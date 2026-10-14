@@ -1,22 +1,36 @@
 import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { Layout } from './components/Layout';
+import { LoginPage } from './pages/LoginPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { NewMessagePage } from './pages/NewMessagePage';
 
 export const App: React.FC = () => {
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6">
-      <div className="max-w-md w-full bg-slate-800 rounded-xl p-8 shadow-xl border border-slate-700">
-        <h1 className="text-2xl font-bold text-rose-400 mb-2">KMRG Admin Web</h1>
-        <p className="text-slate-300 text-sm mb-6">
-          Panel de administración para gestionar mensajes, hitos e interacciones.
-        </p>
-        <div className="rounded-lg bg-slate-950 p-4 border border-slate-800">
-          <p className="text-xs text-slate-400">Estado de conexión con Backend:</p>
-          <span className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Listo para configuración
-          </span>
-        </div>
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Ruta pública */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* Rutas protegidas que requieren autenticación y comparten Layout */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/dashboard/new" element={<NewMessagePage />} />
+            </Route>
+          </Route>
+
+          {/* Redirección de la raíz a dashboard */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+          {/* Ruta de captura (catch-all) que redirige a dashboard */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 };
 
