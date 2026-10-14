@@ -20,7 +20,7 @@ export const TabNavigator: React.FC = () => {
     >
       <Tab.Screen
         name="Hoy"
-        component={TodayScreen}
+        component={TodayScreen as any}
         options={{
           tabBarLabel: 'Hoy',
           tabBarIcon: ({ focused }) => (
@@ -32,7 +32,7 @@ export const TabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="Nosotros"
-        component={MemoriesScreen}
+        component={MemoriesScreen as any}
         options={{
           tabBarLabel: 'Nosotros',
           tabBarIcon: ({ focused }) => (
