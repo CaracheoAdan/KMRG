@@ -8,6 +8,7 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -54,18 +55,20 @@ export const TodayScreen: React.FC = () => {
     if (sendingInteraction) return;
     setSendingInteraction(true);
 
+    const isNative = Platform.OS !== 'web';
+
     // Animación de latido (pulsación)
     Animated.sequence([
       Animated.timing(heartScale, {
         toValue: 1.35,
         duration: 180,
-        useNativeDriver: true,
+        useNativeDriver: isNative,
       }),
       Animated.spring(heartScale, {
         toValue: 1,
         friction: 3,
         tension: 40,
-        useNativeDriver: true,
+        useNativeDriver: isNative,
       }),
     ]).start();
 
@@ -82,7 +85,7 @@ export const TodayScreen: React.FC = () => {
     Animated.timing(feedbackOpacity, {
       toValue: 1,
       duration: 250,
-      useNativeDriver: true,
+      useNativeDriver: isNative,
     }).start();
 
     // Fade out feedback tras 3 segundos
@@ -90,7 +93,7 @@ export const TodayScreen: React.FC = () => {
       Animated.timing(feedbackOpacity, {
         toValue: 0,
         duration: 500,
-        useNativeDriver: true,
+        useNativeDriver: isNative,
       }).start(() => {
         setInteractionFeedback(null);
         setSendingInteraction(false);
