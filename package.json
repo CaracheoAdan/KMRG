@@ -13,7 +13,8 @@
     "dev:admin": "npm --workspace=admin-web run dev",
     "dev:mobile": "npm --workspace=mobile-app run start",
     "build:backend": "npm --workspace=backend run build",
-    "build:admin": "npm --workspace=admin-web run build"
+    "build:admin": "npm --workspace=admin-web run build",
+    "postinstall": "node scripts/patch-expo-notifications.js"
   },
   "keywords": [],
   "author": "",
