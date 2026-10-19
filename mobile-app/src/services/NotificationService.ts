@@ -32,13 +32,18 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
     }
 
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('daily-messages', {
-        name: 'Mensajes de Amor KMRG',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#e63946',
-        sound: 'default',
-      });
+      try {
+        await Notifications.setNotificationChannelAsync('daily-messages', {
+          name: 'Mensajes de Amor KMRG',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#e63946',
+          sound: 'default',
+        });
+      } catch {
+        // En Expo Go en Android, NotificationsChannelsProvider no está presente y lanza NPE
+        console.log('[NotificationService] Canal de notificaciones omitido en Expo Go.');
+      }
     }
 
     return true;

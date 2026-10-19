@@ -3,11 +3,11 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
   FlatList,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Message } from '../types';
 import { getPastMessages } from '../services/StorageService';

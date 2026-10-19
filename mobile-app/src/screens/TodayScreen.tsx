@@ -3,13 +3,13 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
   TouchableOpacity,
   Animated,
   ScrollView,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Message } from '../types';
 import { getTodayMessage, markMessageAsRead } from '../services/StorageService';

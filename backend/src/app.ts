@@ -24,8 +24,11 @@ const corsOptions: CorsOptions = {
 
     if (allowedOrigins.includes(origin)) return callback(null, true);
 
-    // En desarrollo permitir cualquier localhost
-    if (env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+    // En desarrollo permitir cualquier localhost, 127.0.0.1 y direcciones IP de red local (LAN)
+    if (
+      env.NODE_ENV === 'development' &&
+      (/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin))
+    ) {
       return callback(null, true);
     }
 
