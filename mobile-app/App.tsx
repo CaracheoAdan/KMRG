@@ -6,8 +6,9 @@ import { TabNavigator } from './src/navigation/TabNavigator';
 import { syncMessages } from './src/services/SyncService';
 import { scheduleDailyMessage } from './src/services/NotificationService';
 
-// Silenciar avisos informativos de Expo Go que no afectan las notificaciones locales
+// Silenciar avisos informativos y de conexión dev que no afectan el funcionamiento
 LogBox.ignoreLogs([
+  'Cannot connect to Expo CLI',
   '`expo-notifications` functionality is not fully supported in Expo Go',
   'Push notifications (remote notifications) are unavailable in Expo Go',
 ]);
