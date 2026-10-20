@@ -1,9 +1,16 @@
 import React, { useEffect } from 'react';
+import { LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabNavigator } from './src/navigation/TabNavigator';
 import { syncMessages } from './src/services/SyncService';
 import { scheduleDailyMessage } from './src/services/NotificationService';
+
+// Silenciar avisos informativos de Expo Go que no afectan las notificaciones locales
+LogBox.ignoreLogs([
+  '`expo-notifications` functionality is not fully supported in Expo Go',
+  'Push notifications (remote notifications) are unavailable in Expo Go',
+]);
 
 export default function App() {
   useEffect(() => {
