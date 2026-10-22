@@ -2994,7 +2994,7 @@ export const GamesScreen: React.FC = () => {
           if (gamesState.ticTacToe.winner) return { text: 'Terminado', isMyTurn: false };
           const isMyTurn = gamesState.ticTacToe.turn === currentProfile;
           return {
-            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.ticTacToe.turn)}`,
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
             isMyTurn,
           };
         }
@@ -3004,7 +3004,7 @@ export const GamesScreen: React.FC = () => {
             return { text: 'Acomodar', isMyTurn: true };
           const isMyTurn = gamesState.battleship.turn === currentProfile;
           return {
-            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.battleship.turn)}`,
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
             isMyTurn,
           };
         }
@@ -3013,11 +3013,11 @@ export const GamesScreen: React.FC = () => {
           const isWhite = currentProfile === 'Karla';
           const isMyTurn =
             (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
-          return { text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.chess.turn === 'w' ? 'Karla' : 'Javier')}`, isMyTurn };
+          return { text: isMyTurn ? 'Tu turno' : 'Su turno', isMyTurn };
         }
         case 'sudoku': {
           if (sudoku.completed) return { text: 'Completado', isMyTurn: false };
-          return { text: 'Jugar ahora', isMyTurn: true };
+          return { text: 'Colaborativo', isMyTurn: true };
         }
         case 'hangman': {
           if (gamesState.hangman.status !== 'playing')
@@ -3025,11 +3025,11 @@ export const GamesScreen: React.FC = () => {
               text: gamesState.hangman.status === 'won' ? '¡Ganado!' : 'Terminado',
               isMyTurn: false,
             };
-          return { text: 'Adivinar palabra', isMyTurn: true };
+          return { text: 'Adivinar', isMyTurn: true };
         }
       }
     },
-    [gamesState, currentProfile, sudoku, getDisplayName]
+    [gamesState, currentProfile, sudoku]
   );
 
   const getGameTurnLabel = (id: GameTab) => {
@@ -3141,7 +3141,7 @@ export const GamesScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* 2. Grid de 5 Juegos: 2 Columnas x 2 Filas + 5to Juego en Fila Completa */}
+        {/* 2. Grid de 5 Juegos: 2 Columnas x 3 Filas (Misma altura para todas mediante flex) */}
         {(() => {
           // Ordenar juegos: donde es el turno del usuario van PRIMERO
           const sortedGames = [...ALL_GAMES].sort((a, b) => {
@@ -3155,188 +3155,97 @@ export const GamesScreen: React.FC = () => {
           const gridGames = sortedGames.slice(0, 4);
           const fullWidthGame = sortedGames[4];
 
+          const renderCard = (g: typeof ALL_GAMES[0]) => {
+            const status = getGameStatus(g.id);
+            const color = g.iconColor;
+            const isMyTurn = status.isMyTurn;
+
+            return (
+              <PressableScale
+                key={g.id}
+                onPress={() => setPendingGameToLaunch(g.id)}
+                style={[
+                  styles.lobbyCardCompact,
+                  {
+                    backgroundColor: isDark ? colors.surface : '#ffffff',
+                    borderColor: `${color}66`,
+                    borderWidth: 1.5,
+                    shadowColor: color,
+                  },
+                ]}
+                scaleTo={0.96}
+                accessibilityLabel={`Jugar ${g.label}`}
+              >
+                {/* Ícono grande (56px) en círculo pastel del color del juego */}
+                <View style={[styles.lobbyCardIconCircle, { backgroundColor: g.bgTint }]}>
+                  <Ionicons name={g.icon as any} size={28} color={color} />
+                </View>
+
+                {/* Nombre del juego centrado, serif, tamaño 20, peso 700 */}
+                <Text
+                  style={[styles.lobbyCardTitle, { color: colors.text }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {g.label}
+                </Text>
+
+                {/* Descripción centrada, tamaño 13, gris */}
+                <Text
+                  style={[styles.lobbyCardDesc, { color: colors.textSecondary }]}
+                  numberOfLines={2}
+                >
+                  {g.description}
+                </Text>
+
+                {/* Badge de estado centrado abajo, una línea */}
+                <View
+                  style={[
+                    styles.turnBadgePill,
+                    isMyTurn
+                      ? { backgroundColor: color, borderColor: color }
+                      : { backgroundColor: `${color}18`, borderColor: `${color}40` },
+                  ]}
+                >
+                  {isMyTurn && (
+                    <Ionicons name="sparkles" size={10} color="#ffffff" style={{ marginRight: 3 }} />
+                  )}
+                  <Text
+                    style={[
+                      styles.lobbyBadgeText,
+                      { color: isMyTurn ? '#ffffff' : color },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {status.text}
+                  </Text>
+                </View>
+              </PressableScale>
+            );
+          };
+
           return (
             <View style={styles.lobbyGamesGridArea}>
-              {/* Filas 1 y 2: 4 juegos distribuidos en filas explícitas de 2 columnas (ancho amplio garantizado) */}
               <View style={styles.lobbyGridRowsContainer}>
                 {/* Fila 1 */}
                 <View style={styles.lobbyGridRow}>
-                  {[gridGames[0], gridGames[1]].filter(Boolean).map((g) => {
-                    const status = getGameStatus(g.id);
-                    return (
-                      <View key={g.id} style={styles.lobbyCol}>
-                        <PressableScale
-                          onPress={() => setPendingGameToLaunch(g.id)}
-                          style={[
-                            styles.lobbyCardCompact,
-                            {
-                              backgroundColor: colors.surface,
-                              borderColor: status.isMyTurn ? colors.primary : colors.border,
-                              borderWidth: status.isMyTurn ? 2 : 1,
-                            },
-                          ]}
-                          scaleTo={0.96}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <View style={[styles.lobbyCardIconBox, { backgroundColor: g.bgTint }]}>
-                              <Ionicons name={g.icon as any} size={22} color={g.iconColor} />
-                            </View>
-                            <View
-                              style={[
-                                styles.turnBadgeMini,
-                                {
-                                  backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
-                                  borderColor: status.isMyTurn ? colors.primary : colors.border,
-                                },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.turnDot,
-                                  { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
-                                ]}
-                              />
-                              <Text
-                                style={[
-                                  styles.turnBadgeMiniText,
-                                  { color: status.isMyTurn ? colors.primary : colors.textMuted },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {status.text}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={[styles.lobbyCardTitle, { color: colors.text }]} numberOfLines={1}>
-                            {g.label}
-                          </Text>
-                          <Text style={[styles.lobbyCardDesc, { color: colors.textMuted }]} numberOfLines={2}>
-                            {g.description}
-                          </Text>
-                        </PressableScale>
-                      </View>
-                    );
-                  })}
+                  <View style={styles.lobbyCol}>{renderCard(gridGames[0])}</View>
+                  <View style={styles.lobbyCol}>{renderCard(gridGames[1])}</View>
                 </View>
 
                 {/* Fila 2 */}
                 <View style={styles.lobbyGridRow}>
-                  {[gridGames[2], gridGames[3]].filter(Boolean).map((g) => {
-                    const status = getGameStatus(g.id);
-                    return (
-                      <View key={g.id} style={styles.lobbyCol}>
-                        <PressableScale
-                          onPress={() => setPendingGameToLaunch(g.id)}
-                          style={[
-                            styles.lobbyCardCompact,
-                            {
-                              backgroundColor: colors.surface,
-                              borderColor: status.isMyTurn ? colors.primary : colors.border,
-                              borderWidth: status.isMyTurn ? 2 : 1,
-                            },
-                          ]}
-                          scaleTo={0.96}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <View style={[styles.lobbyCardIconBox, { backgroundColor: g.bgTint }]}>
-                              <Ionicons name={g.icon as any} size={22} color={g.iconColor} />
-                            </View>
-                            <View
-                              style={[
-                                styles.turnBadgeMini,
-                                {
-                                  backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
-                                  borderColor: status.isMyTurn ? colors.primary : colors.border,
-                                },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.turnDot,
-                                  { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
-                                ]}
-                              />
-                              <Text
-                                style={[
-                                  styles.turnBadgeMiniText,
-                                  { color: status.isMyTurn ? colors.primary : colors.textMuted },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {status.text}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={[styles.lobbyCardTitle, { color: colors.text }]} numberOfLines={1}>
-                            {g.label}
-                          </Text>
-                          <Text style={[styles.lobbyCardDesc, { color: colors.textMuted }]} numberOfLines={2}>
-                            {g.description}
-                          </Text>
-                        </PressableScale>
-                      </View>
-                    );
-                  })}
+                  <View style={styles.lobbyCol}>{renderCard(gridGames[2])}</View>
+                  <View style={styles.lobbyCol}>{renderCard(gridGames[3])}</View>
                 </View>
-              </View>
 
-              {/* Fila 3: 5to juego en ancho completo horizontal */}
-              {fullWidthGame && (() => {
-                const status = getGameStatus(fullWidthGame.id);
-                return (
-                  <View style={styles.lobbyFullRow}>
-                    <PressableScale
-                      onPress={() => setPendingGameToLaunch(fullWidthGame.id)}
-                      style={[
-                        styles.lobbyCardFullWidth,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: status.isMyTurn ? colors.primary : colors.border,
-                          borderWidth: status.isMyTurn ? 2 : 1,
-                        },
-                      ]}
-                      scaleTo={0.97}
-                    >
-                      <View style={[styles.lobbyCardIconBox, { backgroundColor: fullWidthGame.bgTint }]}>
-                        <Ionicons name={fullWidthGame.icon as any} size={24} color={fullWidthGame.iconColor} />
-                      </View>
-                      <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                        <Text style={[styles.lobbyCardTitle, { color: colors.text }]} numberOfLines={1}>
-                          {fullWidthGame.label}
-                        </Text>
-                        <Text style={[styles.lobbyCardDesc, { color: colors.textMuted }]} numberOfLines={1}>
-                          {fullWidthGame.description}
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.turnBadgeMini,
-                          {
-                            backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
-                            borderColor: status.isMyTurn ? colors.primary : colors.border,
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.turnDot,
-                            { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
-                          ]}
-                        />
-                        <Text
-                          style={[
-                            styles.turnBadgeMiniText,
-                            { color: status.isMyTurn ? colors.primary : colors.textMuted },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {status.text}
-                        </Text>
-                      </View>
-                    </PressableScale>
+                {/* Fila 3: 5to juego en ancho completo, misma altura flex: 1 */}
+                {fullWidthGame && (
+                  <View style={styles.lobbyGridRow}>
+                    <View style={styles.lobbyColFull}>{renderCard(fullWidthGame)}</View>
                   </View>
-                );
-              })()}
+                )}
+              </View>
             </View>
           );
         })()}
@@ -3356,15 +3265,15 @@ export const GamesScreen: React.FC = () => {
             if (!gameInfo) return null;
 
             return (
-              <View style={[styles.launchModalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.launchModalCard, { backgroundColor: colors.surface, borderColor: `${gameInfo.iconColor}40` }]}>
                 <View style={[styles.launchModalIconBox, { backgroundColor: gameInfo.bgTint }]}>
-                  <Ionicons name={gameInfo.icon as any} size={38} color={gameInfo.iconColor} />
+                  <Ionicons name={gameInfo.icon as any} size={40} color={gameInfo.iconColor} />
                 </View>
 
                 <Text style={[styles.launchModalTitle, { color: colors.text }]}>
                   {gameInfo.label}
                 </Text>
-                <Text style={[styles.launchModalSubtitle, { color: colors.textMuted }]}>
+                <Text style={[styles.launchModalSubtitle, { color: colors.textSecondary }]}>
                   {gameInfo.description}
                 </Text>
 
@@ -3372,21 +3281,21 @@ export const GamesScreen: React.FC = () => {
                   style={[
                     styles.launchModalStatusPill,
                     {
-                      backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
-                      borderColor: status.isMyTurn ? colors.primary : colors.border,
+                      backgroundColor: status.isMyTurn ? `${gameInfo.iconColor}18` : colors.surfaceAlt,
+                      borderColor: status.isMyTurn ? gameInfo.iconColor : colors.border,
                     },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.turnDot,
-                      { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
-                    ]}
+                  <Ionicons
+                    name={status.isMyTurn ? 'sparkles' : 'time-outline'}
+                    size={13}
+                    color={status.isMyTurn ? gameInfo.iconColor : colors.textMuted}
+                    style={{ marginRight: 4 }}
                   />
                   <Text
                     style={[
                       styles.launchModalStatusText,
-                      { color: status.isMyTurn ? colors.primary : colors.textSecondary },
+                      { color: status.isMyTurn ? gameInfo.iconColor : colors.textSecondary },
                     ]}
                   >
                     Estado: {status.text}
@@ -3399,7 +3308,7 @@ export const GamesScreen: React.FC = () => {
                     setPendingGameToLaunch(null);
                     setActiveGame(toLaunch);
                   }}
-                  style={[styles.launchPrimaryBtn, { backgroundColor: colors.primary }]}
+                  style={[styles.launchPrimaryBtn, { backgroundColor: gameInfo.iconColor }]}
                   activeOpacity={0.88}
                 >
                   <Ionicons name="play" size={18} color="#ffffff" />
@@ -3652,21 +3561,55 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   lobbyCol: {
     flex: 1,
   },
-  lobbyFullRow: {
-    height: 76,
+  lobbyColFull: {
+    flex: 1,
   },
   lobbyCardCompact: {
     flex: 1,
     width: '100%',
-    borderRadius: 18,
-    padding: 12,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderWidth: 1.5,
-    justifyContent: 'space-between',
-    shadowColor: c.shadow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
+  },
+  lobbyCardIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lobbyCardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    fontFamily: SERIF_FONT,
+    textAlign: 'center',
+  },
+  lobbyCardDesc: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 4,
+  },
+  turnBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  lobbyBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   launchModalOverlay: {
     flex: 1,
@@ -3697,8 +3640,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     marginBottom: 12,
   },
   launchModalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 26,
+    fontWeight: '700',
     fontFamily: SERIF_FONT,
     marginBottom: 4,
     textAlign: 'center',
@@ -3749,50 +3692,6 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   launchCancelBtnText: {
     fontSize: 13,
     fontWeight: '700',
-  },
-  lobbyCardIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  turnBadgeMini: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  turnBadgeMiniText: {
-    fontSize: 9.5,
-    fontWeight: '700',
-  },
-  lobbyCardTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  lobbyCardDesc: {
-    fontSize: 10.5,
-    lineHeight: 14,
-    marginTop: 1,
-  },
-  lobbyCardFullWidth: {
-    width: '100%',
-    height: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    borderWidth: 1.5,
-    shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
   },
   lobbyScoreboard: {
     flexDirection: 'row',

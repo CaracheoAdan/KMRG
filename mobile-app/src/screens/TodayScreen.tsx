@@ -440,7 +440,7 @@ export const TodayScreen: React.FC = () => {
         bounces={false}
       >
         {/* 1. CARTA DEL DÍA: protagonista, con el latido animado */}
-        <FadeSection index={0} style={{ marginTop: 16 }}>
+        <FadeSection index={0} style={{ marginTop: 6 }}>
           <LinearGradient
             colors={[colors.primaryLight, colors.surface]}
             start={{ x: 0, y: 0 }}
@@ -473,7 +473,7 @@ export const TodayScreen: React.FC = () => {
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Text style={styles.dsLetterText} numberOfLines={5}>
+                    <Text style={styles.dsLetterText} numberOfLines={3}>
                       {message
                         ? message.content
                         : currentProfile === 'Karla'
@@ -492,7 +492,7 @@ export const TodayScreen: React.FC = () => {
               <HeartbeatButton
                 onPress={() => void handleHeartPress()}
                 disabled={sendingInteraction}
-                size={68}
+                size={56}
               />
             </View>
 
@@ -530,14 +530,18 @@ export const TodayScreen: React.FC = () => {
             </View>
             <View style={styles.dsChipsRow}>
               {[
-                plural(timeTogether.years, 'año', 'años'),
-                plural(timeTogether.months, 'mes', 'meses'),
-                plural(timeTogether.days, 'día', 'días'),
-              ].map((txt) => (
-                <View key={txt} style={[styles.dsMiniChip, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.dsMiniChipText, { color: colors.primary }]}>{txt}</Text>
-                </View>
-              ))}
+                timeTogether.years > 0 ? plural(timeTogether.years, 'año', 'años') : null,
+                timeTogether.months > 0 ? plural(timeTogether.months, 'mes', 'meses') : null,
+                timeTogether.days > 0 ? plural(timeTogether.days, 'día', 'días') : null,
+              ]
+                .filter(Boolean)
+                .map((txt) => (
+                  <View key={txt!} style={[styles.dsMiniChip, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.dsMiniChipText, { color: colors.primary }]} numberOfLines={1}>
+                      {txt}
+                    </Text>
+                  </View>
+                ))}
             </View>
           </PressableScale>
 
@@ -558,7 +562,12 @@ export const TodayScreen: React.FC = () => {
                 PRÓXIMA CITA
               </Text>
             </View>
-            <Text style={styles.dsEventTitle} numberOfLines={2}>
+            <Text
+              style={styles.dsEventTitle}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+              adjustsFontSizeToFit
+            >
               {homeState.nextEventTitle}
             </Text>
             <Text style={styles.dsEventDate}>
@@ -631,11 +640,9 @@ export const TodayScreen: React.FC = () => {
 
                   {mismatch && (
                     <View style={[styles.mismatchBox, { backgroundColor: colors.surfaceAlt }]}>
-                      <Ionicons name="info" size={14} color={colors.warning} />
-                      <Text style={[styles.mismatchText, { color: colors.warning }]} numberOfLines={3}>
-                        {isMe
-                          ? 'Tu emoción y tu mensaje no coinciden. Toca para actualizarlos.'
-                          : 'Su emoción y su mensaje no coinciden. Pregúntale cómo está.'}
+                      <Ionicons name="information-circle-outline" size={13} color={colors.warning} />
+                      <Text style={[styles.mismatchText, { color: colors.warning }]} numberOfLines={1}>
+                        Emoción y mensaje no coinciden
                       </Text>
                     </View>
                   )}
@@ -1067,6 +1074,7 @@ export const TodayScreen: React.FC = () => {
               onChangeText={setTempEventTitle}
               placeholder="Ej. Cena de aniversario, Ida al cine..."
               placeholderTextColor="#94a3b8"
+              maxLength={50}
               style={styles.textInput}
             />
 
@@ -1096,13 +1104,13 @@ export const TodayScreen: React.FC = () => {
 const makeStyles = (c: ThemePalette) => StyleSheet.create({
   dsContent: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    gap: 12,
+    paddingBottom: 20,
+    gap: 8,
   },
   dsHero: {
     backgroundColor: c.surface,
     borderRadius: 20,
-    padding: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: c.border,
     shadowColor: c.shadow,
@@ -1144,14 +1152,14 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     paddingRight: 12,
   },
   dsLetterText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     color: c.text,
     fontFamily: SERIF_FONT,
   },
   dsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 10,
     width: '100%',
   },
   dsCard: {
@@ -1159,7 +1167,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     minWidth: 0,
     backgroundColor: c.surface,
     borderRadius: 18,
-    padding: 14,
+    padding: 10,
     borderWidth: 1,
     borderColor: c.border,
     shadowColor: c.shadow,
@@ -1173,7 +1181,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   dsIconCircle: {
     width: 28,
@@ -1189,11 +1197,11 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flex: 1,
   },
   dsBigNumber: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: c.text,
     fontFamily: SERIF_FONT,
-    lineHeight: 36,
+    lineHeight: 32,
   },
   dsBigUnit: {
     fontSize: 13,
@@ -1203,18 +1211,19 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   dsChipsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
+    flexWrap: 'nowrap',
+    gap: 4,
+    marginTop: 4,
+    alignItems: 'center',
   },
   dsMiniChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   dsMiniChipText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 9.5,
+    fontWeight: '700',
   },
   dsEventTitle: {
     fontSize: 15,
@@ -1275,7 +1284,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flex: 1,
     backgroundColor: c.surface,
     borderRadius: 16,
-    padding: 12,
+    padding: 8,
     borderWidth: 1,
     borderColor: c.border,
     shadowColor: c.shadow,
@@ -1284,28 +1293,28 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     shadowRadius: 8,
     elevation: 1,
     alignItems: 'center',
-    minHeight: 96,
+    minHeight: 74,
     justifyContent: 'center',
   },
   dsQuickIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   dsQuickTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: c.text,
     textAlign: 'center',
   },
   dsQuickSub: {
-    fontSize: 11,
+    fontSize: 10,
     color: c.textMuted,
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: 1,
   },
   safeArea: {
     flex: 1,

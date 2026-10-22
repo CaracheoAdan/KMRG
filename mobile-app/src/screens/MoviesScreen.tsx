@@ -492,23 +492,19 @@ export const MoviesScreen: React.FC = () => {
 
       {/* Contenedor Fijo SIN Scroll Vertical */}
       <View style={styles.fixedViewport}>
-        {/* Selector de 4 Sub-Pestañas Segmentadas */}
+        {/* Selector de 4 Sub-Pestañas de Ancho Igual (flex: 1) con Ícono + Badge Arriba y Texto Corto Abajo */}
         <View style={styles.tabsWrapper}>
-          <ScrollView
-            ref={tabsScrollRef}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabsScroll}
-          >
+          <View style={styles.equalTabsRow}>
             {[
-              { id: 'pending', label: `Por Ver (${pendingMovies.length})`, icon: 'film-outline' },
-              { id: 'watched', label: `Vistas (${watchedMovies.length})`, icon: 'star-outline' },
+              { id: 'pending', label: 'Por Ver', icon: 'film-outline', count: pendingMovies.length },
+              { id: 'watched', label: 'Vistas', icon: 'star-outline', count: watchedMovies.length },
               {
                 id: 'bucket',
-                label: `Sueños (${completedBucketCount}/${state.bucketList.length})`,
+                label: 'Sueños',
                 icon: 'sparkles-outline',
+                count: state.bucketList.length,
               },
-              { id: 'roulette', label: 'Comida', icon: 'restaurant-outline' },
+              { id: 'roulette', label: 'Comida', icon: 'restaurant-outline', count: null },
             ].map((t) => {
               const active = subTab === t.id;
               return (
@@ -520,23 +516,43 @@ export const MoviesScreen: React.FC = () => {
                     setSubTab(t.id as SubTab);
                   }}
                   style={[
-                    styles.tabBtn,
-                    active
-                      ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                      : { backgroundColor: colors.surface, borderColor: colors.border },
+                    styles.equalTabBtn,
+                    active && styles.equalTabBtnActive,
                   ]}
                   scaleTo={0.96}
                 >
-                  <Ionicons
-                    name={t.icon as any}
-                    size={13}
-                    color={active ? colors.primaryOn : colors.textMuted}
-                  />
+                  <View style={styles.tabIconWrapper}>
+                    <Ionicons
+                      name={t.icon as any}
+                      size={18}
+                      color={active ? colors.primary : colors.textMuted}
+                    />
+                    {t.count !== null && t.count !== undefined && (
+                      <View
+                        style={[
+                          styles.tabBadge,
+                          {
+                            backgroundColor: active ? colors.primary : colors.surfaceAlt,
+                            borderColor: active ? colors.primary : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.tabBadgeText,
+                            { color: active ? '#ffffff' : colors.textSecondary },
+                          ]}
+                        >
+                          {t.count}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <Text
                     style={[
-                      styles.tabBtnText,
+                      styles.equalTabBtnText,
                       active
-                        ? { color: colors.primaryOn, fontWeight: '800' }
+                        ? { color: colors.primary, fontWeight: '800' }
                         : { color: colors.textSecondary },
                     ]}
                     numberOfLines={1}
@@ -546,7 +562,7 @@ export const MoviesScreen: React.FC = () => {
                 </PressableScale>
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {/* ================= VISTAS 1 Y 2: PELÍCULAS POR VER / YA VISTAS ================= */}
@@ -679,19 +695,24 @@ export const MoviesScreen: React.FC = () => {
             {/* Lista Desplazable de Películas (Tarjetas Completas Sin Cortes) */}
             <ScrollView
               style={{ flex: 1 }}
-              contentContainerStyle={styles.cardsScrollContent}
+              contentContainerStyle={[
+                styles.cardsScrollContent,
+                activeMovieList.length === 0 && { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+              ]}
               showsVerticalScrollIndicator={false}
             >
               {activeMovieList.length === 0 ? (
-                <EmptyState
-                  icon={subTab === 'pending' ? 'film-outline' : 'sparkles-outline'}
-                  title={subTab === 'pending' ? 'Sin películas pendientes' : 'Aún no han calificado'}
-                  message={
-                    subTab === 'pending'
-                      ? 'Escribe arriba el título para agregar su próxima peli juntos con póster oficial.'
-                      : 'Cuando terminen de ver una película, toquen "Calificar" para guardarla.'
-                  }
-                />
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%', paddingVertical: 20 }}>
+                  <EmptyState
+                    icon={subTab === 'pending' ? 'film-outline' : 'sparkles-outline'}
+                    title={subTab === 'pending' ? 'Sin películas pendientes' : 'Aún no han calificado'}
+                    message={
+                      subTab === 'pending'
+                        ? 'Escribe arriba el título para agregar su próxima peli juntos con póster oficial.'
+                        : 'Cuando terminen de ver una película, toquen "Calificar" para guardarla.'
+                    }
+                  />
+                </View>
               ) : (
                 activeMovieList.map((movie) => {
                   const avg =
@@ -854,13 +875,15 @@ export const MoviesScreen: React.FC = () => {
               </View>
             </View>
 
-            <View style={styles.cardsDeck}>
+            <View style={[styles.cardsDeck, visibleBuckets.length === 0 && { justifyContent: 'center', alignItems: 'center' }]}>
               {visibleBuckets.length === 0 ? (
-                <EmptyState
-                  icon="sparkles-outline"
-                  title="Sin sueños todavía"
-                  message="Escriban sus viajes, metas y planes por cumplir juntos."
-                />
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+                  <EmptyState
+                    icon="sparkles-outline"
+                    title="Sin sueños todavía"
+                    message="Escriban sus viajes, metas y planes por cumplir juntos."
+                  />
+                </View>
               ) : (
                 visibleBuckets.map((item) => (
                   <PressableScale
@@ -1108,35 +1131,57 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   tabsWrapper: {
     marginBottom: 8,
   },
-  tabsScroll: {
-    gap: 8,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-  },
-  tabsContainer: {
+  equalTabsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: c.surface,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 4,
-    gap: 4,
     borderWidth: 1,
     borderColor: c.border,
-    marginBottom: 8,
+    gap: 4,
   },
-  tabBtn: {
-    flexDirection: 'row',
+  equalTabBtn: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingHorizontal: 2,
     borderRadius: 12,
+  },
+  equalTabBtnActive: {
+    backgroundColor: c.surfaceAlt,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabIconWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  tabBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -12,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
   },
-  tabBtnText: {
-    fontSize: 12,
+  tabBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  equalTabBtnText: {
+    fontSize: 11,
     fontWeight: '700',
-    color: c.textSecondary,
   },
   contentArea: {
     flex: 1,

@@ -547,11 +547,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const wrappedTx = ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
         const left = Math.round(viewportW / 2 + (tx * TILE_SIZE - centerWorld.x));
         const top = Math.round(viewportH / 2 + (ty * TILE_SIZE - centerWorld.y));
-        const sub = ['a', 'b', 'c'][(Math.abs(tx + ty)) % 3];
-        const url =
-          mapStyle === 'dark'
-            ? `https://${sub}.basemaps.cartocdn.com/dark_all/${zoom}/${wrappedTx}/${ty}.png`
-            : `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}.png`;
+        const sub = ['a', 'b', 'c', 'd'][(Math.abs(tx + ty)) % 4];
+        const url = `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}.png`;
 
         tiles.push({
           key: `${zoom}-${tx}-${ty}-${mapStyle}`,
@@ -744,28 +741,32 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => setDetailModalPlace(place)}
-                activeOpacity={0.85}
-                style={[
-                  styles.pinLabelTag,
-                  {
-                    backgroundColor: isSelected ? primaryColor : colors.surface,
-                    borderColor: isSelected ? primaryColor : colors.border,
-                    borderWidth: 1,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.pinLabelText,
-                    { color: isSelected ? '#ffffff' : colors.text },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {place.title}
-                </Text>
-              </TouchableOpacity>
+              {(() => {
+                const isNearRightEdge = sx > viewportW - 120;
+                return (
+                  <TouchableOpacity
+                    onPress={() => setDetailModalPlace(place)}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.pinLabelTag,
+                      isNearRightEdge
+                        ? { position: 'absolute', right: 42, top: 4 }
+                        : { marginTop: 4 },
+                      isSelected && { borderColor: primaryColor },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.pinLabelText,
+                        isSelected && { color: primaryColor, fontWeight: '800' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {place.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           );
         })}
@@ -783,28 +784,16 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           </View>
         )}
 
-
-
-        {/* Controles Flotantes Derechos (Zoom, Estilo, Ruta, Pantalla Completa) */}
+        {/* Controles Flotantes Derechos en Columna Unificada */}
         <View pointerEvents="box-none" style={styles.mapRightControls}>
           <TouchableOpacity
             onPress={() => setIsFullScreen(!isFullScreen)}
             style={styles.mapControlBtn}
+            accessibilityLabel="Alternar pantalla completa"
           >
             <Ionicons
               name={isFullScreen ? 'contract-outline' : 'expand-outline'}
-              size={17}
-              color="#1e293b"
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setMapStyle((s) => (s === 'voyager' ? 'dark' : 'voyager'))}
-            style={styles.mapControlBtn}
-          >
-            <Ionicons
-              name={mapStyle === 'dark' ? 'sunny-outline' : 'moon-outline'}
-              size={17}
+              size={18}
               color="#1e293b"
             />
           </TouchableOpacity>
@@ -815,10 +804,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
               styles.mapControlBtn,
               showRouteLines && { backgroundColor: primaryColor },
             ]}
+            accessibilityLabel="Alternar líneas de ruta"
           >
             <Ionicons
               name="analytics-outline"
-              size={16}
+              size={18}
               color={showRouteLines ? '#ffffff' : '#1e293b'}
             />
           </TouchableOpacity>
@@ -826,16 +816,23 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           <TouchableOpacity
             onPress={() => setZoom((z) => Math.min(18, z + 1))}
             style={styles.mapControlBtn}
+            accessibilityLabel="Acercar mapa"
           >
-            <Ionicons name="add" size={19} color="#1e293b" />
+            <Ionicons name="add" size={20} color="#1e293b" />
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setZoom((z) => Math.max(4, z - 1))}
             style={styles.mapControlBtn}
+            accessibilityLabel="Alejar mapa"
           >
-            <Ionicons name="remove" size={19} color="#1e293b" />
+            <Ionicons name="remove" size={20} color="#1e293b" />
           </TouchableOpacity>
+        </View>
+
+        {/* Atribución CARTO / OpenStreetMap */}
+        <View pointerEvents="none" style={styles.mapAttributionBox}>
+          <Text style={styles.mapAttributionText}>© OpenStreetMap contributors © CARTO</Text>
         </View>
 
         {tileError && (
@@ -876,31 +873,37 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       <View style={styles.statsBanner}>
         <View style={styles.statRowLeft}>
           <View style={[styles.statPill, { backgroundColor: `${primaryColor}14` }]}>
-            <Ionicons name="location" size={12} color={primaryColor} />
+            <Ionicons name="location" size={13} color={primaryColor} />
             <Text style={[styles.statPillText, { color: primaryColor }]}>
               {places.length} Pines · {totalRouteKm} km
             </Text>
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity
-            onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
-            style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add-circle-outline" size={16} color="#ffffff" />
-            <Text style={styles.newPinBannerBtnText}>Nuevo Pin</Text>
-          </TouchableOpacity>
+        <View style={styles.roundActionsRow}>
+          <View style={styles.roundActionItem}>
+            <TouchableOpacity
+              onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
+              style={[styles.roundActionBtn, { backgroundColor: primaryColor }]}
+              activeOpacity={0.85}
+              accessibilityLabel="Nuevo pin"
+            >
+              <Ionicons name="add" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={[styles.roundActionLabel, { color: colors.textSecondary }]}>Nuevo pin</Text>
+          </View>
 
-          <TouchableOpacity
-            onPress={() => setIsFullScreen(true)}
-            style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="expand-outline" size={16} color="#ffffff" />
-            <Text style={styles.newPinBannerBtnText}>Mapa Completo</Text>
-          </TouchableOpacity>
+          <View style={styles.roundActionItem}>
+            <TouchableOpacity
+              onPress={() => setIsFullScreen(true)}
+              style={[styles.roundActionBtn, { backgroundColor: primaryColor }]}
+              activeOpacity={0.85}
+              accessibilityLabel="Mapa completo"
+            >
+              <Ionicons name="expand-outline" size={20} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={[styles.roundActionLabel, { color: colors.textSecondary }]}>Completo</Text>
+          </View>
         </View>
       </View>
 
@@ -950,7 +953,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       </View>
 
       {/* ================= FILTRO DE CATEGORÍAS ================= */}
-      <View style={{ height: 38, marginBottom: 8 }}>
+      <View style={styles.categoriesOuterWrapper}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -1009,6 +1012,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             );
           })}
         </ScrollView>
+        {/* Degradado en el borde derecho para indicar más contenido */}
+        <View pointerEvents="none" style={styles.categoriesFadeRight} />
       </View>
 
       {/* ================= MAPA REAL INTERACTIVO (ARRASTRAR, ZOOM Y TOCAR PARA PINEAR) ================= */}
@@ -1385,20 +1390,46 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontWeight: '800',
     fontFamily: FONTS.sans,
   },
-  newPinBannerBtn: {
+  roundActionsRow: {
     flexDirection: 'row',
+    gap: 10,
     alignItems: 'center',
-    gap: 6,
-    minHeight: 38,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
   },
-  newPinBannerBtnText: {
-    fontSize: 12.5,
+  roundActionItem: {
+    alignItems: 'center',
+  },
+  roundActionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  roundActionLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: c.primaryOn,
-    fontFamily: FONTS.sans,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  categoriesOuterWrapper: {
+    height: 38,
+    marginBottom: 8,
+    position: 'relative',
+  },
+  categoriesFadeRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
   },
   searchBoxWrapper: {
     marginBottom: 6,
@@ -1622,17 +1653,39 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     color: c.primaryOn,
   },
   pinLabelTag: {
-    marginTop: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
     maxWidth: 120,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
   },
   pinLabelText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '700',
-    color: c.primaryOn,
+    color: '#0f172a',
     fontFamily: FONTS.sans,
+  },
+  mapAttributionBox: {
+    position: 'absolute',
+    bottom: 4,
+    left: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    zIndex: 35,
+  },
+  mapAttributionText: {
+    fontSize: 8.5,
+    color: '#475569',
+    fontWeight: '600',
   },
   centerCrosshair: {
     position: 'absolute',
