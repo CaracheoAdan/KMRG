@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
@@ -62,10 +62,15 @@ export const MoviesScreen: React.FC = () => {
   // Paginación para evitar el scroll vertical
   const [moviePage, setMoviePage] = useState(0);
   const [bucketPage, setBucketPage] = useState(0);
+  const tabsScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    tabsScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, []);
 
   // Entrada Rápida de Película con autocompletado en vivo mientras escribes
   const [quickTitle, setQuickTitle] = useState('');
-  const [quickGenre, setQuickGenre] = useState(GENRES[0]);
+  const [quickGenre, setQuickGenre] = useState<string | null>(null);
   const [catalogResults, setCatalogResults] = useState<
     Array<{
       title: string;
@@ -137,21 +142,50 @@ export const MoviesScreen: React.FC = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(
-          `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&entity=movie&limit=6&country=mx`
-        );
-        const data = await response.json();
-        if (!cancelled && Array.isArray(data?.results)) {
-          const mapped = data.results.map((r: any) => ({
-            title: r.trackName || q,
-            year: r.releaseDate ? String(r.releaseDate).slice(0, 4) : '',
-            director: r.artistName || '',
-            genre: r.primaryGenreName || quickGenre,
-            posterUrl: r.artworkUrl100
-              ? String(r.artworkUrl100).replace('100x100bb', '600x900bb')
-              : '',
-            synopsis: r.longDescription || r.shortDescription || '',
-          }));
+        const tmdbKey = process.env.EXPO_PUBLIC_TMDB_API_KEY;
+        let mapped: any[] = [];
+
+        if (tmdbKey) {
+          try {
+            const tmdbRes = await fetch(
+              `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(q)}&language=es-MX`
+            );
+            const tmdbData = await tmdbRes.json();
+            if (Array.isArray(tmdbData?.results) && tmdbData.results.length > 0) {
+              mapped = tmdbData.results.slice(0, 6).map((r: any) => ({
+                title: r.title || r.name || q,
+                year: r.release_date || r.first_air_date ? String(r.release_date || r.first_air_date).slice(0, 4) : '',
+                director: '',
+                genre: quickGenre || (r.media_type === 'tv' ? 'Serie' : 'Película'),
+                posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : '',
+                synopsis: r.overview || '',
+              }));
+            }
+          } catch {
+            // fallback a iTunes si falla TMDB
+          }
+        }
+
+        if (mapped.length === 0) {
+          const response = await fetch(
+            `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&entity=movie&limit=6&country=mx`
+          );
+          const data = await response.json();
+          if (Array.isArray(data?.results)) {
+            mapped = data.results.map((r: any) => ({
+              title: r.trackName || q,
+              year: r.releaseDate ? String(r.releaseDate).slice(0, 4) : '',
+              director: r.artistName || '',
+              genre: quickGenre || r.primaryGenreName || 'Película',
+              posterUrl: r.artworkUrl100
+                ? String(r.artworkUrl100).replace('100x100bb', '600x900bb')
+                : '',
+              synopsis: r.longDescription || r.shortDescription || '',
+            }));
+          }
+        }
+
+        if (!cancelled) {
           setCatalogResults(mapped);
         }
       } catch {
@@ -178,7 +212,7 @@ export const MoviesScreen: React.FC = () => {
     const item: MovieItem = {
       id: `mov-${Date.now()}`,
       title: found.title,
-      genre: found.genre || quickGenre,
+      genre: quickGenre || found.genre || 'Película',
       addedBy: currentProfile,
       watched: false,
       posterUrl: found.posterUrl,
@@ -240,7 +274,7 @@ export const MoviesScreen: React.FC = () => {
     const item: MovieItem = {
       id: `mov-${Date.now()}`,
       title: rawTitle,
-      genre: quickGenre,
+      genre: quickGenre || 'Película',
       addedBy: currentProfile,
       watched: false,
       posterUrl,
@@ -461,6 +495,7 @@ export const MoviesScreen: React.FC = () => {
         {/* Selector de 4 Sub-Pestañas Segmentadas */}
         <View style={styles.tabsWrapper}>
           <ScrollView
+            ref={tabsScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.tabsScroll}
@@ -567,7 +602,7 @@ export const MoviesScreen: React.FC = () => {
                   return (
                     <PressableScale
                       key={g}
-                      onPress={() => setQuickGenre(g)}
+                      onPress={() => setQuickGenre((prev) => (prev === g ? null : g))}
                       style={[
                         styles.quickGenreChip,
                         active
@@ -682,9 +717,9 @@ export const MoviesScreen: React.FC = () => {
                             <Ionicons name="film" size={20} color={colors.primary} />
                             <Text
                               style={[styles.posterPlaceholderTitle, { color: colors.primary }]}
-                              numberOfLines={1}
+                              numberOfLines={3}
                             >
-                              {movie.title.slice(0, 10)}
+                              {movie.title}
                             </Text>
                           </LinearGradient>
                         )}
@@ -857,7 +892,7 @@ export const MoviesScreen: React.FC = () => {
                           styles.bucketTitle,
                           item.completed && styles.bucketTitleCompleted,
                         ]}
-                        numberOfLines={1}
+                        numberOfLines={2}
                       >
                         {item.title}
                       </Text>
@@ -1081,7 +1116,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   tabsScroll: {
     gap: 8,
-    paddingHorizontal: 2,
+    paddingHorizontal: 8,
     alignItems: 'center',
   },
   tabsContainer: {
@@ -1407,11 +1442,11 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flex: 1,
     backgroundColor: c.surface,
     borderRadius: 22,
-    padding: 18,
+    padding: 16,
     alignItems: 'center',
-    justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: c.border,
+    gap: 12,
   },
   foodWheelTitle: {
     fontSize: 18,

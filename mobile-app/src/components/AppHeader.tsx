@@ -232,14 +232,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
               style={[styles.nameInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
             />
 
-            {/* Accesos movidos desde el header: paleta y estadísticas */}
-            <View style={styles.menuRow}>
+            {/* Accesos movidos desde el header: paleta y estadísticas (ambos de ancho igual) */}
+            <View style={[styles.menuRow, { width: '100%' }]}>
               <PressableScale
                 onPress={() => {
                   setIsProfileModalOpen(false);
                   setTimeout(openThemeModal, 250);
                 }}
-                style={[styles.menuTile, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                style={[styles.menuTile, { flex: 1, backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
               >
                 <Ionicons name="color-palette-outline" size={18} color={colors.primary} />
                 <Text style={[styles.menuTileText, { color: colors.text }]}>Paleta de colores</Text>
@@ -249,7 +249,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                   setIsProfileModalOpen(false);
                   setTimeout(() => setIsWrappedOpen(true), 250);
                 }}
-                style={[styles.menuTile, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                style={[styles.menuTile, { flex: 1, backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
               >
                 <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
                 <Text style={[styles.menuTileText, { color: colors.text }]}>Estadísticas</Text>
@@ -269,7 +269,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
 
             <PressableScale
               onPress={() => void handleSaveProfileChanges()}
-              style={[styles.saveBtn, { backgroundColor: colors.primary }]}
+              style={[styles.saveBtn, { backgroundColor: colors.primary, width: '100%' }]}
             >
               <Ionicons name="checkmark-circle" size={16} color={colors.primaryOn} />
               <Text style={[styles.saveBtnText, { color: colors.primaryOn }]}>Guardar perfil</Text>

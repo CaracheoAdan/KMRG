@@ -14,6 +14,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Image,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -199,13 +201,41 @@ export const TodayScreen: React.FC = () => {
     return { totalDays, years, months, days };
   }, [homeState.anniversaryDate]);
 
-  // Cuenta regresiva a próxima cita
-  const daysUntilNextEvent = useMemo(() => {
-    const target = new Date(`${homeState.nextEventDate}T23:59:59`);
+  // Ticker de fecha actual del dispositivo (recalcula al volver de segundo plano y a medianoche)
+  const [currentDateTick, setCurrentDateTick] = useState(() => toLocalDateString(new Date()));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        setCurrentDateTick(toLocalDateString(new Date()));
+        void loadData();
+      }
+    });
+
     const now = new Date();
-    const diff = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  }, [homeState.nextEventDate]);
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+    const msToMidnight = Math.max(1000, midnight.getTime() - now.getTime());
+    const timer = setTimeout(() => {
+      setCurrentDateTick(toLocalDateString(new Date()));
+      void loadData();
+    }, msToMidnight);
+
+    return () => {
+      subscription.remove();
+      clearTimeout(timer);
+    };
+  }, [loadData]);
+
+  // Cuenta regresiva a próxima cita calculada desde medianoche de hoy
+  const daysUntilNextEvent = useMemo(() => {
+    if (!homeState.nextEventDate) return 0;
+    const [y, m, d] = homeState.nextEventDate.split('-').map(Number);
+    const target = new Date(y, m - 1, d, 0, 0, 0);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
+  }, [homeState.nextEventDate, currentDateTick]);
 
   // Mascota de pareja (estilo Pou: se mantiene feliz cuando se mandan corazones)
   const petInfo = useMemo(() => {
@@ -410,7 +440,7 @@ export const TodayScreen: React.FC = () => {
         bounces={false}
       >
         {/* 1. CARTA DEL DÍA: protagonista, con el latido animado */}
-        <FadeSection index={0}>
+        <FadeSection index={0} style={{ marginTop: 16 }}>
           <LinearGradient
             colors={[colors.primaryLight, colors.surface]}
             start={{ x: 0, y: 0 }}
@@ -429,7 +459,7 @@ export const TodayScreen: React.FC = () => {
                 </Text>
               </View>
               <Text style={styles.dsDate}>
-                {message ? formatDisplayDate(message.scheduled_date) : 'Hoy'}
+                {formatDisplayDate(new Date(), { day: 'numeric', month: 'short' })}
               </Text>
             </View>
 
@@ -524,8 +554,8 @@ export const TodayScreen: React.FC = () => {
               <View style={[styles.dsIconCircle, { backgroundColor: colors.primaryLight }]}>
                 <Ionicons name="calendar" size={16} color={colors.primary} />
               </View>
-              <Text style={styles.dsCardLabel} numberOfLines={2}>
-                Nuestra próxima cita
+              <Text style={styles.dsCardLabel} numberOfLines={1}>
+                PRÓXIMA CITA
               </Text>
             </View>
             <Text style={styles.dsEventTitle} numberOfLines={2}>
@@ -616,12 +646,12 @@ export const TodayScreen: React.FC = () => {
         </FadeSection>
 
         {/* 4. ACCESOS RÁPIDOS: tarjetas iguales en altura */}
-        <FadeSection index={3} style={styles.dsRow}>
+        <FadeSection index={3} style={[styles.dsRow, { gap: 12 }]}>
           {quickCards.map((card) => (
             <PressableScale
               key={card.key}
               onPress={card.onPress}
-              style={styles.dsQuickCard}
+              style={[styles.dsQuickCard, { flex: 1 }]}
               accessibilityLabel={card.title}
             >
               {card.key === 'pet' ? (
@@ -1066,7 +1096,7 @@ export const TodayScreen: React.FC = () => {
 const makeStyles = (c: ThemePalette) => StyleSheet.create({
   dsContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 100,
     gap: 12,
   },
   dsHero: {
@@ -1084,12 +1114,12 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   dsQuoteMark: {
     position: 'absolute',
-    top: -10,
-    left: 10,
-    fontSize: 80,
+    top: 6,
+    left: 14,
+    fontSize: 64,
     fontFamily: SERIF_FONT,
-    opacity: 0.12,
-    lineHeight: 80,
+    opacity: 0.14,
+    lineHeight: 64,
   },
   dsBadge: {
     flexDirection: 'row',
@@ -1121,10 +1151,12 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   dsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
+    width: '100%',
   },
   dsCard: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: c.surface,
     borderRadius: 18,
     padding: 14,

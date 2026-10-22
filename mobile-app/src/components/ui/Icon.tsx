@@ -87,12 +87,25 @@ const ICON_MAP: Record<string, LucideComp> = {
   'person-circle-outline': UserCircle,
   'play-forward': SkipForward,
   radio: Radio,
+  remove: Minus,
+  // Búsqueda
+  search: Search,
+  'search-outline': Search,
+  // Restaurante / Comida
+  restaurant: Utensils,
+  'restaurant-outline': Utensils,
+  'fast-food': Utensils,
+  'fast-food-outline': Utensils,
+  // Correo / Cartas
+  mail: Mail,
+  'mail-open': MailOpen,
+  // Recarga / Reset
+  reload: RefreshCw,
+  'reload-outline': RefreshCw,
   refresh: RefreshCw,
+  'refresh-outline': RefreshCw,
   'refresh-circle': RefreshCw,
   sync: RotateCw,
-  remove: Minus,
-  restaurant: Utensils,
-  'search-outline': Search,
   send: Send,
   'shield-checkmark': ShieldCheck,
   'shield-checkmark-outline': ShieldCheck,
@@ -120,12 +133,15 @@ const ICON_MAP: Record<string, LucideComp> = {
   apps: LayoutGrid,
   'extension-puzzle': Puzzle,
   settings: Settings,
+  'settings-outline': Settings,
   notifications: Bell,
+  'notifications-outline': Bell,
   gift: Gift,
   tv: Tv,
   quote: Quote,
   edit: PenLine,
   info: Info,
+  'info-circle': Info,
 };
 
 // Íconos que se muestran "rellenos" cuando representan un estado activo/lleno
@@ -140,8 +156,27 @@ interface IconProps {
   strokeWidth?: number;
 }
 
+const warnedIcons = new Set<string>();
+
 const IconBase: React.FC<IconProps> = ({ name, size = 20, color = '#000', style, fill, strokeWidth }) => {
-  const Cmp = ICON_MAP[name] || Circle;
+  const Cmp = ICON_MAP[name];
+
+  if (!Cmp) {
+    if (__DEV__ && !warnedIcons.has(name)) {
+      warnedIcons.add(name);
+      console.warn(`[KMRG Icon] Ícono no registrado en ICON_MAP: "${name}". Agrega su mapeo en src/components/ui/Icon.tsx`);
+    }
+    const Fallback = Info;
+    const node = (
+      <Fallback
+        size={size}
+        color={color}
+        strokeWidth={strokeWidth ?? ICON_STROKE}
+      />
+    );
+    return style ? <View style={style}>{node}</View> : node;
+  }
+
   const shouldFill = fill ?? (FILLED_NAMES.has(name) && !name.endsWith('outline') ? color : undefined);
   const node = (
     <Cmp

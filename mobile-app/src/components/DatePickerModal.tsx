@@ -17,6 +17,7 @@ interface DatePickerModalProps {
   onSelect: (dateString: string) => void;
   onClose: () => void;
   title?: string;
+  minDate?: string;
 }
 
 const MONTH_NAMES = [
@@ -32,26 +33,29 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
   onSelect,
   onClose,
   title = 'Elige una fecha',
+  minDate,
 }) => {
   const { primaryColor } = useTheme();
 
   // Inicializar en el mes de la fecha actual
-  const initialDate = value ? new Date(value + 'T12:00:00') : new Date();
+  const effectiveVal = (minDate && value && value < minDate) ? minDate : value;
+  const initialDate = effectiveVal ? new Date(effectiveVal + 'T12:00:00') : new Date();
   const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth()); // 0-11
-  const [tempDate, setTempDate] = useState(value);
+  const [tempDate, setTempDate] = useState(effectiveVal);
 
   // Sincronizar cuando cambia el valor recibido
   React.useEffect(() => {
-    if (value) {
-      setTempDate(value);
-      const d = new Date(value + 'T12:00:00');
+    const val = (minDate && value && value < minDate) ? minDate : value;
+    if (val) {
+      setTempDate(val);
+      const d = new Date(val + 'T12:00:00');
       if (!isNaN(d.getTime())) {
         setCurrentYear(d.getFullYear());
         setCurrentMonth(d.getMonth());
       }
     }
-  }, [value, visible]);
+  }, [value, visible, minDate]);
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -135,27 +139,67 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
 
           {/* Accesos rápidos */}
           <View style={styles.quickButtonsRow}>
-            <TouchableOpacity
-              onPress={() => setQuickDate(0)}
-              style={styles.quickBtn}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.quickBtnText}>Hoy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setQuickDate(1)}
-              style={styles.quickBtn}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.quickBtnText}>Ayer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setQuickDate(7)}
-              style={styles.quickBtn}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.quickBtnText}>Hace 1 semana</Text>
-            </TouchableOpacity>
+            {minDate ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => {
+                    const t = new Date(); t.setDate(t.getDate() + 1);
+                    const s = t.toISOString().slice(0, 10);
+                    setTempDate(s); setCurrentYear(t.getFullYear()); setCurrentMonth(t.getMonth());
+                  }}
+                  style={styles.quickBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickBtnText}>Mañana</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    const t = new Date(); t.setDate(t.getDate() + 7);
+                    const s = t.toISOString().slice(0, 10);
+                    setTempDate(s); setCurrentYear(t.getFullYear()); setCurrentMonth(t.getMonth());
+                  }}
+                  style={styles.quickBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickBtnText}>En 1 sem</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    const t = new Date(); t.setDate(t.getDate() + 30);
+                    const s = t.toISOString().slice(0, 10);
+                    setTempDate(s); setCurrentYear(t.getFullYear()); setCurrentMonth(t.getMonth());
+                  }}
+                  style={styles.quickBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickBtnText}>En 1 mes</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  onPress={() => setQuickDate(0)}
+                  style={styles.quickBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickBtnText}>Hoy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setQuickDate(1)}
+                  style={styles.quickBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickBtnText}>Ayer</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setQuickDate(7)}
+                  style={styles.quickBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickBtnText}>Hace 1 sem</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           {/* Controles de mes y año */}
@@ -189,13 +233,16 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
 
               const isSelected = item.dateString === tempDate;
 
+              const isPastDisabled = Boolean(minDate && item.dateString < minDate);
               return (
                 <TouchableOpacity
                   key={item.dateString}
+                  disabled={isPastDisabled}
                   onPress={() => item.dateString && setTempDate(item.dateString)}
                   style={[
                     styles.dayCell,
                     isSelected && [styles.dayCellSelected, { backgroundColor: primaryColor }],
+                    isPastDisabled && { opacity: 0.25 },
                   ]}
                   activeOpacity={0.7}
                 >

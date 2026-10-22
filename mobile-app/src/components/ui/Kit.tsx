@@ -54,6 +54,24 @@ export const PressableScale: React.FC<{
     }).start();
   };
 
+  const flatStyle = StyleSheet.flatten(style) || {};
+  const pressableLayout: ViewStyle = {};
+  if (flatStyle.flex !== undefined) pressableLayout.flex = flatStyle.flex;
+  if (flatStyle.flexGrow !== undefined) pressableLayout.flexGrow = flatStyle.flexGrow;
+  if (flatStyle.flexShrink !== undefined) pressableLayout.flexShrink = flatStyle.flexShrink;
+  if (flatStyle.flexBasis !== undefined) pressableLayout.flexBasis = flatStyle.flexBasis;
+  if (flatStyle.width !== undefined) pressableLayout.width = flatStyle.width;
+  if (flatStyle.maxWidth !== undefined) pressableLayout.maxWidth = flatStyle.maxWidth;
+  if (flatStyle.minWidth !== undefined) pressableLayout.minWidth = flatStyle.minWidth;
+  if (flatStyle.alignSelf !== undefined) pressableLayout.alignSelf = flatStyle.alignSelf;
+  if (flatStyle.margin !== undefined) pressableLayout.margin = flatStyle.margin;
+  if (flatStyle.marginHorizontal !== undefined) pressableLayout.marginHorizontal = flatStyle.marginHorizontal;
+  if (flatStyle.marginVertical !== undefined) pressableLayout.marginVertical = flatStyle.marginVertical;
+  if (flatStyle.marginTop !== undefined) pressableLayout.marginTop = flatStyle.marginTop;
+  if (flatStyle.marginBottom !== undefined) pressableLayout.marginBottom = flatStyle.marginBottom;
+  if (flatStyle.marginLeft !== undefined) pressableLayout.marginLeft = flatStyle.marginLeft;
+  if (flatStyle.marginRight !== undefined) pressableLayout.marginRight = flatStyle.marginRight;
+
   return (
     <Pressable
       onPress={onPress}
@@ -64,8 +82,9 @@ export const PressableScale: React.FC<{
       accessibilityLabel={accessibilityLabel}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      style={Object.keys(pressableLayout).length > 0 ? pressableLayout : undefined}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <Animated.View style={[{ width: '100%' }, style, { transform: [{ scale }] }]}>
         {children}
       </Animated.View>
     </Pressable>

@@ -485,27 +485,41 @@ export const MemoriesScreen: React.FC = () => {
                     )}
                   </View>
 
-                  <View
-                    style={[
-                      styles.memoryCard,
-                      {
-                        backgroundColor: colors.paper,
-                        borderColor: colors.border,
-                        borderLeftColor: item.theme_color || primaryColor,
-                        borderLeftWidth: 4,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.memoryContent,
-                        { color: colors.text, fontFamily: SERIF_FONT },
-                      ]}
-                      numberOfLines={3}
-                    >
-                      “{item.content}”
-                    </Text>
-                  </View>
+                  {(() => {
+                    const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
+                    return (
+                      <View
+                        style={[
+                          styles.memoryCard,
+                          {
+                            backgroundColor: colors.paper,
+                            borderColor: colors.border,
+                            borderLeftColor: item.theme_color || primaryColor,
+                            borderLeftWidth: 4,
+                          },
+                        ]}
+                      >
+                        {isSealed ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+                            <Ionicons name="lock-closed" size={14} color={colors.primary} />
+                            <Text style={[styles.memoryContent, { color: colors.primary, fontWeight: '700', fontStyle: 'italic' }]}>
+                              Sellada con candado hasta el {formattedDate}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text
+                            style={[
+                              styles.memoryContent,
+                              { color: colors.text, fontFamily: SERIF_FONT },
+                            ]}
+                            numberOfLines={3}
+                          >
+                            “{item.content || 'Sin contenido'}”
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </PressableScale>
               </View>
             );
@@ -569,50 +583,45 @@ export const MemoriesScreen: React.FC = () => {
 
       {/* Selector de Modos de Vista: Álbum | Mapa | Calendario | Cartas (Sin solapamiento) */}
       <View style={[styles.viewToggleContainer, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.viewToggleScroll}
-        >
-          {[
-            { id: 'album', label: 'Álbum', icon: 'images' },
-            { id: 'map', label: 'Mapa', icon: 'map' },
-            { id: 'calendar', label: 'Calendario', icon: 'calendar' },
-            { id: 'timeline', label: 'Cartas', icon: 'mail-open-outline' },
-          ].map((item) => {
-            const active = viewMode === item.id;
-            return (
-              <PressableScale
-                key={item.id}
-                onPress={() => setViewMode(item.id as ViewMode)}
+        {[
+          { id: 'album', label: 'Álbum', icon: 'images' },
+          { id: 'map', label: 'Mapa', icon: 'map' },
+          { id: 'calendar', label: 'Calendario', icon: 'calendar' },
+          { id: 'timeline', label: 'Cartas', icon: 'mail-open-outline' },
+        ].map((item) => {
+          const active = viewMode === item.id;
+          return (
+            <PressableScale
+              key={item.id}
+              onPress={() => setViewMode(item.id as ViewMode)}
+              style={[
+                styles.viewToggleBtn,
+                { flex: 1 },
+                active
+                  ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                  : { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              scaleTo={0.95}
+            >
+              <Ionicons
+                name={item.icon as any}
+                size={14}
+                color={active ? colors.primaryOn : colors.textMuted}
+              />
+              <Text
                 style={[
-                  styles.viewToggleBtn,
+                  styles.viewToggleText,
                   active
-                    ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                    : { backgroundColor: colors.surface, borderColor: colors.border },
+                    ? { color: colors.primaryOn, fontWeight: '800' }
+                    : { color: colors.textSecondary },
                 ]}
-                scaleTo={0.95}
+                numberOfLines={1}
               >
-                <Ionicons
-                  name={item.icon as any}
-                  size={14}
-                  color={active ? colors.primaryOn : colors.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.viewToggleText,
-                    active
-                      ? { color: colors.primaryOn, fontWeight: '800' }
-                      : { color: colors.textSecondary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item.label}
-                </Text>
-              </PressableScale>
-            );
-          })}
-        </ScrollView>
+                {item.label}
+              </Text>
+            </PressableScale>
+          );
+        })}
       </View>
 
       {loading ? (
@@ -1143,8 +1152,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     alignContent: 'flex-start',
   },
   albumGridItem: {
-    width: GRID_IMAGE_SIZE,
-    height: GRID_IMAGE_SIZE * 1.15,
+    width: '48.5%',
+    aspectRatio: 1,
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#f1f3f5',
@@ -1339,10 +1348,10 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     marginBottom: 4,
   },
   dateBadge: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '700',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 8,
     textTransform: 'capitalize',
   },

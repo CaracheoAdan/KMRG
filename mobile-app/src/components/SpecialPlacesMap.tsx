@@ -34,7 +34,7 @@ import { supabase } from '../config/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const INLINE_MAP_WIDTH = SCREEN_WIDTH - 36;
-const INLINE_MAP_HEIGHT = Math.min(245, Math.max(190, Math.floor(SCREEN_HEIGHT * 0.29)));
+const INLINE_MAP_HEIGHT = Math.min(320, Math.max(260, Math.floor(SCREEN_HEIGHT * 0.38)));
 const TILE_SIZE = 256;
 
 const CATEGORIES: Array<{
@@ -546,7 +546,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const url =
           mapStyle === 'dark'
             ? `https://${sub}.basemaps.cartocdn.com/dark_all/${zoom}/${wrappedTx}/${ty}.png`
-            : `https://${sub}.tile.openstreetmap.org/${zoom}/${wrappedTx}/${ty}.png`;
+            : `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}.png`;
 
         tiles.push({
           key: `${zoom}-${tx}-${ty}-${mapStyle}`,
@@ -777,33 +777,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           </View>
         )}
 
-        {/* Botón inferior central para Pinear en el punto actual o activar toque */}
-        <View pointerEvents="box-none" style={styles.bottomMapBar}>
-          <TouchableOpacity
-            onPress={() => setIsPinDropMode((prev) => !prev)}
-            style={[
-              styles.pinHereBtn,
-              {
-                backgroundColor: isPinDropMode ? '#0f172a' : primaryColor,
-              },
-            ]}
-            activeOpacity={0.88}
-          >
-            <Ionicons name="location" size={15} color="#ffffff" />
-            <Text style={styles.pinHereBtnText}>
-              {isPinDropMode ? 'Toca el mapa ahora...' : 'Tocar mapa para pinear'}
-            </Text>
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
-            style={styles.pinCenterBtn}
-            activeOpacity={0.88}
-          >
-            <Ionicons name="add" size={16} color="#0f172a" />
-            <Text style={styles.pinCenterBtnText}>Pinear centro</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Controles Flotantes Derechos (Zoom, Estilo, Ruta, Pantalla Completa) */}
         <View pointerEvents="box-none" style={styles.mapRightControls}>
@@ -889,7 +863,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <TouchableOpacity
             onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
-            style={[styles.newPinBannerBtn, { backgroundColor: '#0f172a' }]}
+            style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
             activeOpacity={0.85}
           >
             <Ionicons name="add-circle-outline" size={13} color="#ffffff" />

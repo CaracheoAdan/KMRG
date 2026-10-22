@@ -1404,85 +1404,9 @@ export const GamesScreen: React.FC = () => {
       <View
         style={[
           styles.arenaCard,
-          isFull && styles.arenaCardProDark,
+          { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
-        {/* Cabecera del Juego (O Barra de Consola Pro en Modo Zoom) */}
-        <View style={styles.arenaHeader}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {isFull && (
-                <View style={[styles.proLiveBadge, { backgroundColor: primaryColor }]}>
-                  <Text style={styles.proLiveBadgeText}>PRO ARENA</Text>
-                </View>
-              )}
-              <Text
-                style={[
-                  styles.arenaTitle,
-                  isFull && { fontSize: 20, color: '#f8fafc', letterSpacing: 0.5 },
-                ]}
-              >
-                {activeGame === 'tictactoe'
-                  ? isFull
-                    ? 'CYBER TIC-TAC-TOE'
-                    : 'Tres en Raya'
-                  : activeGame === 'sudoku'
-                  ? isFull
-                    ? 'SUDOKU MASTER STUDIO'
-                    : 'Sudoku'
-                  : activeGame === 'chess'
-                  ? isFull
-                    ? 'GRANDMASTER CHESS'
-                    : 'Ajedrez'
-                  : activeGame === 'battleship'
-                  ? isFull
-                    ? 'BATTLESHIP COMMAND 10x10'
-                    : 'Battleship 10x10'
-                  : isFull
-                  ? 'HANGMAN ARCADE'
-                  : 'El Ahorcado'}
-              </Text>
-            </View>
-            <Text style={[styles.arenaSubtitle, isFull && { color: '#94a3b8' }]}>
-              {activeGame === 'tictactoe'
-                ? `Ronda #${gamesState.ticTacToe.round || 1} • Karlita ${gamesState.ticTacToe.scoreKarla} - ${gamesState.ticTacToe.scoreJavier} Javier`
-                : activeGame === 'sudoku'
-                ? `Récord K: ${gamesState.sudoku.bestScoreKarla} | J: ${gamesState.sudoku.bestScoreJavier} • ${sudoku.score} pts`
-                : activeGame === 'chess'
-                ? `Karlita ${gamesState.chess.winsKarla || 0} - ${gamesState.chess.winsJavier || 0} Javier`
-                : activeGame === 'battleship'
-                ? `Flotas 10x10 • Karlita ${remainingShipsKarla}/5 buques vs ${remainingShipsJavier}/5 Javier`
-                : `Racha: ${hangman.streak || 0} • ${hangman.category || 'General'}`}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => setIsFullScreenGame(!isFull)}
-            style={[
-              styles.fullScreenToggleBtn,
-              {
-                backgroundColor: isFull ? '#1e293b' : `${primaryColor}15`,
-                borderWidth: isFull ? 1 : 0,
-                borderColor: '#334155',
-              },
-            ]}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isFull ? 'contract-outline' : 'game-controller'}
-              size={15}
-              color={isFull ? '#38bdf8' : primaryColor}
-            />
-            <Text
-              style={[
-                styles.fullScreenToggleText,
-                { color: isFull ? '#f8fafc' : primaryColor },
-              ]}
-            >
-              {isFull ? 'Salir Modo Pro' : 'Modo Juego Pro'}
-            </Text>
-          </TouchableOpacity>
-        </View>
 
         {/* ================= 1. TRES EN RAYA ================= */}
         {activeGame === 'tictactoe' && (
@@ -1833,7 +1757,7 @@ export const GamesScreen: React.FC = () => {
               ))}
             </View>
 
-            {/* Barra Inferior de Teclado Numérico o Game Over si perdió las 3 vidas */}
+            {/* Teclado numérico físico propio (1-9) siempre visible y anclado abajo */}
             {isSudokuGameOver ? (
               <TouchableOpacity
                 onPress={() => void handleNewSudokuGame(sudoku.difficulty)}
@@ -1848,49 +1772,23 @@ export const GamesScreen: React.FC = () => {
                 </Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                onPress={() => {
-                  if (!selectedSudokuCell) {
-                    for (let rr = 0; rr < 9; rr++) {
-                      const cc = sudoku.board[rr].findIndex((v, i) => !sudoku.fixed[rr][i] && v === 0);
-                      if (cc !== -1) {
-                        handleSelectSudokuCell(rr, cc);
-                        return;
-                      }
-                    }
-                  } else {
-                    sudokuInputRef.current?.focus();
-                  }
-                }}
-                activeOpacity={0.85}
-                style={[
-                  styles.primaryGameBtn,
-                  {
-                    backgroundColor: isFull ? '#1e293b' : `${primaryColor}16`,
-                    borderWidth: 1,
-                    borderColor: isFull ? '#38bdf8' : `${primaryColor}45`,
-                    width: '100%',
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="keypad-outline"
-                  size={16}
-                  color={isFull ? '#38bdf8' : primaryColor}
-                />
-                <Text
-                  style={[
-                    styles.primaryGameBtnText,
-                    { color: isFull ? '#f8fafc' : primaryColor, fontSize: 12 },
-                  ]}
-                >
-                  {selectedSudokuCell
-                    ? `Casilla F${selectedSudokuCell[0] + 1}C${
-                        selectedSudokuCell[1] + 1
-                      } • Toca para abrir Teclado Numérico (1-9)`
-                    : 'Toca cualquier casilla vacía para usar tu Teclado Numérico'}
-                </Text>
-              </TouchableOpacity>
+              <View style={{ width: '100%', gap: 6, marginTop: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 4 }}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <TouchableOpacity
+                      key={num}
+                      onPress={() => void handleSudokuNumberPress(num)}
+                      style={[
+                        styles.sudokuNumKey,
+                        { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.sudokuNumKeyText, { color: colors.text }]}>{num}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             )}
           </View>
         )}
@@ -1976,7 +1874,10 @@ export const GamesScreen: React.FC = () => {
                               styles.chessGlyph,
                               {
                                 fontSize: isFull ? 29 : 22,
-                                color: piece.color === 'w' ? '#6b21a8' : '#0f172a',
+                                color: piece.color === 'w' ? '#ffffff' : '#0f172a',
+   textShadowColor: piece.color === 'w' ? '#0f172a' : '#ffffff',
+   textShadowOffset: { width: 0, height: 1 },
+   textShadowRadius: 3,
                               },
                             ]}
                           >
@@ -2329,7 +2230,7 @@ export const GamesScreen: React.FC = () => {
                     ]}
                     numberOfLines={1}
                   >
-                    Arrastra cualquier barco o tócalo para rotarlo ahí mismo:
+                    Arrastra un barco o tócalo para rotarlo
                   </Text>
                   <TouchableOpacity
                     onPress={() => handleRotateSelectedShipInPlace()}
@@ -3055,7 +2956,7 @@ export const GamesScreen: React.FC = () => {
         case 'battleship': {
           if (gamesState.battleship.winner) return { text: 'Terminado', isMyTurn: false };
           if (gamesState.battleship.phase === 'setup')
-            return { text: 'Acomodar flota', isMyTurn: true };
+            return { text: 'Acomodar', isMyTurn: true };
           const isMyTurn = gamesState.battleship.turn === currentProfile;
           return {
             text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.battleship.turn)}`,
@@ -3064,10 +2965,10 @@ export const GamesScreen: React.FC = () => {
         }
         case 'chess': {
           if (gamesState.chess.winner) return { text: 'Jaque Mate', isMyTurn: false };
-          const isWhite = currentProfile === 'Javier';
+          const isWhite = currentProfile === 'Karla';
           const isMyTurn =
             (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
-          return { text: isMyTurn ? 'Tu turno' : 'Turno de tu pareja', isMyTurn };
+          return { text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.chess.turn === 'w' ? 'Karla' : 'Javier')}`, isMyTurn };
         }
         case 'sudoku': {
           if (sudoku.completed) return { text: 'Completado', isMyTurn: false };
@@ -3095,12 +2996,12 @@ export const GamesScreen: React.FC = () => {
       case 'sudoku':
         return 'Colaborativo';
       case 'chess': {
-        const isWhite = currentProfile === 'Javier';
+        const isWhite = currentProfile === 'Karla';
         const isMyTurn =
           (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
         return isMyTurn
           ? 'Tu turno'
-          : `Turno de ${getDisplayName(currentProfile === 'Karla' ? 'Javier' : 'Karla')}`;
+          : `Turno de ${getDisplayName(gamesState.chess.turn === 'w' ? 'Karla' : 'Javier')}`;
       }
       case 'battleship': {
         if (gamesState.battleship.phase === 'setup') return 'Acomodo de Flota';
@@ -3266,10 +3167,16 @@ export const GamesScreen: React.FC = () => {
                   <View style={[styles.gameGridIconBox, { backgroundColor: g.bgTint }]}>
                     <Ionicons name={g.icon as any} size={26} color={g.iconColor} />
                   </View>
-                  <Text style={[styles.gameGridCardTitle, { color: colors.text }]}>{g.label}</Text>
+                  <Text
+                    style={[styles.gameGridCardTitle, { color: colors.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {g.label}
+                  </Text>
                   <Text
                     style={[styles.gameGridCardSub, { color: colors.textMuted }]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
                     {g.description}
                   </Text>
@@ -3280,7 +3187,7 @@ export const GamesScreen: React.FC = () => {
                         backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
                         borderColor: status.isMyTurn ? colors.primary : colors.border,
                         alignSelf: 'flex-start',
-                        marginTop: 8,
+                        marginTop: 'auto',
                       },
                     ]}
                   >
@@ -3295,6 +3202,7 @@ export const GamesScreen: React.FC = () => {
                         styles.turnBadgeText,
                         { color: status.isMyTurn ? colors.primary : colors.textMuted },
                       ]}
+                      numberOfLines={1}
                     >
                       {status.text}
                     </Text>
@@ -3510,7 +3418,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   lobbyScrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 28,
+    paddingBottom: 110,
     gap: 16,
   },
   lobbyScoreboard: {
@@ -3638,18 +3546,22 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   gamesGridTwoCol: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 12,
   },
   gameGridCard: {
     width: '48%',
+    minHeight: 164,
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
+    borderColor: c.border,
     shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 2,
+    justifyContent: 'space-between',
   },
   gameGridIconBox: {
     width: 44,
@@ -3936,6 +3848,18 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sudokuNumKey: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sudokuNumKeyText: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   sudokuGridContainer: {
     borderWidth: 2,

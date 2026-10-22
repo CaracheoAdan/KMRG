@@ -49,7 +49,12 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [profile, setProfile] = useState<UserProfile>('Javier');
   const [activeTab, setActiveTab] = useState<'write' | 'sent'>('write');
   const [content, setContent] = useState('');
-  const [scheduledDate, setScheduledDate] = useState(() => toLocalDateString(new Date()));
+  const getTomorrowString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return toLocalDateString(d);
+  };
+  const [scheduledDate, setScheduledDate] = useState(() => getTomorrowString());
   const [themeColor, setThemeColor] = useState(primaryColor);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSealingEnvelope, setIsSealingEnvelope] = useState(false);
@@ -192,7 +197,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 styles.paperSheet,
                 {
                   backgroundColor: colors.paper,
-                  borderColor: `${themeColor}50`,
+                  borderColor: themeColor,
+                  borderTopWidth: 4,
                 },
               ]}
             >
@@ -288,6 +294,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <DatePickerModal
               visible={showDatePicker}
               value={scheduledDate}
+              minDate={getTomorrowString()}
               onSelect={(selected) => setScheduledDate(selected)}
               onClose={() => setShowDatePicker(false)}
               title="Fecha de Desbloqueo"
@@ -494,7 +501,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   writeViewport: {
     flex: 1,
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 12,
+    paddingBottom: 24,
   },
   paperSheet: {
     backgroundColor: c.paper,
@@ -659,7 +667,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     gap: 12,
   },
   colorPickerContainer: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
+    width: '100%',
   },
   colorPickerLabel: {
     fontSize: 10,
@@ -737,7 +746,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   colorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 10,
+    flexWrap: 'wrap',
   },
   colorDot: {
     width: 28,
@@ -756,8 +766,10 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 13,
+    paddingVertical: 14,
     borderRadius: 16,
+    marginTop: 16,
+    marginBottom: 8,
   },
   submitButtonText: {
     fontSize: 14,
