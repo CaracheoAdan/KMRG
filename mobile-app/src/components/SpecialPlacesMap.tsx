@@ -547,8 +547,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const wrappedTx = ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
         const left = Math.round(viewportW / 2 + (tx * TILE_SIZE - centerWorld.x));
         const top = Math.round(viewportH / 2 + (ty * TILE_SIZE - centerWorld.y));
-        const sub = ['a', 'b', 'c'][(Math.abs(tx + ty)) % 3];
-        const url = `https://${sub}.tile.openstreetmap.org/${zoom}/${wrappedTx}/${ty}.png`;
+        const mapService = mapStyle === 'dark' ? 'Canvas/World_Dark_Gray_Base' : 'World_Street_Map';
+        const url = `https://server.arcgisonline.com/ArcGIS/rest/services/${mapService}/MapServer/tile/${zoom}/${ty}/${wrappedTx}`;
 
         tiles.push({
           key: `${zoom}-${tx}-${ty}-${mapStyle}`,
@@ -831,7 +831,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
         {/* Atribución CARTO / OpenStreetMap */}
         <View pointerEvents="none" style={styles.mapAttributionBox}>
-          <Text style={styles.mapAttributionText}>© OpenStreetMap contributors</Text>
+          <Text style={styles.mapAttributionText}>© Esri, HERE, OpenStreetMap contributors</Text>
         </View>
 
         {tileError && (

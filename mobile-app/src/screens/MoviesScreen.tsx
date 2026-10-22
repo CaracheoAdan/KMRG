@@ -492,9 +492,9 @@ export const MoviesScreen: React.FC = () => {
 
       {/* Contenedor Fijo SIN Scroll Vertical */}
       <View style={styles.fixedViewport}>
-        {/* Selector de 4 Sub-Pestañas de Ancho Igual (flex: 1) con Ícono + Badge Arriba y Texto Corto Abajo */}
+        {/* Selector de 4 Sub-Pestañas con el mismo tamaño y consistencia que Nosotros */}
         <View style={styles.tabsWrapper}>
-          <View style={styles.equalTabsRow}>
+          <View style={[styles.equalTabsRow, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
             {[
               { id: 'pending', label: 'Por Ver', icon: 'film-outline', count: pendingMovies.length },
               { id: 'watched', label: 'Vistas', icon: 'star-outline', count: watchedMovies.length },
@@ -517,48 +517,49 @@ export const MoviesScreen: React.FC = () => {
                   }}
                   style={[
                     styles.equalTabBtn,
-                    active && styles.equalTabBtnActive,
+                    { flex: 1 },
+                    active
+                      ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                      : { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
-                  scaleTo={0.96}
+                  scaleTo={0.95}
                 >
-                  <View style={styles.tabIconWrapper}>
-                    <Ionicons
-                      name={t.icon as any}
-                      size={18}
-                      color={active ? colors.primary : colors.textMuted}
-                    />
-                    {t.count !== null && t.count !== undefined && (
-                      <View
-                        style={[
-                          styles.tabBadge,
-                          {
-                            backgroundColor: active ? colors.primary : colors.surfaceAlt,
-                            borderColor: active ? colors.primary : colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.tabBadgeText,
-                            { color: active ? '#ffffff' : colors.textSecondary },
-                          ]}
-                        >
-                          {t.count}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
+                  <Ionicons
+                    name={t.icon as any}
+                    size={16}
+                    color={active ? colors.primaryOn : colors.textMuted}
+                  />
                   <Text
                     style={[
                       styles.equalTabBtnText,
                       active
-                        ? { color: colors.primary, fontWeight: '800' }
+                        ? { color: colors.primaryOn, fontWeight: '800' }
                         : { color: colors.textSecondary },
                     ]}
                     numberOfLines={1}
                   >
                     {t.label}
                   </Text>
+                  {t.count !== null && t.count !== undefined && t.count > 0 && (
+                    <View
+                      style={[
+                        styles.tabBadge,
+                        {
+                          backgroundColor: active ? 'rgba(255,255,255,0.28)' : colors.surfaceAlt,
+                          borderColor: active ? 'rgba(255,255,255,0.45)' : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabBadgeText,
+                          { color: active ? colors.primaryOn : colors.textSecondary },
+                        ]}
+                      >
+                        {t.count}
+                      </Text>
+                    </View>
+                  )}
                 </PressableScale>
               );
             })}
@@ -1137,12 +1138,13 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   tabsWrapper: {
+    marginVertical: 4,
     marginBottom: 8,
   },
   equalTabsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: c.surface,
+    backgroundColor: c.surfaceAlt,
     borderRadius: 16,
     padding: 4,
     borderWidth: 1,
@@ -1151,30 +1153,25 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   equalTabBtn: {
     flex: 1,
+    minHeight: 40,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 2,
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 4,
     borderRadius: 12,
+    borderWidth: 1,
   },
   equalTabBtnActive: {
-    backgroundColor: c.surfaceAlt,
+    backgroundColor: c.surface,
     shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 2,
+    shadowRadius: 3,
     elevation: 2,
   },
-  tabIconWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
   tabBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -12,
     minWidth: 16,
     height: 16,
     borderRadius: 8,
@@ -1182,14 +1179,16 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    marginLeft: 1,
   },
   tabBadgeText: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: '800',
   },
   equalTabBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
+    color: c.textSecondary,
   },
   contentArea: {
     flex: 1,
