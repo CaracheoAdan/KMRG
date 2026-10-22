@@ -97,8 +97,8 @@ interface Props {
 }
 
 export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor }) => {
-  const { colors: themeColors } = useThemeTokens();
-  const styles = React.useMemo(() => makeStyles(themeColors), [themeColors]);
+  const { colors, isDark } = useThemeTokens();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [places, setPlaces] = useState<SpecialPlace[]>(DEFAULT_SPECIAL_PLACES);
   const [selectedPlace, setSelectedPlace] = useState<SpecialPlace | null>(
     DEFAULT_SPECIAL_PLACES[0] || null
@@ -542,10 +542,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const wrappedTx = ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
         const left = Math.round(viewportW / 2 + (tx * TILE_SIZE - centerWorld.x));
         const top = Math.round(viewportH / 2 + (ty * TILE_SIZE - centerWorld.y));
+        const sub = ['a', 'b', 'c'][(Math.abs(tx + ty)) % 3];
         const url =
           mapStyle === 'dark'
-            ? `https://basemaps.cartocdn.com/dark_all/${zoom}/${wrappedTx}/${ty}.png`
-            : `https://basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}.png`;
+            ? `https://${sub}.basemaps.cartocdn.com/dark_all/${zoom}/${wrappedTx}/${ty}.png`
+            : `https://${sub}.tile.openstreetmap.org/${zoom}/${wrappedTx}/${ty}.png`;
 
         tiles.push({
           key: `${zoom}-${tx}-${ty}-${mapStyle}`,
@@ -595,7 +596,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           {tiles.map((t) => (
             <Image
               key={t.key}
-              source={{ uri: t.url }}
+              source={{ uri: t.url, headers: { 'User-Agent': 'KMRG-App/1.0' } }}
               style={{
                 position: 'absolute',
                 left: t.left,
@@ -743,13 +744,19 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                 style={[
                   styles.pinLabelTag,
                   {
-                    backgroundColor: isSelected
-                      ? primaryColor
-                      : 'rgba(15, 23, 42, 0.88)',
+                    backgroundColor: isSelected ? primaryColor : colors.surface,
+                    borderColor: isSelected ? primaryColor : colors.border,
+                    borderWidth: 1,
                   },
                 ]}
               >
-                <Text style={styles.pinLabelText} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.pinLabelText,
+                    { color: isSelected ? '#ffffff' : colors.text },
+                  ]}
+                  numberOfLines={1}
+                >
                   {place.title}
                 </Text>
               </TouchableOpacity>

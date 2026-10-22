@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
@@ -16,11 +16,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '../components/ui/Icon';
-import { PressableScale } from '../components/ui/Kit';
+import { PressableScale, EmptyState } from '../components/ui/Kit';
 import * as ImagePicker from 'expo-image-picker';
 import { PhotoCalendar } from '../components/PhotoCalendar';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -79,6 +80,22 @@ export const MemoriesScreen: React.FC = () => {
 
   // Modal para ver tarjeta completa de recuerdo en grande
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
+
+  // Modal para ver carta completa con animación de sobre
+  const [selectedLetter, setSelectedLetter] = useState<Message | null>(null);
+  const letterAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (selectedLetter) {
+      letterAnim.setValue(0);
+      Animated.spring(letterAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [selectedLetter, letterAnim]);
 
   // Fecha seleccionada en el calendario
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalDateString(new Date()));
@@ -405,15 +422,11 @@ export const MemoriesScreen: React.FC = () => {
   const renderTimelinePaginatedView = () => {
     if (memories.length === 0) {
       return (
-        <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIconCircle, { backgroundColor: `${primaryColor}18` }]}>
-            <Ionicons name="book-outline" size={40} color={primaryColor} />
-          </View>
-          <Text style={styles.emptyTitle}>Nuestra historia apenas comienza</Text>
-          <Text style={styles.emptySubtitle}>
-            Los mensajes que se vayan leyendo día tras día se guardarán aquí en su cápsula del tiempo.
-          </Text>
-        </View>
+        <EmptyState
+          icon="mail-outline"
+          title="Nuestra historia apenas comienza"
+          message="Los mensajes que se vayan leyendo día tras día se guardarán aquí en su cápsula del tiempo."
+        />
       );
     }
 
@@ -428,7 +441,7 @@ export const MemoriesScreen: React.FC = () => {
     return (
       <View style={styles.timelineFixedContainer}>
         <View style={styles.sectionTitleRow}>
-          <Ionicons name="time-outline" size={16} color={primaryColor} />
+          <Ionicons name="mail-open" size={16} color={primaryColor} />
           <Text style={styles.sectionTitle}>Cartas Guardadas ({memories.length})</Text>
         </View>
 
@@ -449,7 +462,12 @@ export const MemoriesScreen: React.FC = () => {
                   {!isLast && <View style={styles.timelineLine} />}
                 </View>
 
-                <View style={styles.memoryCardWrapper}>
+                <PressableScale
+                  onPress={() => setSelectedLetter(item)}
+                  style={styles.memoryCardWrapper}
+                  scaleTo={0.98}
+                  accessibilityLabel={`Leer carta del ${formattedDate}`}
+                >
                   <View style={styles.memoryHeader}>
                     <Text
                       style={[
@@ -461,18 +479,34 @@ export const MemoriesScreen: React.FC = () => {
                     </Text>
                     {item.is_read && (
                       <View style={styles.readBadge}>
-                        <Ionicons name="checkmark-done" size={13} color="#adb5bd" />
-                        <Text style={styles.readCheck}>Leído</Text>
+                        <Ionicons name="checkmark-done" size={13} color={colors.textMuted} />
+                        <Text style={[styles.readCheck, { color: colors.textMuted }]}>Leída</Text>
                       </View>
                     )}
                   </View>
 
-                  <View style={[styles.memoryCard, { borderLeftColor: primaryColor }]}>
-                    <Text style={styles.memoryContent} numberOfLines={3}>
-                      {item.content}
+                  <View
+                    style={[
+                      styles.memoryCard,
+                      {
+                        backgroundColor: colors.paper,
+                        borderColor: colors.border,
+                        borderLeftColor: item.theme_color || primaryColor,
+                        borderLeftWidth: 4,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.memoryContent,
+                        { color: colors.text, fontFamily: SERIF_FONT },
+                      ]}
+                      numberOfLines={3}
+                    >
+                      “{item.content}”
                     </Text>
                   </View>
-                </View>
+                </PressableScale>
               </View>
             );
           })}
@@ -791,11 +825,182 @@ export const MemoriesScreen: React.FC = () => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Modal para Leer Carta Completa con Animación de Sobre Abierto */}
+      <Modal
+        visible={Boolean(selectedLetter)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedLetter(null)}
+      >
+        <View style={styles.letterModalOverlay}>
+          <Animated.View
+            style={[
+              styles.letterPaperCard,
+              {
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+                transform: [
+                  {
+                    scale: letterAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.85, 1],
+                    }),
+                  },
+                  {
+                    translateY: letterAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [40, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {/* Cabecera del sobre / carta */}
+            <View
+              style={[
+                styles.letterModalHeaderFlap,
+                { backgroundColor: selectedLetter?.theme_color || primaryColor },
+              ]}
+            >
+              <Ionicons name="mail-open" size={16} color="#ffffff" />
+              <Text style={styles.letterModalFlapText}>
+                Carta del {selectedLetter ? formatDisplayDate(selectedLetter.scheduled_date) : ''}
+              </Text>
+            </View>
+
+            <View style={styles.letterModalBody}>
+              <View style={styles.letterHeaderDecor}>
+                <Ionicons
+                  name="heart"
+                  size={16}
+                  color={selectedLetter?.theme_color || primaryColor}
+                />
+                <Text style={[styles.letterRecipientText, { color: colors.textSecondary }]}>
+                  Para {selectedLetter?.recipient === 'Karla' ? 'Karlita' : 'Javier'}
+                </Text>
+              </View>
+
+              <ScrollView
+                style={styles.letterScrollArea}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text
+                  style={[
+                    styles.letterFullContent,
+                    { color: colors.text, fontFamily: SERIF_FONT },
+                  ]}
+                >
+                  {selectedLetter?.content}
+                </Text>
+              </ScrollView>
+
+              <View style={styles.letterModalFooter}>
+                <Text style={[styles.letterAuthorText, { color: colors.textMuted }]}>
+                  Con amor, {selectedLetter?.sender === 'Karla' ? 'Karlita' : 'Javier'}
+                </Text>
+                <PressableScale
+                  onPress={() => setSelectedLetter(null)}
+                  style={[
+                    styles.letterCloseBtn,
+                    { backgroundColor: selectedLetter?.theme_color || primaryColor },
+                  ]}
+                  scaleTo={0.94}
+                >
+                  <Text style={styles.letterCloseBtnText}>Guardar en Sobre</Text>
+                </PressableScale>
+              </View>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
 
 const makeStyles = (c: ThemePalette) => StyleSheet.create({
+  letterModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  letterPaperCard: {
+    width: '100%',
+    maxWidth: 360,
+    maxHeight: '80%',
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  letterModalHeaderFlap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+  },
+  letterModalFlapText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  letterModalBody: {
+    padding: 18,
+    flexShrink: 1,
+  },
+  letterHeaderDecor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    marginBottom: 12,
+  },
+  letterRecipientText: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: SERIF_FONT,
+  },
+  letterScrollArea: {
+    maxHeight: 260,
+  },
+  letterFullContent: {
+    fontSize: 16,
+    lineHeight: 26,
+  },
+  letterModalFooter: {
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  letterAuthorText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  letterCloseBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  letterCloseBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
   safeArea: {
     flex: 1,
     backgroundColor: c.background,

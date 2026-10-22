@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  Animated,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -50,6 +52,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [scheduledDate, setScheduledDate] = useState(() => toLocalDateString(new Date()));
   const [themeColor, setThemeColor] = useState(primaryColor);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSealingEnvelope, setIsSealingEnvelope] = useState(false);
+  const sealAnim = useRef(new Animated.Value(0)).current;
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [sentLetters, setSentLetters] = useState<Message[]>([]);
   const [sentPage, setSentPage] = useState(0);
@@ -83,20 +87,32 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       });
 
       if (result.success) {
-        Alert.alert(
-          'Carta Programada',
-          `Tu carta quedó guardada con candado y se abrirá para ${recipientDisplay} el ${scheduledDate}.`,
-          [
-            {
-              text: 'Aceptar',
-              onPress: () => {
-                setContent('');
-                getSentMessages(profile).then(setSentLetters);
-                navigation.navigate('Hoy');
+        setIsSealingEnvelope(true);
+        Animated.sequence([
+          Animated.timing(sealAnim, {
+            toValue: 1,
+            duration: 650,
+            useNativeDriver: true,
+          }),
+          Animated.delay(300),
+        ]).start(() => {
+          setIsSealingEnvelope(false);
+          sealAnim.setValue(0);
+          Alert.alert(
+            'Carta Sellada',
+            `Tu sobre quedó cerrado con candado y se abrirá para ${recipientDisplay} el ${formatDisplayDate(scheduledDate)}.`,
+            [
+              {
+                text: 'Aceptar',
+                onPress: () => {
+                  setContent('');
+                  getSentMessages(profile).then(setSentLetters);
+                  navigation.navigate('Hoy');
+                },
               },
-            },
-          ]
-        );
+            ]
+          );
+        });
       } else {
         Alert.alert('Aviso', result.error || 'No se pudo enviar la carta.');
       }
@@ -170,8 +186,24 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
         {activeTab === 'write' ? (
           <View style={styles.writeViewport}>
-            {/* Hoja de Carta / Papel con Estética Callejera y Cálida */}
-            <View style={[styles.paperSheet, { backgroundColor: colors.paper, borderColor: colors.border }]}>
+            {/* Hoja de Carta / Papel con Previsualización del Sobre */}
+            <View
+              style={[
+                styles.paperSheet,
+                {
+                  backgroundColor: colors.paper,
+                  borderColor: `${themeColor}50`,
+                },
+              ]}
+            >
+              {/* Banda decorativa que previsualiza el color del sobre seleccionado */}
+              <View style={[styles.envelopeFlapAccent, { backgroundColor: themeColor }]}>
+                <Ionicons name="mail" size={12} color="#ffffff" />
+                <Text style={styles.envelopeFlapText}>
+                  Sobre {PRESET_COLORS.find((c) => c.hex === themeColor)?.label || ''}
+                </Text>
+              </View>
+
               {/* Encabezado decorativo de la carta */}
               <View style={styles.paperHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -206,51 +238,49 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
             {/* Opciones: Fecha de apertura y selector de color con etiqueta clara */}
             <View style={[styles.envelopeConfigCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.envelopeConfigRow}>
-                {/* Selector de Fecha */}
-                <PressableScale
-                  onPress={() => setShowDatePicker(true)}
-                  style={[styles.datePickerCompact, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
-                  scaleTo={0.96}
-                >
-                  <Ionicons name="calendar" size={16} color={themeColor} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.dateLabelMini, { color: colors.textMuted }]}>APERTURA</Text>
-                    <Text style={[styles.datePickerSelectedText, { color: colors.text }]} numberOfLines={1}>
-                      {formatDisplayDate(scheduledDate, {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </Text>
-                  </View>
-                </PressableScale>
-
-                {/* Color del sobre / carta con etiqueta */}
-                <View style={styles.colorPickerContainer}>
-                  <Text style={[styles.colorPickerLabel, { color: colors.textMuted }]}>
-                    Color del sobre / carta
+              {/* Selector de Fecha Prominente */}
+              <PressableScale
+                onPress={() => setShowDatePicker(true)}
+                style={[styles.datePickerProminent, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                scaleTo={0.97}
+                accessibilityLabel="Seleccionar fecha de apertura"
+              >
+                <View style={[styles.dateIconCircle, { backgroundColor: `${colors.primary}18` }]}>
+                  <Ionicons name="calendar" size={18} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dateLabelMini, { color: colors.textMuted }]}>FECHA DE DESBLOQUEO</Text>
+                  <Text style={[styles.datePickerProminentText, { color: colors.text }]} numberOfLines={1}>
+                    Se abrirá el {formatDisplayDate(scheduledDate, { day: 'numeric', month: 'short', year: 'numeric' })}
                   </Text>
-                  <View style={styles.colorRow}>
-                    {PRESET_COLORS.map((color) => {
-                      const isSelected = themeColor === color.hex;
-                      return (
-                        <PressableScale
-                          key={color.hex}
-                          onPress={() => setThemeColor(color.hex)}
-                          style={[
-                            styles.colorDot,
-                            { backgroundColor: color.hex },
-                            isSelected && styles.colorDotSelected,
-                          ]}
-                          scaleTo={0.9}
-                          accessibilityLabel={`Color ${color.label}`}
-                        >
-                          {isSelected && <Ionicons name="checkmark" size={13} color="#ffffff" />}
-                        </PressableScale>
-                      );
-                    })}
-                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              </PressableScale>
+
+              {/* Color del sobre con etiqueta */}
+              <View style={styles.colorPickerContainer}>
+                <Text style={[styles.colorPickerLabel, { color: colors.textSecondary }]}>
+                  Color del sobre
+                </Text>
+                <View style={styles.colorRow}>
+                  {PRESET_COLORS.map((color) => {
+                    const isSelected = themeColor === color.hex;
+                    return (
+                      <PressableScale
+                        key={color.hex}
+                        onPress={() => setThemeColor(color.hex)}
+                        style={[
+                          styles.colorDot,
+                          { backgroundColor: color.hex },
+                          isSelected && styles.colorDotSelected,
+                        ]}
+                        scaleTo={0.9}
+                        accessibilityLabel={`Color ${color.label}`}
+                      >
+                        {isSelected && <Ionicons name="checkmark" size={13} color="#ffffff" />}
+                      </PressableScale>
+                    );
+                  })}
                 </View>
               </View>
             </View>
@@ -268,17 +298,19 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               disabled={isSubmitting}
               style={[
                 styles.submitButton,
-                { backgroundColor: themeColor },
+                { backgroundColor: colors.primary },
                 isSubmitting && { opacity: 0.7 },
               ]}
               scaleTo={0.97}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <ActivityIndicator size="small" color={colors.primaryOn} />
               ) : (
                 <>
-                  <Ionicons name="lock-closed" size={16} color="#ffffff" />
-                  <Text style={styles.submitButtonText}>Programar con Candado</Text>
+                  <Ionicons name="lock-closed" size={16} color={colors.primaryOn} />
+                  <Text style={[styles.submitButtonText, { color: colors.primaryOn }]}>
+                    Programar con Candado
+                  </Text>
                 </>
               )}
             </PressableScale>
@@ -297,36 +329,50 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   const isFuture =
                     toLocalDateString(letter.scheduled_date) > toLocalDateString(new Date());
                   return (
-                    <View key={letter.id} style={styles.sentCard}>
+                    <View
+                      key={letter.id}
+                      style={[
+                        styles.sentCard,
+                        {
+                          borderLeftWidth: 4,
+                          borderLeftColor: letter.theme_color || colors.primary,
+                        },
+                      ]}
+                    >
                       <View style={styles.sentTopRow}>
                         <View style={styles.badgeWithDot}>
                           <View
-                            style={[styles.colorIndicator, { backgroundColor: letter.theme_color }]}
+                            style={[
+                              styles.colorIndicator,
+                              { backgroundColor: letter.theme_color || colors.primary },
+                            ]}
                           />
                           <Text style={styles.sentDateText}>
-                            {formatDisplayDate(letter.scheduled_date)}
+                            {isFuture
+                              ? `Se abrirá el ${formatDisplayDate(letter.scheduled_date)}`
+                              : `Abierta el ${formatDisplayDate(letter.scheduled_date)}`}
                           </Text>
                         </View>
                         <View
                           style={[
                             styles.lockStatusBadge,
                             {
-                              backgroundColor: isFuture ? `${primaryColor}15` : '#e6f4ea',
+                              backgroundColor: isFuture ? `${colors.primary}15` : '#e6f4ea',
                             },
                           ]}
                         >
                           <Ionicons
                             name={isFuture ? 'lock-closed' : 'checkmark-circle'}
                             size={12}
-                            color={isFuture ? primaryColor : '#2a9d8f'}
+                            color={isFuture ? colors.primary : '#2a9d8f'}
                           />
                           <Text
                             style={[
                               styles.lockStatusText,
-                              { color: isFuture ? primaryColor : '#2a9d8f' },
+                              { color: isFuture ? colors.primary : '#2a9d8f' },
                             ]}
                           >
-                            {isFuture ? 'Con candado' : 'Abierta'}
+                            {isFuture ? 'Sellada' : 'Abierta'}
                           </Text>
                         </View>
                       </View>
@@ -365,6 +411,38 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Modal de Animación: Sobre Sellándose */}
+      <Modal visible={isSealingEnvelope} transparent animationType="fade">
+        <View style={styles.sealingOverlay}>
+          <Animated.View
+            style={[
+              styles.sealingCard,
+              {
+                backgroundColor: colors.surface,
+                transform: [
+                  {
+                    scale: sealAnim.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [0.85, 1.05, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={[styles.sealingEnvelopeBody, { backgroundColor: themeColor }]}>
+              <View style={styles.sealingWax}>
+                <Ionicons name="lock-closed" size={26} color="#ffffff" />
+              </View>
+            </View>
+            <Text style={[styles.sealingTitle, { color: colors.text }]}>Sellando con candado...</Text>
+            <Text style={[styles.sealingSub, { color: colors.textMuted }]}>
+              Tu sobre se abrirá para {recipientDisplay} el {formatDisplayDate(scheduledDate)}
+            </Text>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -433,6 +511,23 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
   },
+  envelopeFlapAccent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  envelopeFlapText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   paperHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -483,6 +578,79 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 1,
+  },
+  datePickerProminent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  dateIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePickerProminentText: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  sealingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  sealingCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  sealingEnvelopeBody: {
+    width: 100,
+    height: 70,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sealingWax: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  sealingTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    fontFamily: SERIF_FONT,
+  },
+  sealingSub: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
   },
   envelopeConfigRow: {
     flexDirection: 'row',

@@ -11,11 +11,13 @@ import {
   Platform,
   Dimensions,
   Animated,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '../components/ui/Icon';
+import { PressableScale } from '../components/ui/Kit';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppHeader } from '../components/AppHeader';
@@ -54,6 +56,21 @@ interface VictoryCelebration {
   color: string;
   onPlayAgain: () => void;
 }
+
+const ALL_GAMES: Array<{
+  id: GameTab;
+  label: string;
+  icon: string;
+  description: string;
+  bgTint: string;
+  iconColor: string;
+}> = [
+  { id: 'tictactoe', label: '3 en Raya', icon: 'grid', description: 'Clásico duelo en parejas', bgTint: '#ede9fe', iconColor: '#7c3aed' },
+  { id: 'sudoku', label: 'Sudoku', icon: 'apps', description: 'Rompecabezas colaborativo', bgTint: '#e0f2fe', iconColor: '#0284c7' },
+  { id: 'chess', label: 'Ajedrez', icon: 'trophy', description: 'Estrategia y jaque mate', bgTint: '#fef3c7', iconColor: '#d97706' },
+  { id: 'battleship', label: 'Battleship', icon: 'boat', description: 'Guerra naval en 10x10', bgTint: '#cffafe', iconColor: '#0891b2' },
+  { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle', description: 'Adivina la palabra oculta', bgTint: '#ffe4e6', iconColor: '#e11d48' },
+];
 
 const HANGMAN_DICTIONARY: Array<{ word: string; hint: string; category: string }> = [
   { word: 'MATRIX', hint: 'Ciencia ficción con Neo y las pastillas roja y azul', category: 'Cine' },
@@ -192,13 +209,12 @@ const PIECE_VALUES: Record<string, number> = {
 };
 
 export const GamesScreen: React.FC = () => {
-  const { colors: themeColors } = useTheme();
-  const styles = React.useMemo(() => makeStyles(themeColors), [themeColors]);
-  const { profile, getDisplayName } = useProfile();
-  const { primaryColor } = useTheme();
+  const { colors, isDark, primaryColor } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const { profile, getDisplayName, getAvatarUri } = useProfile();
   const currentProfile = profile || 'Karla';
 
-  const [activeGame, setActiveGame] = useState<GameTab>('tictactoe');
+  const [activeGame, setActiveGame] = useState<GameTab | null>(null);
   const [gamesState, setGamesState] = useState<GamesState>(DEFAULT_GAMES_STATE);
   const [isFullScreenGame, setIsFullScreenGame] = useState<boolean>(false);
 
@@ -2936,163 +2952,403 @@ export const GamesScreen: React.FC = () => {
     );
   };
 
+  const activeMatches = useMemo(() => {
+    const list: Array<{
+      id: GameTab;
+      name: string;
+      icon: string;
+      statusText: string;
+      detail: string;
+      isMyTurn: boolean;
+    }> = [];
+
+    // TicTacToe
+    if (
+      !gamesState.ticTacToe.winner &&
+      gamesState.ticTacToe.board.some((c) => c !== null)
+    ) {
+      const isMyTurn = gamesState.ticTacToe.turn === currentProfile;
+      list.push({
+        id: 'tictactoe',
+        name: '3 en Raya',
+        icon: 'grid',
+        statusText: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.ticTacToe.turn)}`,
+        detail: isMyTurn ? 'Te toca marcar casilla' : 'Esperando tirada',
+        isMyTurn,
+      });
+    }
+
+    // Battleship
+    if (!gamesState.battleship.winner && gamesState.battleship.phase === 'battle') {
+      const isMyTurn = gamesState.battleship.turn === currentProfile;
+      list.push({
+        id: 'battleship',
+        name: 'Battleship',
+        icon: 'boat',
+        statusText: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.battleship.turn)}`,
+        detail: isMyTurn ? 'Dispara al radar enemigo' : 'Esperando ataque',
+        isMyTurn,
+      });
+    }
+
+    // Chess
+    if (!gamesState.chess.winner && (gamesState.chess.lastMove !== null || gamesState.chess.capturedByW.length > 0 || gamesState.chess.capturedByB.length > 0)) {
+      const isWhite = currentProfile === 'Javier';
+      const isMyTurn =
+        (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
+      list.push({
+        id: 'chess',
+        name: 'Ajedrez',
+        icon: 'trophy',
+        statusText: isMyTurn ? 'Tu turno' : 'Turno de tu pareja',
+        detail: isMyTurn ? 'Haz tu próximo movimiento' : 'Pensando jugada',
+        isMyTurn,
+      });
+    }
+
+    // Sudoku
+    if (
+      !sudoku.completed &&
+      sudoku.board.some((row, r) =>
+        row.some((v, c) => v !== 0 && !sudoku.fixed[r][c])
+      )
+    ) {
+      list.push({
+        id: 'sudoku',
+        name: 'Sudoku',
+        icon: 'apps',
+        statusText: 'En curso',
+        detail: `${sudoku.mistakes}/${MAX_SUDOKU_MISTAKES} errores`,
+        isMyTurn: true,
+      });
+    }
+
+    // Hangman
+    if (gamesState.hangman.status === 'playing' && gamesState.hangman.guessed.length > 0) {
+      const wrongCount = gamesState.hangman.guessed.filter(
+        (l) => !gamesState.hangman.word.toUpperCase().includes(l)
+      ).length;
+      list.push({
+        id: 'hangman',
+        name: 'Ahorcado',
+        icon: 'extension-puzzle',
+        statusText: 'En curso',
+        detail: `${gamesState.hangman.category} • ${6 - wrongCount} vidas`,
+        isMyTurn: true,
+      });
+    }
+
+    return list;
+  }, [gamesState, currentProfile, sudoku, getDisplayName]);
+
+  const getGameStatus = useCallback(
+    (id: GameTab) => {
+      switch (id) {
+        case 'tictactoe': {
+          if (gamesState.ticTacToe.winner) return { text: 'Terminado', isMyTurn: false };
+          const isMyTurn = gamesState.ticTacToe.turn === currentProfile;
+          return {
+            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.ticTacToe.turn)}`,
+            isMyTurn,
+          };
+        }
+        case 'battleship': {
+          if (gamesState.battleship.winner) return { text: 'Terminado', isMyTurn: false };
+          if (gamesState.battleship.phase === 'setup')
+            return { text: 'Acomodar flota', isMyTurn: true };
+          const isMyTurn = gamesState.battleship.turn === currentProfile;
+          return {
+            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.battleship.turn)}`,
+            isMyTurn,
+          };
+        }
+        case 'chess': {
+          if (gamesState.chess.winner) return { text: 'Jaque Mate', isMyTurn: false };
+          const isWhite = currentProfile === 'Javier';
+          const isMyTurn =
+            (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
+          return { text: isMyTurn ? 'Tu turno' : 'Turno de tu pareja', isMyTurn };
+        }
+        case 'sudoku': {
+          if (sudoku.completed) return { text: 'Completado', isMyTurn: false };
+          return { text: 'Jugar ahora', isMyTurn: true };
+        }
+        case 'hangman': {
+          if (gamesState.hangman.status !== 'playing')
+            return {
+              text: gamesState.hangman.status === 'won' ? '¡Ganado!' : 'Terminado',
+              isMyTurn: false,
+            };
+          return { text: 'Adivinar palabra', isMyTurn: true };
+        }
+      }
+    },
+    [gamesState, currentProfile, sudoku, getDisplayName]
+  );
+
+  const getGameTurnLabel = (id: GameTab) => {
+    switch (id) {
+      case 'tictactoe': {
+        const turn = gamesState.ticTacToe.turn;
+        return turn === currentProfile ? 'Tu turno' : `Turno de ${getDisplayName(turn)}`;
+      }
+      case 'sudoku':
+        return 'Colaborativo';
+      case 'chess': {
+        const isWhite = currentProfile === 'Javier';
+        const isMyTurn =
+          (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
+        return isMyTurn
+          ? 'Tu turno'
+          : `Turno de ${getDisplayName(currentProfile === 'Karla' ? 'Javier' : 'Karla')}`;
+      }
+      case 'battleship': {
+        if (gamesState.battleship.phase === 'setup') return 'Acomodo de Flota';
+        const turn = gamesState.battleship.turn;
+        return turn === currentProfile ? 'Tu turno de disparar' : `Turno de ${getDisplayName(turn)}`;
+      }
+      case 'hangman':
+        return 'Adivinando palabra';
+    }
+  };
+
+  const handleResetCurrentGame = () => {
+    if (!activeGame) return;
+    switch (activeGame) {
+      case 'tictactoe':
+        void handleNewTicTacToeRound();
+        break;
+      case 'sudoku':
+        void handleNewSudokuGame(sudoku.difficulty);
+        break;
+      case 'chess':
+        void handleResetChess();
+        break;
+      case 'battleship':
+        void handleResetBattleship();
+        break;
+      case 'hangman':
+        void handleRandomHangmanWord();
+        break;
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style={isFullScreenGame ? 'light' : 'dark'} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 
-      {/* Contenedor Fijo SIN Scroll */}
-      <View style={styles.fixedViewport}>
-        {/* Marcador Global Compacto */}
-        <View style={[styles.globalScoreCard, { borderColor: `${primaryColor}30` }]}>
-          <View style={styles.playerScoreInline}>
-            <View style={[styles.playerBadgeCircle, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]}>
-              <Text style={[styles.playerBadgeLetter, { color: '#9333ea' }]}>
+      {/* ================= VISTA LOBBY: MARCADOR + CONTINUAR + TODOS LOS JUEGOS ================= */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.lobbyScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 1. Marcador Compacto Karlita vs Javier */}
+        <View style={[styles.lobbyScoreboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.lobbyPlayer}>
+            <View style={[styles.lobbyAvatarCircle, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]}>
+              <Text style={[styles.lobbyAvatarText, { color: '#9333ea' }]}>
                 {getDisplayName('Karla').charAt(0).toUpperCase()}
               </Text>
             </View>
             <View>
-              <Text style={styles.playerName}>
-                {getDisplayName('Karla')} ({lb.trophiesKarla}★)
+              <Text style={[styles.lobbyPlayerName, { color: colors.text }]} numberOfLines={1}>
+                {getDisplayName('Karla')}
               </Text>
-              <Text style={[styles.pointsValue, { color: '#9333ea' }]}>{lb.pointsKarla} pts</Text>
+              <View style={styles.lobbyScorePills}>
+                <Text style={[styles.lobbyPoints, { color: '#9333ea' }]}>{lb.pointsKarla} pts</Text>
+                <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>• {lb.trophiesKarla} ★</Text>
+              </View>
             </View>
           </View>
 
-          <View style={styles.vsBadge}>
-            <Text style={styles.vsBadgeText}>VS</Text>
+          <View style={[styles.lobbyVsBadge, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+            <Text style={[styles.lobbyVsText, { color: colors.primary }]}>VS</Text>
           </View>
 
-          <View style={[styles.playerScoreInline, { justifyContent: 'flex-end' }]}>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.playerName}>
-                {getDisplayName('Javier')} ({lb.trophiesJavier}★)
-              </Text>
-              <Text style={[styles.pointsValue, { color: '#0284c7' }]}>{lb.pointsJavier} pts</Text>
-            </View>
-            <View style={[styles.playerBadgeCircle, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
-              <Text style={[styles.playerBadgeLetter, { color: '#0284c7' }]}>
+          <View style={[styles.lobbyPlayer, { justifyContent: 'flex-end', flexDirection: 'row-reverse' }]}>
+            <View style={[styles.lobbyAvatarCircle, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
+              <Text style={[styles.lobbyAvatarText, { color: '#0284c7' }]}>
                 {getDisplayName('Javier').charAt(0).toUpperCase()}
               </Text>
             </View>
-          </View>
-        </View>
-
-        {/* Selector de los 5 Juegos */}
-        <View style={styles.gamesSelectorGrid}>
-          {[
-            { id: 'tictactoe', label: '3 en Raya', icon: 'grid' },
-            { id: 'sudoku', label: 'Sudoku', icon: 'apps' },
-            { id: 'chess', label: 'Ajedrez', icon: 'trophy' },
-            { id: 'battleship', label: 'Battleship', icon: 'boat' },
-            { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle' },
-          ].map((g) => {
-            const active = activeGame === g.id;
-            return (
-              <TouchableOpacity
-                key={g.id}
-                onPress={() => setActiveGame(g.id as GameTab)}
-                style={[
-                  styles.gameTabCard,
-                  active && {
-                    backgroundColor: primaryColor,
-                    borderColor: primaryColor,
-                  },
-                ]}
-                activeOpacity={0.85}
-              >
-                <Ionicons
-                  name={g.icon as any}
-                  size={13}
-                  color={active ? '#ffffff' : primaryColor}
-                />
-                <Text style={[styles.gameTabTitle, active && { color: '#ffffff' }]} numberOfLines={1}>
-                  {g.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Arena del Juego Activo ajustada al resto de la pantalla */}
-        <View style={{ flex: 1 }}>
-          {renderActiveGameArena(false)}
-        </View>
-      </View>
-
-      {/* ================= MODAL CONSOLA DE JUEGO PROFESIONAL INDEPENDIENTE (MODO ZOOM PRO) ================= */}
-      <Modal
-        visible={isFullScreenGame}
-        animationType="fade"
-        onRequestClose={() => setIsFullScreenGame(false)}
-      >
-        <SafeAreaView style={styles.proConsoleModalContainer}>
-          {/* HUD Superior Estilo Videojuego Profesional Independiente */}
-          <View style={styles.proConsoleTopHud}>
-            <View style={styles.proHudPlayerPill}>
-              <View style={[styles.proHudDot, { backgroundColor: '#e879f9' }]} />
-              <Text style={styles.proHudPlayerName}>KARLITA</Text>
-              <Text style={[styles.proHudPlayerScore, { color: '#e879f9' }]}>
-                {lb.pointsKarla}
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.lobbyPlayerName, { color: colors.text }]} numberOfLines={1}>
+                {getDisplayName('Javier')}
               </Text>
-            </View>
-
-            <View style={styles.proHudCenterBadge}>
-              <Ionicons name="trophy" size={14} color="#f59e0b" />
-              <Text style={styles.proHudCenterText}>
-                {lb.trophiesKarla} - {lb.trophiesJavier}
-              </Text>
-            </View>
-
-            <View style={styles.proHudPlayerPill}>
-              <Text style={[styles.proHudPlayerScore, { color: '#38bdf8' }]}>
-                {lb.pointsJavier}
-              </Text>
-              <Text style={styles.proHudPlayerName}>JAVIER</Text>
-              <View style={[styles.proHudDot, { backgroundColor: '#38bdf8' }]} />
+              <View style={styles.lobbyScorePills}>
+                <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>{lb.trophiesJavier} ★ •</Text>
+                <Text style={[styles.lobbyPoints, { color: '#0284c7' }]}>{lb.pointsJavier} pts</Text>
+              </View>
             </View>
           </View>
+        </View>
 
-          {/* Barra de Cambio Rápido entre los 5 Juegos Profesionales */}
-          <View style={styles.proConsoleTabsRow}>
-            {[
-              { id: 'tictactoe', label: '3 EN RAYA', icon: 'grid' },
-              { id: 'sudoku', label: 'SUDOKU', icon: 'apps' },
-              { id: 'chess', label: 'AJEDREZ', icon: 'trophy' },
-              { id: 'battleship', label: 'BATTLESHIP', icon: 'boat' },
-              { id: 'hangman', label: 'AHORCADO', icon: 'extension-puzzle' },
-            ].map((g) => {
-              const active = activeGame === g.id;
-              return (
-                <TouchableOpacity
-                  key={`pro-${g.id}`}
-                  onPress={() => setActiveGame(g.id as GameTab)}
+        {/* 2. Sección Continuar (Partidas en Curso) */}
+        {activeMatches.length > 0 && (
+          <View style={styles.lobbySection}>
+            <Text style={[styles.lobbySectionTitle, { color: colors.text }]}>Continuar Partida</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingVertical: 4 }}
+            >
+              {activeMatches.map((m) => (
+                <PressableScale
+                  key={`continue-${m.id}`}
+                  onPress={() => setActiveGame(m.id as GameTab)}
                   style={[
-                    styles.proGameTabBtn,
-                    active && styles.proGameTabBtnActive,
+                    styles.continueCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: m.isMyTurn ? colors.primary : colors.border,
+                    },
                   ]}
+                  scaleTo={0.96}
                 >
-                  <Ionicons
-                    name={g.icon as any}
-                    size={12}
-                    color={active ? '#38bdf8' : '#64748b'}
-                  />
+                  <View style={styles.continueCardTop}>
+                    <View style={[styles.continueIconCircle, { backgroundColor: colors.primaryLight }]}>
+                      <Ionicons name={m.icon as any} size={18} color={colors.primary} />
+                    </View>
+                    <View
+                      style={[
+                        styles.turnBadge,
+                        {
+                          backgroundColor: m.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
+                          borderColor: m.isMyTurn ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.turnDot,
+                          { backgroundColor: m.isMyTurn ? colors.primary : colors.textMuted },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.turnBadgeText,
+                          { color: m.isMyTurn ? colors.primary : colors.textMuted },
+                        ]}
+                      >
+                        {m.statusText}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.continueGameName, { color: colors.text }]}>{m.name}</Text>
+                  <Text style={[styles.continueGameSub, { color: colors.textMuted }]}>{m.detail}</Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* 3. Todos los Juegos (Cuadrícula de 2 Columnas con Tarjetas Grandes) */}
+        <View style={styles.lobbySection}>
+          <Text style={[styles.lobbySectionTitle, { color: colors.text }]}>Todos los Juegos</Text>
+          <View style={styles.gamesGridTwoCol}>
+            {ALL_GAMES.map((g) => {
+              const status = getGameStatus(g.id);
+              return (
+                <PressableScale
+                  key={g.id}
+                  onPress={() => setActiveGame(g.id)}
+                  style={[
+                    styles.gameGridCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: status.isMyTurn ? colors.primary : colors.border,
+                    },
+                  ]}
+                  scaleTo={0.96}
+                >
+                  <View style={[styles.gameGridIconBox, { backgroundColor: g.bgTint }]}>
+                    <Ionicons name={g.icon as any} size={26} color={g.iconColor} />
+                  </View>
+                  <Text style={[styles.gameGridCardTitle, { color: colors.text }]}>{g.label}</Text>
                   <Text
-                    style={[
-                      styles.proGameTabBtnText,
-                      active && { color: '#f8fafc' },
-                    ]}
+                    style={[styles.gameGridCardSub, { color: colors.textMuted }]}
                     numberOfLines={1}
                   >
-                    {g.label}
+                    {g.description}
                   </Text>
-                </TouchableOpacity>
+                  <View
+                    style={[
+                      styles.turnBadge,
+                      {
+                        backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
+                        borderColor: status.isMyTurn ? colors.primary : colors.border,
+                        alignSelf: 'flex-start',
+                        marginTop: 8,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.turnDot,
+                        { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.turnBadgeText,
+                        { color: status.isMyTurn ? colors.primary : colors.textMuted },
+                      ]}
+                    >
+                      {status.text}
+                    </Text>
+                  </View>
+                </PressableScale>
               );
             })}
           </View>
+        </View>
+      </ScrollView>
 
-          <View style={{ flex: 1, paddingHorizontal: 10, paddingBottom: 10 }}>
-            {renderActiveGameArena(true)}
+      {/* ================= PANTALLA COMPLETA DEL JUEGO ACTIVO (HEADER MÍNIMO + BARRA INFERIOR OCULTA) ================= */}
+      <Modal
+        visible={Boolean(activeGame)}
+        animationType="slide"
+        onRequestClose={() => setActiveGame(null)}
+      >
+        <SafeAreaView style={[styles.gameFullScreenContainer, { backgroundColor: colors.background }]}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+
+          {/* Header Mínimo del Juego */}
+          <View style={[styles.gameMinimalHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <PressableScale
+              onPress={() => setActiveGame(null)}
+              style={styles.backBtn}
+              scaleTo={0.92}
+              accessibilityLabel="Volver al lobby"
+            >
+              <Ionicons name="chevron-back" size={20} color={colors.text} />
+              <Text style={[styles.backBtnText, { color: colors.text }]}>Lobby</Text>
+            </PressableScale>
+
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[styles.gameMinimalTitle, { color: colors.text }]}>
+                {ALL_GAMES.find((g) => g.id === activeGame)?.label}
+              </Text>
+              <Text style={[styles.gameMinimalTurn, { color: colors.primary }]}>
+                {activeGame ? getGameTurnLabel(activeGame) : ''}
+              </Text>
+            </View>
+
+            <PressableScale
+              onPress={() => handleResetCurrentGame()}
+              style={[styles.resetGameBtn, { backgroundColor: colors.surfaceAlt }]}
+              scaleTo={0.92}
+              accessibilityLabel="Reiniciar partida"
+            >
+              <Ionicons name="reload" size={16} color={colors.text} />
+            </PressableScale>
+          </View>
+
+          {/* Arena del Juego Montada Únicamente Cuando Está Activa */}
+          <View style={styles.gameActiveArenaWrapper}>
+            {activeGame && renderActiveGameArena(true)}
           </View>
         </SafeAreaView>
       </Modal>
@@ -3250,7 +3506,212 @@ export const GamesScreen: React.FC = () => {
 const makeStyles = (c: ThemePalette) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#faf9f9',
+    backgroundColor: c.background,
+  },
+  lobbyScrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 28,
+    gap: 16,
+  },
+  lobbyScoreboard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginTop: 6,
+  },
+  lobbyPlayer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  lobbyAvatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lobbyAvatarText: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  lobbyPlayerName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  lobbyScorePills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  lobbyPoints: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  lobbyStars: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  lobbyVsBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginHorizontal: 8,
+  },
+  lobbyVsText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  lobbySection: {
+    gap: 10,
+  },
+  lobbySectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontFamily: SERIF_FONT,
+    letterSpacing: 0.2,
+  },
+  continueCard: {
+    width: 170,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1.5,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  continueCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  continueIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueGameName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  continueGameSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  turnBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  turnDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  turnBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  gamesGridTwoCol: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  gameGridCard: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  gameGridIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  gameGridCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  gameGridCardSub: {
+    fontSize: 11,
+  },
+  gameFullScreenContainer: {
+    flex: 1,
+  },
+  gameMinimalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  backBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  gameMinimalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: SERIF_FONT,
+  },
+  gameMinimalTurn: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  resetGameBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gameActiveArenaWrapper: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fixedViewport: {
     flex: 1,
