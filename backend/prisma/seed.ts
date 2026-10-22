@@ -1,23 +1,33 @@
+import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
+dotenv.config();
+
 const prisma = new PrismaClient();
+const BCRYPT_COST = 12;
 
 async function main(): Promise<void> {
-  console.log('🌱 Iniciando seed de la base de datos...');
+  console.log('Iniciando seed de la base de datos...');
 
-  // ── 1. Crear usuario administrador por defecto ──
-  const adminEmail = 'admin@kmrg.app';
-  const adminPassword = 'Admin12345!';
+  // 1. Crear usuario administrador inicial a partir de variables de entorno
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL || 'admin@kmrg.app').toLowerCase().trim();
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!adminPassword || adminPassword.trim().length < 8) {
+    throw new Error(
+      'Falta SEED_ADMIN_PASSWORD (o tiene menos de 8 caracteres). Define SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD en el entorno antes de ejecutar el seed.',
+    );
+  }
 
   const existingAdmin = await prisma.adminUser.findUnique({
     where: { email: adminEmail },
   });
 
   if (existingAdmin) {
-    console.log(`✅ El usuario admin "${adminEmail}" ya existe. Omitiendo creación.`);
+    console.log(`El usuario administrador "${adminEmail}" ya existe. Omitiendo creación.`);
   } else {
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    const passwordHash = await bcrypt.hash(adminPassword, BCRYPT_COST);
 
     await prisma.adminUser.create({
       data: {
@@ -26,41 +36,38 @@ async function main(): Promise<void> {
       },
     });
 
-    console.log(`✅ Usuario administrador creado:`);
-    console.log(`   Email:    ${adminEmail}`);
-    console.log(`   Password: ${adminPassword}`);
-    console.log('   ⚠️  Cambia esta contraseña en producción.');
+    console.log(`Usuario administrador creado con éxito (${adminEmail}).`);
   }
 
-  // ── 2. Mensajes de ejemplo ──
+  // 2. Mensajes de ejemplo
   const messagesCount = await prisma.message.count();
   if (messagesCount === 0) {
     await prisma.message.createMany({
       data: [
         {
-          content: '¡Buenos días, mi amor! Hoy es un día especial solo porque existes. ❤️',
+          content: '¡Buenos días, mi amor! Hoy es un día especial solo porque existes.',
           scheduled_date: new Date('2026-10-15'),
           theme_color: '#e63946',
           is_read: false,
         },
         {
-          content: 'Cada día a tu lado es un regalo. Gracias por ser tú. 🌹',
+          content: 'Cada día a tu lado es un regalo. Gracias por ser tú.',
           scheduled_date: new Date('2026-10-20'),
           theme_color: '#457b9d',
           is_read: false,
         },
         {
-          content: '¿Recuerdas nuestra primera cita? Yo nunca la olvidaré. 🥰',
+          content: '¿Recuerdas nuestra primera cita? Yo nunca la olvidaré.',
           scheduled_date: new Date('2026-11-01'),
           theme_color: '#f4a261',
           is_read: false,
         },
       ],
     });
-    console.log('✅ 3 mensajes de ejemplo creados.');
+    console.log('3 mensajes de ejemplo creados.');
   }
 
-  // ── 3. Hitos de ejemplo ──
+  // 3. Hitos de ejemplo
   const milestonesCount = await prisma.milestone.count();
   if (milestonesCount === 0) {
     await prisma.milestone.createMany({
@@ -77,15 +84,15 @@ async function main(): Promise<void> {
         },
       ],
     });
-    console.log('✅ 2 hitos de ejemplo creados.');
+    console.log('2 hitos de ejemplo creados.');
   }
 
-  console.log('🌱 Seed finalizado con éxito.');
+  console.log('Seed finalizado con éxito.');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error ejecutando seed:', e);
+    console.error('Error ejecutando seed:', e instanceof Error ? e.message : e);
     process.exit(1);
   })
   .finally(async () => {

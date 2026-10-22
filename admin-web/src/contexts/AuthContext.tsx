@@ -1,17 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import api from '../lib/api';
+import type { AdminUser, ApiResponse } from '../types';
 
-export interface User {
-  id: string;
-  email: string;
-}
+export type User = AdminUser;
 
 export interface AuthContextType {
-  token: string | null;
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,81 +19,52 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('kmrg_token');
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [user, setUser] = useState<User | null>(() => {
-    const savedUser = localStorage.getItem('kmrg_user');
-    if (savedUser) {
-      try {
-        return JSON.parse(savedUser) as User;
-      } catch {
-        localStorage.removeItem('kmrg_user');
-        return null;
-      }
-    }
-    return null;
-  });
-
-  // On mount, check localStorage for existing token/user and hydrate state
+  // Al montar, hidratar la sesión desde la cookie httpOnly consultando /auth/me
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem('kmrg_token');
-      const storedUser = localStorage.getItem('kmrg_user');
+    let cancelled = false;
+    api
+      .get<ApiResponse<{ user: User }>>('/auth/me')
+      .then((res) => {
+        if (!cancelled) setUser(res.data?.data?.user ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser) as User);
-      } else if (!storedToken || !storedUser) {
-        setToken(null);
-        setUser(null);
-      }
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
+    const response = await api.post<ApiResponse<{ user: User }>>('/auth/login', { email, password });
+    const authUser = response.data?.data?.user;
+    if (!authUser) {
+      throw new Error('Respuesta de autenticación incompleta');
+    }
+    setUser(authUser);
+  }, []);
+
+  const logout = useCallback(async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout');
     } catch (error) {
-      console.error('Error hydrating authentication state:', error);
-      localStorage.removeItem('kmrg_token');
-      localStorage.removeItem('kmrg_user');
-      setToken(null);
+      console.error('Error al cerrar sesión:', error);
+    } finally {
       setUser(null);
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<void> => {
-    const response = await api.post('/auth/login', { email, password });
-    const payload = response.data?.data || response.data;
-
-    const authToken: string = payload.token;
-    const authUser: User = payload.user;
-
-    if (!authToken || !authUser) {
-      throw new Error('Respuesta de autenticación incompleta');
-    }
-
-    localStorage.setItem('kmrg_token', authToken);
-    localStorage.setItem('kmrg_user', JSON.stringify(authUser));
-
-    setToken(authToken);
-    setUser(authUser);
-  }, []);
-
-  const logout = useCallback((): void => {
-    localStorage.removeItem('kmrg_token');
-    localStorage.removeItem('kmrg_user');
-    setToken(null);
-    setUser(null);
-  }, []);
-
-  const isAuthenticated = Boolean(token && user);
+  const isAuthenticated = Boolean(user);
 
   const value = useMemo<AuthContextType>(
-    () => ({
-      token,
-      user,
-      isAuthenticated,
-      login,
-      logout,
-    }),
-    [token, user, isAuthenticated, login, logout]
+    () => ({ user, isAuthenticated, isLoading, login, logout }),
+    [user, isAuthenticated, isLoading, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

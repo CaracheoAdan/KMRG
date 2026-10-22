@@ -1,15 +1,19 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
+import { logger } from '../config/logger';
+import { handlePrismaError } from '../utils/prismaErrors';
 
-// ── Admin: Listar hitos ordenados por fecha ──
+// ── Admin y Mobile: Listar hitos ordenados por fecha ascendente ──
 export const listMilestones = async (_req: Request, res: Response): Promise<void> => {
   try {
     const milestones = await prisma.milestone.findMany({
-      orderBy: { date: 'asc' },
+      select: { id: true, title: true, date: true, image_url: true, created_at: true },
+      orderBy: [{ date: 'asc' }, { created_at: 'asc' }],
+      take: 1000,
     });
     res.json({ success: true, data: milestones });
   } catch (error) {
-    console.error('Error en listMilestones:', error);
+    logger.error({ err: error }, 'Error en listMilestones');
     res.status(500).json({ success: false, message: 'Error al obtener hitos' });
   }
 };
@@ -33,7 +37,7 @@ export const createMilestone = async (req: Request, res: Response): Promise<void
 
     res.status(201).json({ success: true, data: milestone });
   } catch (error) {
-    console.error('Error en createMilestone:', error);
+    logger.error({ err: error }, 'Error en createMilestone');
     res.status(500).json({ success: false, message: 'Error al crear hito' });
   }
 };
@@ -48,12 +52,6 @@ export const updateMilestone = async (req: Request, res: Response): Promise<void
       image_url?: string;
     };
 
-    const exists = await prisma.milestone.findUnique({ where: { id } });
-    if (!exists) {
-      res.status(404).json({ success: false, message: 'Hito no encontrado' });
-      return;
-    }
-
     const updated = await prisma.milestone.update({
       where: { id },
       data: {
@@ -65,8 +63,13 @@ export const updateMilestone = async (req: Request, res: Response): Promise<void
 
     res.json({ success: true, data: updated });
   } catch (error) {
-    console.error('Error en updateMilestone:', error);
-    res.status(500).json({ success: false, message: 'Error al actualizar hito' });
+    handlePrismaError(
+      res,
+      error,
+      'updateMilestone',
+      'Hito no encontrado',
+      'Error al actualizar hito',
+    );
   }
 };
 
@@ -75,16 +78,16 @@ export const deleteMilestone = async (req: Request, res: Response): Promise<void
   try {
     const id = req.params.id as string;
 
-    const exists = await prisma.milestone.findUnique({ where: { id } });
-    if (!exists) {
-      res.status(404).json({ success: false, message: 'Hito no encontrado' });
-      return;
-    }
-
     await prisma.milestone.delete({ where: { id } });
     res.json({ success: true, message: 'Hito eliminado' });
   } catch (error) {
-    console.error('Error en deleteMilestone:', error);
-    res.status(500).json({ success: false, message: 'Error al eliminar hito' });
+    handlePrismaError(
+      res,
+      error,
+      'deleteMilestone',
+      'Hito no encontrado',
+      'Error al eliminar hito',
+    );
   }
 };
+

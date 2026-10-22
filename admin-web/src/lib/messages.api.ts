@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { ApiResponse, CreateMessagePayload, Message } from '../types';
+import type { ApiResponse, CreateMessagePayload, UpdateMessagePayload, Message } from '../types';
 
 export const getMessages = async (): Promise<Message[]> => {
   const response = await api.get<ApiResponse<Message[]>>('/admin/messages');
@@ -8,6 +8,11 @@ export const getMessages = async (): Promise<Message[]> => {
 
 export const createMessage = async (payload: CreateMessagePayload): Promise<Message> => {
   const response = await api.post<ApiResponse<Message>>('/admin/messages', payload);
+  return response.data.data;
+};
+
+export const updateMessage = async (id: string, payload: UpdateMessagePayload): Promise<Message> => {
+  const response = await api.put<ApiResponse<Message>>(`/admin/messages/${id}`, payload);
   return response.data.data;
 };
 

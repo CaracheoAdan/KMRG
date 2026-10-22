@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Mail, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Pencil, Mail, Calendar, AlertCircle, RefreshCw, Heart, Sparkles, Clock } from 'lucide-react';
 import { getMessages, deleteMessage } from '../lib/messages.api';
-import { Message } from '../types';
+import { getInteractions } from '../lib/interactions.api';
+import { Message, Interaction } from '../types';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -10,27 +11,59 @@ import { Button } from '../components/ui/Button';
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchMessagesList = useCallback(async (): Promise<void> => {
+  const fetchData = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const data = await getMessages();
-      setMessages(Array.isArray(data) ? data : []);
+      const [messagesResult, interactionsResult] = await Promise.allSettled([
+        getMessages(),
+        getInteractions(),
+      ]);
+      if (messagesResult.status === 'fulfilled' && Array.isArray(messagesResult.value)) {
+        setMessages(messagesResult.value);
+      }
+      if (interactionsResult.status === 'fulfilled' && Array.isArray(interactionsResult.value)) {
+        setInteractions(interactionsResult.value);
+      }
+      if (messagesResult.status === 'rejected' || interactionsResult.status === 'rejected') {
+        throw messagesResult.status === 'rejected' ? messagesResult.reason : (interactionsResult as PromiseRejectedResult).reason;
+      }
     } catch (error: unknown) {
-      console.error('Error al cargar mensajes:', error);
-      setErrorMessage('No se pudieron cargar los mensajes programados. Intenta de nuevo.');
+      console.error('Error al cargar datos:', error);
+      setErrorMessage('No se pudieron cargar los datos del Centro de Control. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMessagesList();
-  }, [fetchMessagesList]);
+    fetchData();
+
+    // Polling silencioso cada 15 segundos para actualizar interacciones y estado de lectura en vivo
+    const interval = setInterval(async () => {
+      try {
+        const [freshInteractions, freshMessages] = await Promise.all([
+          getInteractions(),
+          getMessages(),
+        ]);
+        if (Array.isArray(freshInteractions)) {
+          setInteractions(freshInteractions);
+        }
+        if (Array.isArray(freshMessages)) {
+          setMessages(freshMessages);
+        }
+      } catch {
+        // Silencioso
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const handleDelete = async (id: string): Promise<void> => {
     const confirmed = window.confirm('¿Estás seguro de que deseas eliminar este mensaje programado?');
@@ -74,13 +107,98 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const formatDateTime = (dateStr: string): string => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const truncateContent = (text: string, maxLen = 80): string => {
     if (!text) return '';
     return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
   };
 
+  const getInteractionLabel = (type: string): string => {
+    switch (type) {
+      case 'thinking_of_you':
+        return 'Pensando en ti ❤️';
+      case 'heartbeat':
+        return 'Latido de amor 💓';
+      case 'reaction':
+        return 'Reacción especial ✨';
+      default:
+        return 'Pensando en ti ❤️';
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* Sección de Interacciones: Pensando en ti */}
+      <Card className="p-6 bg-gradient-to-br from-rose-50/70 via-white to-pink-50/50 border-rose-100 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-rose-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
+              <Heart className="w-5 h-5 fill-rose-500 text-rose-500 animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                Pensando en ti
+                <span className="bg-rose-100 text-rose-700 font-semibold text-xs px-2.5 py-0.5 rounded-full">
+                  {interactions.length} {interactions.length === 1 ? 'latido' : 'latidos'}
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Registros en vivo cuando ella presiona el corazón en la app
+              </p>
+            </div>
+          </div>
+          {interactions.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-100/70 px-3 py-1.5 rounded-lg font-medium self-start sm:self-auto shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Último: {formatDateTime(interactions[0].created_at)}</span>
+            </div>
+          )}
+        </div>
+
+        {interactions.length === 0 ? (
+          <div className="py-6 text-center text-slate-400 text-sm">
+            Aún no hay interacciones registradas. Aparecerán aquí en cuanto presione el corazón.
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-56 overflow-y-auto pr-1">
+            {interactions.slice(0, 9).map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 p-3 rounded-xl bg-white/80 border border-rose-100 shadow-2xs hover:border-rose-300 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
+                  <Heart className="w-4 h-4 fill-rose-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-slate-800 truncate">
+                    {getInteractionLabel(item.type)}
+                  </p>
+                  <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    <span>{formatDateTime(item.created_at)}</span>
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
         <div className="flex items-center gap-3">
@@ -96,12 +214,13 @@ export const DashboardPage: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={fetchMessagesList}
+            onClick={fetchData}
             disabled={isLoading}
             className="text-slate-600 hover:text-slate-900"
             title="Recargar lista"
+            aria-label="Recargar lista de mensajes"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
           </Button>
 
           <Button
@@ -129,7 +248,7 @@ export const DashboardPage: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={fetchMessagesList}
+            onClick={fetchData}
             className="text-red-700 hover:bg-red-100 text-xs px-2 py-1 h-auto"
           >
             Reintentar
@@ -198,8 +317,8 @@ export const DashboardPage: React.FC = () => {
                   <th scope="col" className="py-3 px-4 w-28 whitespace-nowrap text-center">
                     Estado
                   </th>
-                  <th scope="col" className="py-3 px-4 sm:px-6 w-20 text-right">
-                    Acción
+                  <th scope="col" className="py-3 px-4 sm:px-6 w-28 text-right">
+                    Acciones
                   </th>
                 </tr>
               </thead>
@@ -220,7 +339,7 @@ export const DashboardPage: React.FC = () => {
                           title={`Color temático: ${message.theme_color}`}
                         />
                         <span
-                          className="text-slate-800 font-medium leading-relaxed"
+                          className="text-slate-800 font-serif font-medium leading-relaxed"
                           title={message.content}
                         >
                           {truncateContent(message.content, 80)}
@@ -231,7 +350,7 @@ export const DashboardPage: React.FC = () => {
                     {/* Scheduled Date */}
                     <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                         <span>{formatScheduledDate(message.scheduled_date)}</span>
                       </div>
                     </td>
@@ -246,19 +365,37 @@ export const DashboardPage: React.FC = () => {
                       </Badge>
                     </td>
 
-                    {/* Delete Action */}
+                    {/* Edit & Delete Actions */}
                     <td className="py-4 px-4 sm:px-6 align-middle text-right whitespace-nowrap">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={deletingId === message.id}
-                        onClick={() => handleDelete(message.id)}
-                        className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 h-8 w-8 rounded-lg transition-colors"
-                        title="Eliminar mensaje"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="inline-flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            navigate(`/dashboard/messages/${message.id}/edit`, {
+                              state: { message },
+                            })
+                          }
+                          className="text-slate-400 hover:text-slate-800 hover:bg-slate-100 p-2 h-8 w-8 rounded-lg transition-colors"
+                          title="Editar mensaje"
+                          aria-label="Editar mensaje"
+                        >
+                          <Pencil className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={deletingId === message.id}
+                          onClick={() => handleDelete(message.id)}
+                          className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 h-8 w-8 rounded-lg transition-colors"
+                          title="Eliminar mensaje"
+                          aria-label="Eliminar mensaje"
+                        >
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

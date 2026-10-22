@@ -1,41 +1,64 @@
 import React, { useEffect } from 'react';
-import { LogBox } from 'react-native';
+import { View, ActivityIndicator, LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabNavigator } from './src/navigation/TabNavigator';
-import { syncMessages } from './src/services/SyncService';
+import { WelcomeAuthScreen } from './src/screens/WelcomeAuthScreen';
+import { ProfileProvider, useProfile } from './src/contexts/ProfileContext';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { ThemeSelectorModal } from './src/components/ThemeSelectorModal';
+import { syncSupabaseMessages, syncSupabaseMilestones } from './src/services/SupabaseService';
 import { scheduleDailyMessage } from './src/services/NotificationService';
 
-// Silenciar avisos informativos y de conexión dev que no afectan el funcionamiento
-LogBox.ignoreLogs([
-  'Cannot connect to Expo CLI',
-  '`expo-notifications` functionality is not fully supported in Expo Go',
-  'Push notifications (remote notifications) are unavailable in Expo Go',
-]);
+// Filtrar únicamente avisos informativos conocidos de librerías sin ocultar errores reales
+LogBox.ignoreLogs(['Support for defaultProps will be removed']);
 
-export default function App() {
+function MainNavigator() {
+  const { profile, isLoading, setProfile } = useProfile();
+  const { primaryColor } = useTheme();
+
   useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        // 1. Sincronización anticipada silenciosa en caché local
-        await syncMessages();
+    if (profile) {
+      void Promise.all([syncSupabaseMessages(), syncSupabaseMilestones()]).then(() => {
+        void scheduleDailyMessage();
+      });
+    }
+  }, [profile]);
 
-        // 2. Programar notificaciones locales diarias (7:00 AM)
-        await scheduleDailyMessage();
-      } catch (error) {
-        // Fallo transparente y silencioso para no romper la experiencia
-        console.log('[App] Inicialización completada con datos locales.');
-      }
-    };
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#faf9f9' }}>
+        <ActivityIndicator size="large" color={primaryColor} />
+      </View>
+    );
+  }
 
-    initializeApp();
-  }, []);
+  if (!profile) {
+    return (
+      <WelcomeAuthScreen
+        onAuthenticated={async (chosenProfile) => {
+          await setProfile(chosenProfile);
+        }}
+      />
+    );
+  }
 
   return (
+    <NavigationContainer>
+      <TabNavigator />
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <TabNavigator />
-      </NavigationContainer>
+      <ProfileProvider>
+        <ThemeProvider>
+          <MainNavigator />
+          <ThemeSelectorModal />
+        </ThemeProvider>
+      </ProfileProvider>
     </SafeAreaProvider>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { AlertCircle, Lock } from 'lucide-react';
 import axios from 'axios';
@@ -14,7 +14,7 @@ interface LoginFormInputs {
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const {
@@ -28,6 +28,10 @@ export const LoginPage: React.FC = () => {
     },
     mode: 'onTouched',
   });
+
+  if (!isLoading && isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const onSubmit = async (data: LoginFormInputs): Promise<void> => {
     setErrorMessage(null);
@@ -70,7 +74,7 @@ export const LoginPage: React.FC = () => {
         {errorMessage && (
           <div
             role="alert"
-            className="mb-6 p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3 text-red-800 text-sm animate-in fade-in duration-200"
+            className="mb-6 p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3 text-red-800 text-sm animate-fade-in"
           >
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="flex-1 font-medium leading-snug">{errorMessage}</div>

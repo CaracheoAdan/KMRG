@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    name: Typecheck & Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm --workspace=backend run prisma:generate
+
+      - name: Typecheck Backend
+        run: npx tsc --noEmit -p backend
+
+      - name: Typecheck Admin Web
+        run: npx tsc --noEmit -p admin-web
+
+      - name: Typecheck Mobile App
+        run: cd mobile-app && npx tsc --noEmit
+
+      - name: Run Backend Tests
+        run: npm --workspace=backend test

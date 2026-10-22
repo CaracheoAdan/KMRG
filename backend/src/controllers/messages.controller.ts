@@ -1,15 +1,18 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
+import { logger } from '../config/logger';
+import { handlePrismaError } from '../utils/prismaErrors';
 
 // ── Admin: Listar todos los mensajes ordenados por fecha ──
 export const listMessages = async (_req: Request, res: Response): Promise<void> => {
   try {
     const messages = await prisma.message.findMany({
-      orderBy: { scheduled_date: 'asc' },
+      orderBy: [{ scheduled_date: 'asc' }, { created_at: 'asc' }],
+      take: 2000,
     });
     res.json({ success: true, data: messages });
   } catch (error) {
-    console.error('Error en listMessages:', error);
+    logger.error({ err: error }, 'Error en listMessages');
     res.status(500).json({ success: false, message: 'Error al obtener mensajes' });
   }
 };
@@ -35,7 +38,7 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
 
     res.status(201).json({ success: true, data: message });
   } catch (error) {
-    console.error('Error en createMessage:', error);
+    logger.error({ err: error }, 'Error en createMessage');
     res.status(500).json({ success: false, message: 'Error al crear mensaje' });
   }
 };
@@ -51,12 +54,6 @@ export const updateMessage = async (req: Request, res: Response): Promise<void> 
       is_read?: boolean;
     };
 
-    const exists = await prisma.message.findUnique({ where: { id } });
-    if (!exists) {
-      res.status(404).json({ success: false, message: 'Mensaje no encontrado' });
-      return;
-    }
-
     const updated = await prisma.message.update({
       where: { id },
       data: {
@@ -69,8 +66,13 @@ export const updateMessage = async (req: Request, res: Response): Promise<void> 
 
     res.json({ success: true, data: updated });
   } catch (error) {
-    console.error('Error en updateMessage:', error);
-    res.status(500).json({ success: false, message: 'Error al actualizar mensaje' });
+    handlePrismaError(
+      res,
+      error,
+      'updateMessage',
+      'Mensaje no encontrado',
+      'Error al actualizar mensaje',
+    );
   }
 };
 
@@ -79,36 +81,58 @@ export const deleteMessage = async (req: Request, res: Response): Promise<void> 
   try {
     const id = req.params.id as string;
 
-    const exists = await prisma.message.findUnique({ where: { id } });
-    if (!exists) {
-      res.status(404).json({ success: false, message: 'Mensaje no encontrado' });
-      return;
-    }
-
     await prisma.message.delete({ where: { id } });
     res.json({ success: true, message: 'Mensaje eliminado' });
   } catch (error) {
-    console.error('Error en deleteMessage:', error);
-    res.status(500).json({ success: false, message: 'Error al eliminar mensaje' });
+    handlePrismaError(
+      res,
+      error,
+      'deleteMessage',
+      'Mensaje no encontrado',
+      'Error al eliminar mensaje',
+    );
   }
 };
 
-// ── Mobile: Sincronizar mensajes futuros (scheduled_date >= HOY) ──
+// ── Mobile: Sincronización completa de mensajes ──
+// Se devuelven todos los mensajes (pasados y futuros) para que la app pueda:
+//  - Mostrar la línea de tiempo "Nosotros" incluso tras una instalación nueva.
+//  - Reflejar ediciones y eliminaciones hechas desde el panel (la app reemplaza su caché).
+//  - Programar notificaciones locales de mensajes futuros (prefetching).
 export const syncMessages = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     const messages = await prisma.message.findMany({
-      where: {
-        scheduled_date: { gte: today },
-      },
-      orderBy: { scheduled_date: 'asc' },
+      select: { id: true, content: true, scheduled_date: true, theme_color: true, is_read: true, created_at: true },
+      orderBy: [{ scheduled_date: 'asc' }, { created_at: 'asc' }],
+      take: 2000,
     });
 
     res.json({ success: true, data: messages });
   } catch (error) {
-    console.error('Error en syncMessages:', error);
+    logger.error({ err: error }, 'Error en syncMessages');
     res.status(500).json({ success: false, message: 'Error al sincronizar mensajes' });
   }
 };
+
+// ── Mobile: Confirmar lectura de un mensaje ──
+export const markMessageAsRead = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+
+    await prisma.message.update({
+      where: { id },
+      data: { is_read: true },
+    });
+
+    res.json({ success: true, message: 'Mensaje marcado como leído' });
+  } catch (error) {
+    handlePrismaError(
+      res,
+      error,
+      'markMessageAsRead',
+      'Mensaje no encontrado',
+      'Error al marcar mensaje como leído',
+    );
+  }
+};
+

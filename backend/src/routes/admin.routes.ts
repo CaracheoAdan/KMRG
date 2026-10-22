@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAdminAuth } from '../middlewares/auth.middleware';
+import { requireCsrfHeader } from '../middlewares/csrf.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
   listMessages,
@@ -26,7 +27,8 @@ import {
 
 const router = Router();
 
-// ── Todas las rutas admin requieren JWT ──
+// ── Todas las rutas admin requieren cookie de sesión + cabecera CSRF en mutaciones ──
+router.use(requireCsrfHeader);
 router.use(requireAdminAuth);
 
 // ── Messages CRUD ──
@@ -45,3 +47,4 @@ router.delete('/milestones/:id', validate({ params: uuidParamSchema }), deleteMi
 router.get('/interactions', listInteractions);
 
 export default router;
+

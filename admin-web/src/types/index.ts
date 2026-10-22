@@ -29,9 +29,8 @@ export interface AdminUser {
 
 export interface AuthResponse {
   success: boolean;
-  message: string;
+  message?: string;
   data: {
-    token: string;
     user: AdminUser;
   };
 }
@@ -49,8 +48,12 @@ export interface CreateMessagePayload {
   is_read?: boolean;
 }
 
+export type UpdateMessagePayload = Partial<CreateMessagePayload>;
+
 export interface CreateMilestonePayload {
   title: string;
   date: string;
   image_url: string;
 }
+
+export type UpdateMilestonePayload = Partial<CreateMilestonePayload>;

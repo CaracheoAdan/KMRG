@@ -6,6 +6,8 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { NewMessagePage } from './pages/NewMessagePage';
+import { EditMessagePage } from './pages/EditMessagePage';
+import { MilestonesPage } from './pages/MilestonesPage';
 
 export const App: React.FC = () => {
   return (
@@ -20,6 +22,8 @@ export const App: React.FC = () => {
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/dashboard/new" element={<NewMessagePage />} />
+              <Route path="/dashboard/messages/:id/edit" element={<EditMessagePage />} />
+              <Route path="/milestones" element={<MilestonesPage />} />
             </Route>
           </Route>
 

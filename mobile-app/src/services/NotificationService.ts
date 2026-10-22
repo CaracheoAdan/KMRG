@@ -1,17 +1,21 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { getCachedMessages, toLocalDateString } from './StorageService';
+import { getCachedMessages, toLocalDateString, toLocalDateAtHour } from './StorageService';
 
-// Configuración global del manejador de notificaciones
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Configuración segura del manejador de notificaciones
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch {
+  // Ignorar en entornos donde no esté disponible
+}
 
 /**
  * Solicita permisos para notificaciones locales al usuario
@@ -35,10 +39,13 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
       try {
         await Notifications.setNotificationChannelAsync('daily-messages', {
           name: 'Mensajes de Amor KMRG',
-          importance: Notifications.AndroidImportance.HIGH,
+          importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#e63946',
           sound: 'default',
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          bypassDnd: false,
+          showBadge: true,
         });
       } catch {
         // En Expo Go en Android, NotificationsChannelsProvider no está presente y lanza NPE
@@ -71,10 +78,10 @@ export const scheduleDailyMessage = async (): Promise<void> => {
     // Cancelar notificaciones previas programadas para evitar duplicados
     await Notifications.cancelAllScheduledNotificationsAsync();
 
-    // 1. Verificar si hay un mensaje programado para hoy
+    // 1. Verificar si hay un mensaje programado para hoy aún no leído
     const todayMessage = messages.find((m) => toLocalDateString(m.scheduled_date) === todayStr);
 
-    if (todayMessage) {
+    if (todayMessage && !todayMessage.is_read) {
       // Hora objetivo: 7:00 AM del día de hoy
       const targetTimeToday = new Date(now);
       targetTimeToday.setHours(7, 0, 0, 0);
@@ -91,17 +98,22 @@ export const scheduleDailyMessage = async (): Promise<void> => {
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: targetTimeToday,
+            ...(Platform.OS === 'android' ? { channelId: 'daily-messages' } : {}),
           },
         });
       }
     }
 
     // 2. Programar notificaciones anticipadas para mensajes futuros (a las 7:00 AM de cada fecha)
-    const futureMessages = messages.filter((m) => toLocalDateString(m.scheduled_date) > todayStr);
+    const futureMessages = messages
+      .filter((m) => toLocalDateString(m.scheduled_date) > todayStr)
+      .sort((a, b) =>
+        toLocalDateString(a.scheduled_date).localeCompare(toLocalDateString(b.scheduled_date))
+      );
 
-    for (const msg of futureMessages.slice(0, 10)) {
-      const scheduledDate = new Date(msg.scheduled_date);
-      scheduledDate.setHours(7, 0, 0, 0);
+    // Programar hasta 60 mensajes futuros (2 meses de cartas anticipadas en hardware local)
+    for (const msg of futureMessages.slice(0, 60)) {
+      const scheduledDate = toLocalDateAtHour(msg.scheduled_date, 7);
 
       if (scheduledDate > now) {
         await Notifications.scheduleNotificationAsync({
@@ -114,6 +126,7 @@ export const scheduleDailyMessage = async (): Promise<void> => {
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: scheduledDate,
+            ...(Platform.OS === 'android' ? { channelId: 'daily-messages' } : {}),
           },
         });
       }

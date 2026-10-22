@@ -1,33 +1,30 @@
 import axios from 'axios';
 
+/**
+ * Cliente HTTP del panel. La sesión vive en la cookie httpOnly `kmrg_session`
+ * (enviada automáticamente gracias a `withCredentials`). El header
+ * `X-Requested-With` es obligatorio para las peticiones mutables (protección CSRF).
+ */
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
+  timeout: 15000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'kmrg-admin',
   },
 });
 
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('kmrg_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('kmrg_token');
-      window.location.href = '/login';
+    const url = String(error.config?.url ?? '');
+    // 401 en login = credenciales incorrectas; 401 en /auth/me = no hay sesión (lo gestiona AuthContext).
+    const isExempt = url.includes('/auth/login') || url.includes('/auth/me');
+    if (error.response?.status === 401 && !isExempt) {
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
