@@ -1342,16 +1342,20 @@ export const GamesScreen: React.FC = () => {
         (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V')) === 'H';
 
     const radius = Math.max(8, Math.floor(cellPx * 0.45));
+    const SHIP_VIBRANT_COLORS: Record<string, string> = {
+      carrier: '#f43f5e',     // Portaaviones (5) - Coral vibrante
+      battleship: '#f59e0b',  // Acorazado (4) - Ámbar dorado
+      cruiser: '#8b5cf6',     // Crucero (3) - Púrpura elegante
+      submarine: '#10b981',   // Submarino (3) - Esmeralda
+      destroyer: '#ec4899',   // Destructor (2) - Rosa intenso
+    };
+    const defaultColor = SHIP_VIBRANT_COLORS[ship.id] || '#0ea5e9';
     const hullBg = isSunk
-      ? '#7f1d1d'
-      : isSelectedForSetup
-      ? '#0ea5e9'
-      : '#334155';
-    const hullBorder = isSunk
       ? '#ef4444'
       : isSelectedForSetup
       ? '#38bdf8'
-      : '#94a3b8';
+      : defaultColor;
+    const hullBorder = isSelectedForSetup ? '#fef08a' : '#ffffff';
 
     return (
       <View
@@ -1408,46 +1412,49 @@ export const GamesScreen: React.FC = () => {
         ]}
       >
 
-        {/* ================= 1. TRES EN RAYA ================= */}
+        {/* ================= 1. TRES EN RAYA (TABLERO BLANCO, TONOS PASTEL, SIN NEGRO) ================= */}
         {activeGame === 'tictactoe' && (
           <View style={styles.gameBodyCentered}>
+            {/* Pill único de turno arriba */}
             <View
               style={[
-                styles.statusBanner,
-                {
-                  backgroundColor: gamesState.ticTacToe.winner
-                    ? isFull
-                      ? '#064e3b'
-                      : '#d1fae5'
-                    : isFull
-                    ? '#0f172a'
-                    : `${primaryColor}14`,
-                  borderWidth: isFull ? 1 : 0,
-                  borderColor: isFull ? '#1e293b' : 'transparent',
-                },
+                styles.unifiedTurnPill,
+                gamesState.ticTacToe.winner
+                  ? { backgroundColor: '#d1fae5', borderColor: '#34d399' }
+                  : gamesState.ticTacToe.turn === 'Karla'
+                  ? { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }
+                  : { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' },
               ]}
             >
+              <View
+                style={[
+                  styles.turnDot,
+                  {
+                    backgroundColor: gamesState.ticTacToe.winner
+                      ? '#059669'
+                      : gamesState.ticTacToe.turn === 'Karla'
+                      ? '#9333ea'
+                      : '#0284c7',
+                  },
+                ]}
+              />
               <Text
                 style={[
-                  styles.statusBannerText,
+                  styles.unifiedTurnPillText,
                   {
                     color: gamesState.ticTacToe.winner
-                      ? '#10b981'
-                      : isFull
-                      ? '#38bdf8'
-                      : primaryColor,
+                      ? '#059669'
+                      : gamesState.ticTacToe.turn === 'Karla'
+                      ? '#9333ea'
+                      : '#0284c7',
                   },
                 ]}
               >
                 {gamesState.ticTacToe.winner
                   ? gamesState.ticTacToe.winner === 'Empate'
-                    ? '¡EMPATE TÉCNICO! (+40 PTS)'
-                    : `¡VICTORIA DE ${
-                        gamesState.ticTacToe.winner === 'Karla' ? 'KARLITA' : 'JAVIER'
-                      }! (+150 PTS)`
-                  : `TURNO ACTIVO: ${
-                      gamesState.ticTacToe.turn === 'Karla' ? 'KARLITA (✕)' : 'JAVIER (○)'
-                    }`}
+                    ? '¡EMPATE! (+40 PTS)'
+                    : `¡VICTORIA DE ${gamesState.ticTacToe.winner === 'Karla' ? 'KARLITA' : 'JAVIER'}! (+150 PTS)`
+                  : `TURNO: ${gamesState.ticTacToe.turn === 'Karla' ? 'KARLITA (✕)' : 'JAVIER (○)'}`}
               </Text>
             </View>
 
@@ -1457,9 +1464,12 @@ export const GamesScreen: React.FC = () => {
                 {
                   width: boardPx,
                   height: boardPx,
-                  backgroundColor: isFull ? '#090d16' : `${primaryColor}15`,
-                  borderWidth: isFull ? 2 : 0,
-                  borderColor: isFull ? '#1e293b' : 'transparent',
+                  backgroundColor: '#ede9fe',
+                  borderRadius: 22,
+                  padding: 10,
+                  borderWidth: 1.5,
+                  borderColor: '#ddd6fe',
+                  gap: 8,
                 },
               ]}
             >
@@ -1471,15 +1481,21 @@ export const GamesScreen: React.FC = () => {
                     onPress={() => void handleTicTacToePress(idx)}
                     style={[
                       styles.tttCell,
-                      isFull && {
-                        backgroundColor: '#111827',
+                      {
+                        backgroundColor: '#ffffff',
+                        borderRadius: 16,
                         borderWidth: 1,
-                        borderColor: '#1e293b',
+                        borderColor: '#e2e8f0',
+                        shadowColor: '#7c3aed',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 4,
+                        elevation: 2,
                       },
                       isWinningCell && {
-                        backgroundColor: isFull ? '#422006' : '#fef08a',
+                        backgroundColor: '#fef08a',
                         borderColor: '#eab308',
-                        borderWidth: 2.5,
+                        borderWidth: 3,
                       },
                     ]}
                     activeOpacity={0.8}
@@ -1489,8 +1505,9 @@ export const GamesScreen: React.FC = () => {
                         style={[
                           styles.tttPiece,
                           {
-                            fontSize: isFull ? 50 : 34,
-                            color: isFull ? '#e879f9' : '#9333ea',
+                            fontSize: isFull ? 54 : 36,
+                            color: '#9333ea',
+                            fontWeight: '900',
                           },
                         ]}
                       >
@@ -1502,8 +1519,9 @@ export const GamesScreen: React.FC = () => {
                         style={[
                           styles.tttPiece,
                           {
-                            fontSize: isFull ? 50 : 34,
-                            color: isFull ? '#38bdf8' : '#0284c7',
+                            fontSize: isFull ? 54 : 36,
+                            color: '#0284c7',
+                            fontWeight: '900',
                           },
                         ]}
                       >
@@ -1520,7 +1538,7 @@ export const GamesScreen: React.FC = () => {
               style={[
                 styles.primaryGameBtn,
                 {
-                  backgroundColor: isFull ? '#0284c7' : primaryColor,
+                  backgroundColor: primaryColor,
                   width: '100%',
                 },
               ]}
@@ -1533,8 +1551,15 @@ export const GamesScreen: React.FC = () => {
           </View>
         )}
 
-        {/* ================= 2. SUDOKU (3 VIDAS + TECLADO NUMÉRICO NATIVO) ================= */}
-        {activeGame === 'sudoku' && (
+        {/* ================= 2. SUDOKU (TABLERO BLANCO, LÍNEAS AZULES, HIGHLIGHTS PASTEL) ================= */}
+        {activeGame === 'sudoku' && (() => {
+          const digitCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+          sudoku.board.forEach((r) => {
+            r.forEach((v) => {
+              if (v >= 1 && v <= 9) digitCounts[v] = (digitCounts[v] || 0) + 1;
+            });
+          });
+          return (
           <View style={styles.gameBodyCentered}>
             {/* Input oculto conectado al Teclado Numérico Nativo del Teléfono */}
             <TextInput
@@ -1652,7 +1677,7 @@ export const GamesScreen: React.FC = () => {
             <View
               style={[
                 styles.sudokuGridContainer,
-                isFull && { borderColor: '#38bdf8', backgroundColor: '#0f172a' },
+                { borderColor: '#2563eb', backgroundColor: '#ffffff', borderWidth: 2, borderRadius: 12, overflow: 'hidden' },
                 isSudokuGameOver && { opacity: 0.45 },
               ]}
             >
@@ -1692,31 +1717,15 @@ export const GamesScreen: React.FC = () => {
                             height: sudokuCellPx,
                             borderRightWidth: rightBorder,
                             borderBottomWidth: bottomBorder,
-                            borderRightColor:
-                              rightBorder === 2
-                                ? isFull
-                                  ? '#38bdf8'
-                                  : '#1e293b'
-                                : isFull
-                                ? '#1e293b'
-                                : '#cbd5e1',
-                            borderBottomColor:
-                              bottomBorder === 2
-                                ? isFull
-                                  ? '#38bdf8'
-                                  : '#1e293b'
-                                : isFull
-                                ? '#1e293b'
-                                : '#cbd5e1',
-                          },
-                          isSameCross && {
-                            backgroundColor: isFull ? '#1e293b' : `${primaryColor}10`,
-                          },
-                          isSameNumber && {
-                            backgroundColor: isFull ? '#0369a1' : `${primaryColor}28`,
-                          },
-                          isSelected && {
-                            backgroundColor: isFull ? '#0284c7' : `${primaryColor}45`,
+                            borderRightColor: rightBorder === 2 ? '#2563eb' : '#e2e8f0',
+                            borderBottomColor: bottomBorder === 2 ? '#2563eb' : '#e2e8f0',
+                            backgroundColor: isSelected
+                              ? '#bfdbfe'
+                              : isSameNumber
+                              ? '#fef3c7'
+                              : isSameCross
+                              ? '#eff6ff'
+                              : '#ffffff',
                           },
                         ]}
                         activeOpacity={0.75}
@@ -1728,14 +1737,14 @@ export const GamesScreen: React.FC = () => {
                               { fontSize: isFull ? 18 : 14 },
                               isFixed
                                 ? {
-                                    color: isFull ? '#f8fafc' : '#0f172a',
-                                    fontWeight: '800',
+                                    color: '#0f172a',
+                                    fontWeight: '900',
                                   }
                                 : {
-                                    color: isFull ? '#38bdf8' : primaryColor,
-                                    fontWeight: '700',
+                                    color: currentProfile === 'Karla' ? '#9333ea' : '#0284c7',
+                                    fontWeight: '800',
                                   },
-                              isWrong && { color: '#ef4444' },
+                              isWrong && { color: '#ef4444', fontWeight: '900' },
                             ]}
                           >
                             {val}
@@ -1774,65 +1783,108 @@ export const GamesScreen: React.FC = () => {
             ) : (
               <View style={{ width: '100%', gap: 6, marginTop: 8 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 4 }}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                    <TouchableOpacity
-                      key={num}
-                      onPress={() => void handleSudokuNumberPress(num)}
-                      style={[
-                        styles.sudokuNumKey,
-                        { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
-                      ]}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.sudokuNumKeyText, { color: colors.text }]}>{num}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                    const count = digitCounts[num] || 0;
+                    const remaining = Math.max(0, 9 - count);
+                    const isDone = remaining === 0;
+                    return (
+                      <TouchableOpacity
+                        key={num}
+                        disabled={isDone}
+                        onPress={() => void handleSudokuNumberPress(num)}
+                        style={[
+                          styles.sudokuNumKey,
+                          {
+                            backgroundColor: isDone ? colors.surfaceAlt : colors.surface,
+                            borderColor: isDone ? colors.border : '#93c5fd',
+                            opacity: isDone ? 0.35 : 1,
+                            paddingVertical: 5,
+                            alignItems: 'center',
+                          },
+                        ]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.sudokuNumKeyText, { color: isDone ? colors.textMuted : '#0f172a', fontWeight: '800' }]}>
+                          {num}
+                        </Text>
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: isDone ? colors.textMuted : '#2563eb' }}>
+                          {isDone ? '✓' : remaining}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             )}
           </View>
-        )}
+          );
+        })()}
 
-        {/* ================= 3. AJEDREZ ================= */}
+        {/* ================= 3. AJEDREZ (CASILLAS CREMA Y ÁMBAR, PIEZAS LEGIBLES) ================= */}
         {activeGame === 'chess' && (
           <View style={styles.gameBodyCentered}>
-            <View style={styles.chessTopStatusRow}>
+            {/* Pill único de turno */}
+            <View
+              style={[
+                styles.unifiedTurnPill,
+                gamesState.chess.winner
+                  ? { backgroundColor: '#d1fae5', borderColor: '#34d399' }
+                  : gamesState.chess.turn === 'w'
+                  ? { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }
+                  : { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' },
+              ]}
+            >
+              <View
+                style={[
+                  styles.turnDot,
+                  {
+                    backgroundColor: gamesState.chess.winner
+                      ? '#059669'
+                      : gamesState.chess.turn === 'w'
+                      ? '#9333ea'
+                      : '#0284c7',
+                  },
+                ]}
+              />
               <Text
                 style={[
-                  styles.chessTurnLabel,
-                  { color: isFull ? '#38bdf8' : primaryColor },
+                  styles.unifiedTurnPillText,
+                  {
+                    color: gamesState.chess.winner
+                      ? '#059669'
+                      : gamesState.chess.turn === 'w'
+                      ? '#9333ea'
+                      : '#0284c7',
+                  },
                 ]}
               >
                 {gamesState.chess.winner
-                  ? `¡Ganó ${gamesState.chess.winner === 'w' ? 'Karlita' : 'Javier'}!`
-                  : `Turno: ${
-                      gamesState.chess.turn === 'w'
-                        ? 'Karlita (Blancas)'
-                        : 'Javier (Negras)'
-                    }`}
+                  ? `¡VICTORIA DE ${gamesState.chess.winner === 'w' ? 'KARLITA' : 'JAVIER'}!`
+                  : `TURNO: ${gamesState.chess.turn === 'w' ? 'KARLITA (BLANCAS) 💜' : 'JAVIER (NEGRAS) 💙'}`}
               </Text>
               {isKingInCheck && !gamesState.chess.winner && (
-                <View style={styles.checkWarningBadge}>
-                  <Text style={styles.checkWarningText}>¡JAQUE AL REY!</Text>
+                <View style={[styles.checkWarningBadge, { marginLeft: 6 }]}>
+                  <Text style={styles.checkWarningText}>¡JAQUE!</Text>
                 </View>
-              )}
-              {materialAdvantage !== 0 && (
-                <Text style={styles.advantageTag}>
-                  Ventaja {materialAdvantage > 0 ? `K +${materialAdvantage}` : `J +${Math.abs(materialAdvantage)}`}
-                </Text>
               )}
             </View>
 
             <View
               style={[
                 styles.chessBoardOuter,
-                isFull && { borderColor: '#f59e0b', borderWidth: 2.5 },
+                {
+                  borderColor: '#b45309',
+                  borderWidth: 3,
+                  borderRadius: 16,
+                  backgroundColor: '#b45309',
+                  overflow: 'hidden',
+                },
               ]}
             >
               {gamesState.chess.board.map((row, r) => (
                 <View key={r} style={styles.chessRow}>
                   {row.map((piece, c) => {
-                    const isDark = (r + c) % 2 === 1;
+                    const isDarkSquare = (r + c) % 2 === 1;
                     const isSelected =
                       selectedChessPos?.[0] === r && selectedChessPos?.[1] === c;
                     const isLastMove =
@@ -1843,6 +1895,11 @@ export const GamesScreen: React.FC = () => {
                     const isTarget = validChessTargets.some(
                       ([tr, tc]) => tr === r && tc === c
                     );
+                    const isKingCheckSquare =
+                      isKingInCheck &&
+                      piece &&
+                      piece.type === 'k' &&
+                      piece.color === gamesState.chess.turn;
 
                     return (
                       <TouchableOpacity
@@ -1853,17 +1910,15 @@ export const GamesScreen: React.FC = () => {
                           {
                             width: chessCellPx,
                             height: chessCellPx,
-                            backgroundColor: isSelected
-                              ? '#fde047'
+                            backgroundColor: isKingCheckSquare
+                              ? '#ef4444'
+                              : isSelected
+                              ? '#38bdf8'
                               : isLastMove
-                              ? '#fef08a'
-                              : isDark
-                              ? isFull
-                                ? '#334155'
-                                : `${primaryColor}42`
-                              : isFull
-                              ? '#cbd5e1'
-                              : '#ffffff',
+                              ? '#fde68a'
+                              : isDarkSquare
+                              ? '#d97706'
+                              : '#fefae0',
                           },
                         ]}
                         activeOpacity={0.85}
@@ -1873,11 +1928,11 @@ export const GamesScreen: React.FC = () => {
                             style={[
                               styles.chessGlyph,
                               {
-                                fontSize: isFull ? 29 : 22,
-                                color: piece.color === 'w' ? '#ffffff' : '#0f172a',
-   textShadowColor: piece.color === 'w' ? '#0f172a' : '#ffffff',
-   textShadowOffset: { width: 0, height: 1 },
-   textShadowRadius: 3,
+                                fontSize: isFull ? 30 : 23,
+                                color: piece.color === 'w' ? '#ffffff' : '#1e293b',
+                                textShadowColor: piece.color === 'w' ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)',
+                                textShadowOffset: { width: 0, height: 1 },
+                                textShadowRadius: 3,
                               },
                             ]}
                           >
@@ -1888,6 +1943,7 @@ export const GamesScreen: React.FC = () => {
                           <View
                             style={[
                               styles.chessMoveIndicator,
+                              { backgroundColor: '#0284c7aa' },
                               piece && styles.chessCaptureIndicator,
                             ]}
                           />
@@ -1944,86 +2000,72 @@ export const GamesScreen: React.FC = () => {
           </View>
         )}
 
-        {/* ================= 4. EL AHORCADO ================= */}
-        {activeGame === 'hangman' && (
+        {/* ================= 4. EL AHORCADO (TARJETA ROSA PASTEL, AHORCADO GRIS, TECLADO 3 FILAS) ================= */}
+        {activeGame === 'hangman' && (() => {
+          const QWERTY_ROWS = [
+            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Ñ'],
+            ['Z', 'X', 'C', 'V', 'B', 'N', 'M'],
+          ];
+
+          return (
           <View style={styles.gameBodyCentered}>
+            {/* Tarjeta de Pistas Rosa Pastel */}
             <View
               style={[
                 styles.hangmanStageCompact,
-                isFull && { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#1e293b' },
+                { backgroundColor: '#fdf2f8', borderWidth: 1.5, borderColor: '#f472b6', borderRadius: 16 },
               ]}
             >
               <View style={styles.gallowsBoxCompact}>
-                <View style={[styles.gallowsBase, isFull && { backgroundColor: '#94a3b8' }]} />
-                <View style={[styles.gallowsPole, isFull && { backgroundColor: '#94a3b8' }]} />
-                <View style={[styles.gallowsTop, isFull && { backgroundColor: '#94a3b8' }]} />
-                <View style={styles.gallowsRope} />
+                <View style={[styles.gallowsBase, { backgroundColor: '#475569' }]} />
+                <View style={[styles.gallowsPole, { backgroundColor: '#475569' }]} />
+                <View style={[styles.gallowsTop, { backgroundColor: '#475569' }]} />
+                <View style={[styles.gallowsRope, { backgroundColor: '#94a3b8' }]} />
                 {wrongGuessesCount >= 1 && (
-                  <View
-                    style={[
-                      styles.hmHead,
-                      { borderColor: isFull ? '#38bdf8' : primaryColor },
-                    ]}
-                  />
+                  <View style={[styles.hmHead, { borderColor: '#f43f5e', borderWidth: 3.5 }]} />
                 )}
                 {wrongGuessesCount >= 2 && (
-                  <View
-                    style={[
-                      styles.hmBody,
-                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
-                    ]}
-                  />
+                  <View style={[styles.hmBody, { backgroundColor: '#f43f5e', width: 3.5 }]} />
                 )}
                 {wrongGuessesCount >= 3 && (
-                  <View
-                    style={[
-                      styles.hmArmLeft,
-                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
-                    ]}
-                  />
+                  <View style={[styles.hmArmLeft, { backgroundColor: '#f43f5e', height: 3.5 }]} />
                 )}
                 {wrongGuessesCount >= 4 && (
-                  <View
-                    style={[
-                      styles.hmArmRight,
-                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
-                    ]}
-                  />
+                  <View style={[styles.hmArmRight, { backgroundColor: '#f43f5e', height: 3.5 }]} />
                 )}
                 {wrongGuessesCount >= 5 && (
-                  <View
-                    style={[
-                      styles.hmLegLeft,
-                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
-                    ]}
-                  />
+                  <View style={[styles.hmLegLeft, { backgroundColor: '#f43f5e', height: 3.5 }]} />
                 )}
                 {wrongGuessesCount >= 6 && (
-                  <View
-                    style={[
-                      styles.hmLegRight,
-                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
-                    ]}
-                  />
+                  <View style={[styles.hmLegRight, { backgroundColor: '#f43f5e', height: 3.5 }]} />
                 )}
               </View>
 
               <View style={styles.hangmanInfoRight}>
-                <View style={styles.livesIndicatorRow}>
-                  <Ionicons name="heart" size={13} color="#e11d48" />
-                  <Text style={styles.livesCountText}>
-                    Vidas: {Math.max(0, maxWrong - wrongGuessesCount)}/{maxWrong}
-                  </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 }}>
+                  {Array.from({ length: maxWrong }).map((_, i) => {
+                    const isAlive = i < maxWrong - wrongGuessesCount;
+                    return (
+                      <Ionicons
+                        key={i}
+                        name={isAlive ? 'heart' : 'heart-dislike-outline'}
+                        size={14}
+                        color={isAlive ? '#e11d48' : '#cbd5e1'}
+                      />
+                    );
+                  })}
                 </View>
-                <Text
-                  style={[styles.hangmanHintBox, isFull && { color: '#cbd5e1' }]}
-                  numberOfLines={2}
-                >
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#db2777', textTransform: 'uppercase' }}>
+                  {hangman.category || 'Palabra Oculta'}
+                </Text>
+                <Text style={[styles.hangmanHintBox, { color: '#334155' }]} numberOfLines={2}>
                   “{hangman.hint}”
                 </Text>
               </View>
             </View>
 
+            {/* Letras de la palabra centradas */}
             <View style={styles.wordSlotsWrap}>
               {hangman.word.split('').map((ch, idx) => {
                 if (ch === ' ') return <View key={idx} style={{ width: 8 }} />;
@@ -2035,21 +2077,17 @@ export const GamesScreen: React.FC = () => {
                     style={[
                       styles.wordSlotBox,
                       {
-                        borderColor: revealed
-                          ? isFull
-                            ? '#38bdf8'
-                            : primaryColor
-                          : '#475569',
-                      },
-                      revealed && {
-                        backgroundColor: isFull ? '#1e293b' : `${primaryColor}12`,
+                        backgroundColor: '#ffffff',
+                        borderColor: revealed ? '#f472b6' : '#cbd5e1',
+                        borderWidth: 1.5,
+                        borderRadius: 8,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.wordSlotChar,
-                        { color: isFull ? '#f8fafc' : '#0f172a' },
+                        { color: '#0f172a', fontWeight: '900' },
                       ]}
                     >
                       {revealed ? ch : ''}
@@ -2059,51 +2097,56 @@ export const GamesScreen: React.FC = () => {
               })}
             </View>
 
-            <View style={styles.azKeyboard}>
-              {ALPHABET.map((letter) => {
-                const used = hangman.guessed.includes(letter);
-                const hit = used && hangman.word.includes(letter);
-                return (
-                  <TouchableOpacity
-                    key={letter}
-                    disabled={used || hangman.status !== 'playing'}
-                    onPress={() => void handleGuessLetter(letter)}
-                    style={[
-                      styles.azKey,
-                      isFull && {
-                        width: 34,
-                        height: 34,
-                        backgroundColor: '#1e293b',
-                        borderColor: '#334155',
-                      },
-                      used && {
-                        backgroundColor: hit
-                          ? isFull
-                            ? '#0284c7'
-                            : primaryColor
-                          : isFull
-                          ? '#0f172a'
-                          : '#e2e8f0',
-                        borderColor: hit
-                          ? isFull
-                            ? '#38bdf8'
-                            : primaryColor
-                          : 'transparent',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.azKeyText,
-                        isFull && { color: '#f8fafc' },
-                        used && { color: hit ? '#ffffff' : '#64748b' },
-                      ]}
-                    >
-                      {letter}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            {/* Teclado QWERTY en 3 Filas con Teclas Blancas y Estados Verde/Rojo */}
+            <View style={{ width: '100%', gap: 5, marginTop: 4 }}>
+              {QWERTY_ROWS.map((rowLetters, rIdx) => (
+                <View key={rIdx} style={{ flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
+                  {rowLetters.map((letter) => {
+                    const used = hangman.guessed.includes(letter);
+                    const hit = used && hangman.word.includes(letter);
+                    return (
+                      <TouchableOpacity
+                        key={letter}
+                        disabled={used || hangman.status !== 'playing'}
+                        onPress={() => void handleGuessLetter(letter)}
+                        style={[
+                          styles.azKey,
+                          {
+                            width: rIdx === 2 ? 38 : 31,
+                            height: 36,
+                            borderRadius: 8,
+                            backgroundColor: '#ffffff',
+                            borderWidth: 1,
+                            borderColor: '#e2e8f0',
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.05,
+                            shadowRadius: 2,
+                            elevation: 1,
+                          },
+                          used && {
+                            backgroundColor: hit ? '#dcfce7' : '#fee2e2',
+                            borderColor: hit ? '#86efac' : '#fca5a5',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.azKeyText,
+                            { color: '#1e293b', fontWeight: '800' },
+                            used && {
+                              color: hit ? '#16a34a' : '#dc2626',
+                              textDecorationLine: hit ? 'none' : 'line-through',
+                            },
+                          ]}
+                        >
+                          {letter}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
 
             <View style={styles.chessControlsRow}>
@@ -2138,7 +2181,7 @@ export const GamesScreen: React.FC = () => {
                   {
                     flex: 1,
                     marginTop: 0,
-                    backgroundColor: isFull ? '#0284c7' : primaryColor,
+                    backgroundColor: primaryColor,
                   },
                 ]}
               >
@@ -2147,7 +2190,8 @@ export const GamesScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        )}
+          );
+        })()}
 
         {/* ================= 5. BATTLESHIP 10x10 (INVITACIÓN, ACOMODAR BARCOS Y COMBATE NAVAL) ================= */}
         {activeGame === 'battleship' && (
@@ -2291,7 +2335,7 @@ export const GamesScreen: React.FC = () => {
                       style={{
                         width: bsCoordHeaderPx,
                         height: bsCoordHeaderPx,
-                        backgroundColor: '#082f49',
+                        backgroundColor: '#0369a1',
                       }}
                     />
                     {COL_NUMBERS.map((colLbl) => (
@@ -3015,23 +3059,37 @@ export const GamesScreen: React.FC = () => {
 
   const handleResetCurrentGame = () => {
     if (!activeGame) return;
-    switch (activeGame) {
-      case 'tictactoe':
-        void handleNewTicTacToeRound();
-        break;
-      case 'sudoku':
-        void handleNewSudokuGame(sudoku.difficulty);
-        break;
-      case 'chess':
-        void handleResetChess();
-        break;
-      case 'battleship':
-        void handleResetBattleship();
-        break;
-      case 'hangman':
-        void handleRandomHangmanWord();
-        break;
-    }
+    const gameLabel = ALL_GAMES.find((g) => g.id === activeGame)?.label || 'este juego';
+    Alert.alert(
+      `¿Reiniciar ${gameLabel}?`,
+      'Se reiniciará la partida actual para ambos jugadores. ¿Deseas continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Reiniciar',
+          style: 'destructive',
+          onPress: () => {
+            switch (activeGame) {
+              case 'tictactoe':
+                void handleNewTicTacToeRound();
+                break;
+              case 'sudoku':
+                void handleNewSudokuGame(sudoku.difficulty);
+                break;
+              case 'chess':
+                void handleResetChess();
+                break;
+              case 'battleship':
+                void handleResetBattleship();
+                break;
+              case 'hangman':
+                void handleRandomHangmanWord();
+                break;
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -3039,12 +3097,8 @@ export const GamesScreen: React.FC = () => {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 
-      {/* ================= VISTA LOBBY: MARCADOR + CONTINUAR + TODOS LOS JUEGOS ================= */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.lobbyScrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      {/* ================= VISTA LOBBY ZERO-SCROLL: MARCADOR + GRID 2x2 + 1 FULL WIDTH ================= */}
+      <View style={styles.lobbyZeroScrollContainer}>
         {/* 1. Marcador Compacto Karlita vs Javier */}
         <View style={[styles.lobbyScoreboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.lobbyPlayer}>
@@ -3086,133 +3140,138 @@ export const GamesScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* 2. Sección Continuar (Partidas en Curso) */}
-        {activeMatches.length > 0 && (
-          <View style={styles.lobbySection}>
-            <Text style={[styles.lobbySectionTitle, { color: colors.text }]}>Continuar Partida</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 10, paddingVertical: 4 }}
-            >
-              {activeMatches.map((m) => (
-                <PressableScale
-                  key={`continue-${m.id}`}
-                  onPress={() => setActiveGame(m.id as GameTab)}
-                  style={[
-                    styles.continueCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: m.isMyTurn ? colors.primary : colors.border,
-                    },
-                  ]}
-                  scaleTo={0.96}
-                >
-                  <View style={styles.continueCardTop}>
-                    <View style={[styles.continueIconCircle, { backgroundColor: colors.primaryLight }]}>
-                      <Ionicons name={m.icon as any} size={18} color={colors.primary} />
+        {/* 2. Grid de 5 Juegos: 2 Columnas x 2 Filas + 5to Juego en Fila Completa */}
+        {(() => {
+          // Ordenar juegos: donde es el turno del usuario van PRIMERO
+          const sortedGames = [...ALL_GAMES].sort((a, b) => {
+            const stA = getGameStatus(a.id);
+            const stB = getGameStatus(b.id);
+            if (stA.isMyTurn && !stB.isMyTurn) return -1;
+            if (!stA.isMyTurn && stB.isMyTurn) return 1;
+            return 0;
+          });
+
+          const gridGames = sortedGames.slice(0, 4);
+          const fullWidthGame = sortedGames[4];
+
+          return (
+            <View style={styles.lobbyGamesGridArea}>
+              {/* Filas 1 y 2: 4 juegos en cuadrícula 2x2 */}
+              <View style={styles.lobbyGrid2x2}>
+                {gridGames.map((g) => {
+                  const status = getGameStatus(g.id);
+                  return (
+                    <PressableScale
+                      key={g.id}
+                      onPress={() => setActiveGame(g.id)}
+                      style={[
+                        styles.lobbyCardCompact,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: status.isMyTurn ? colors.primary : colors.border,
+                        },
+                      ]}
+                      scaleTo={0.96}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <View style={[styles.lobbyCardIconBox, { backgroundColor: g.bgTint }]}>
+                          <Ionicons name={g.icon as any} size={22} color={g.iconColor} />
+                        </View>
+                        <View
+                          style={[
+                            styles.turnBadgeMini,
+                            {
+                              backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
+                              borderColor: status.isMyTurn ? colors.primary : colors.border,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.turnDot,
+                              { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.turnBadgeMiniText,
+                              { color: status.isMyTurn ? colors.primary : colors.textMuted },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {status.text}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.lobbyCardTitle, { color: colors.text }]} numberOfLines={1}>
+                        {g.label}
+                      </Text>
+                      <Text style={[styles.lobbyCardDesc, { color: colors.textMuted }]} numberOfLines={2}>
+                        {g.description}
+                      </Text>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+
+              {/* Fila 3: 5to juego en ancho completo horizontal */}
+              {fullWidthGame && (() => {
+                const status = getGameStatus(fullWidthGame.id);
+                return (
+                  <PressableScale
+                    onPress={() => setActiveGame(fullWidthGame.id)}
+                    style={[
+                      styles.lobbyCardFullWidth,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: status.isMyTurn ? colors.primary : colors.border,
+                      },
+                    ]}
+                    scaleTo={0.97}
+                  >
+                    <View style={[styles.lobbyCardIconBox, { backgroundColor: fullWidthGame.bgTint }]}>
+                      <Ionicons name={fullWidthGame.icon as any} size={24} color={fullWidthGame.iconColor} />
+                    </View>
+                    <View style={{ flex: 1, paddingHorizontal: 10 }}>
+                      <Text style={[styles.lobbyCardTitle, { color: colors.text }]} numberOfLines={1}>
+                        {fullWidthGame.label}
+                      </Text>
+                      <Text style={[styles.lobbyCardDesc, { color: colors.textMuted }]} numberOfLines={1}>
+                        {fullWidthGame.description}
+                      </Text>
                     </View>
                     <View
                       style={[
-                        styles.turnBadge,
+                        styles.turnBadgeMini,
                         {
-                          backgroundColor: m.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
-                          borderColor: m.isMyTurn ? colors.primary : colors.border,
+                          backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
+                          borderColor: status.isMyTurn ? colors.primary : colors.border,
                         },
                       ]}
                     >
                       <View
                         style={[
                           styles.turnDot,
-                          { backgroundColor: m.isMyTurn ? colors.primary : colors.textMuted },
+                          { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
                         ]}
                       />
                       <Text
                         style={[
-                          styles.turnBadgeText,
-                          { color: m.isMyTurn ? colors.primary : colors.textMuted },
+                          styles.turnBadgeMiniText,
+                          { color: status.isMyTurn ? colors.primary : colors.textMuted },
                         ]}
+                        numberOfLines={1}
                       >
-                        {m.statusText}
+                        {status.text}
                       </Text>
                     </View>
-                  </View>
-                  <Text style={[styles.continueGameName, { color: colors.text }]}>{m.name}</Text>
-                  <Text style={[styles.continueGameSub, { color: colors.textMuted }]}>{m.detail}</Text>
-                </PressableScale>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* 3. Todos los Juegos (Cuadrícula de 2 Columnas con Tarjetas Grandes) */}
-        <View style={styles.lobbySection}>
-          <Text style={[styles.lobbySectionTitle, { color: colors.text }]}>Todos los Juegos</Text>
-          <View style={styles.gamesGridTwoCol}>
-            {ALL_GAMES.map((g) => {
-              const status = getGameStatus(g.id);
-              return (
-                <PressableScale
-                  key={g.id}
-                  onPress={() => setActiveGame(g.id)}
-                  style={[
-                    styles.gameGridCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: status.isMyTurn ? colors.primary : colors.border,
-                    },
-                  ]}
-                  scaleTo={0.96}
-                >
-                  <View style={[styles.gameGridIconBox, { backgroundColor: g.bgTint }]}>
-                    <Ionicons name={g.icon as any} size={26} color={g.iconColor} />
-                  </View>
-                  <Text
-                    style={[styles.gameGridCardTitle, { color: colors.text }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                  >
-                    {g.label}
-                  </Text>
-                  <Text
-                    style={[styles.gameGridCardSub, { color: colors.textMuted }]}
-                    numberOfLines={2}
-                  >
-                    {g.description}
-                  </Text>
-                  <View
-                    style={[
-                      styles.turnBadge,
-                      {
-                        backgroundColor: status.isMyTurn ? `${colors.primary}18` : colors.surfaceAlt,
-                        borderColor: status.isMyTurn ? colors.primary : colors.border,
-                        alignSelf: 'flex-start',
-                        marginTop: 'auto',
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.turnDot,
-                        { backgroundColor: status.isMyTurn ? colors.primary : colors.textMuted },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.turnBadgeText,
-                        { color: status.isMyTurn ? colors.primary : colors.textMuted },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {status.text}
-                    </Text>
-                  </View>
-                </PressableScale>
-              );
-            })}
-          </View>
-        </View>
-      </ScrollView>
+                  </PressableScale>
+                );
+              })()}
+            </View>
+          );
+        })()}
+      </View>
 
       {/* ================= PANTALLA COMPLETA DEL JUEGO ACTIVO (HEADER MÍNIMO + BARRA INFERIOR OCULTA) ================= */}
       <Modal
@@ -3421,6 +3480,84 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     paddingBottom: 110,
     gap: 16,
   },
+  lobbyZeroScrollContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  lobbyGamesGridArea: {
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  lobbyGrid2x2: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignContent: 'space-between',
+    gap: 8,
+  },
+  lobbyCardCompact: {
+    width: '48.5%',
+    flex: 1,
+    minHeight: 115,
+    borderRadius: 16,
+    padding: 10,
+    borderWidth: 1.5,
+    justifyContent: 'space-between',
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  lobbyCardIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  turnBadgeMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  turnBadgeMiniText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+  lobbyCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  lobbyCardDesc: {
+    fontSize: 10.5,
+    lineHeight: 14,
+    marginTop: 1,
+  },
+  lobbyCardFullWidth: {
+    width: '100%',
+    height: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   lobbyScoreboard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3483,6 +3620,23 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  unifiedTurnPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    marginBottom: 8,
+    alignSelf: 'center',
+  },
+  unifiedTurnPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   lobbySection: {
     gap: 10,
@@ -4561,17 +4715,17 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   bsGridOuter10x10: {
     borderWidth: 2,
-    borderColor: '#0284c7',
-    borderRadius: 10,
+    borderColor: '#38bdf8',
+    borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#082f49',
+    backgroundColor: '#0284c7',
   },
   bsCoordHeaderCell: {
-    backgroundColor: '#082f49',
+    backgroundColor: '#0369a1',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.3,
-    borderColor: '#0369a1',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   bsCoordText: {
     fontSize: 8,
@@ -4581,9 +4735,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   bsCell10x10: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 0.4,
-    borderColor: 'rgba(56, 189, 248, 0.28)',
-    backgroundColor: '#0c4a6e',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    backgroundColor: '#0284c7',
     position: 'relative',
   },
   shipHullSegment: {

@@ -114,24 +114,25 @@ export const getTodayMessage = async (profile: UserProfile): Promise<Message | n
     const messages = await getCachedMessages();
     const todayStr = toLocalDateString(new Date());
 
-    // Cartas dirigidas a este perfil (o compatibles con versiones anteriores)
-    const myMessages = messages.filter((m) => {
+    // PRIVACIDAD ESTRICTA:
+    // Solo cartas dirigidas al destinatario actual cuya fecha de apertura ya llegó (scheduled_date <= HOY).
+    const myUnlockedMessages = messages.filter((m) => {
       const recipient = m.recipient === 'Ella' ? 'Karla' : m.recipient;
-      return !recipient || recipient === profile;
+      const isTargetRecipient = recipient ? recipient === profile : m.sender !== profile;
+      const isUnlocked = toLocalDateString(m.scheduled_date) <= todayStr;
+      return isTargetRecipient && isUnlocked;
     });
 
-    // 1. Mensaje exacto de hoy
-    const exactToday = myMessages.find((m) => toLocalDateString(m.scheduled_date) === todayStr);
+    // 1. Mensaje exacto del día de hoy
+    const exactToday = myUnlockedMessages.find((m) => toLocalDateString(m.scheduled_date) === todayStr);
     if (exactToday) return exactToday;
 
-    // 2. Mensaje desbloqueado más reciente (nunca futuro)
-    const unlocked = myMessages
-      .filter((m) => toLocalDateString(m.scheduled_date) <= todayStr)
-      .sort((a, b) =>
-        toLocalDateString(b.scheduled_date).localeCompare(toLocalDateString(a.scheduled_date))
-      );
+    // 2. Mensaje desbloqueado más reciente
+    const sorted = myUnlockedMessages.sort((a, b) =>
+      toLocalDateString(b.scheduled_date).localeCompare(toLocalDateString(a.scheduled_date))
+    );
 
-    return unlocked.length > 0 ? unlocked[0] : null;
+    return sorted.length > 0 ? sorted[0] : null;
   } catch (error) {
     console.warn('Error obteniendo carta de hoy:', error);
     return null;
@@ -139,7 +140,8 @@ export const getTodayMessage = async (profile: UserProfile): Promise<Message | n
 };
 
 /**
- * Cartas pasadas ya desbloqueadas para la línea de tiempo
+ * Cartas pasadas y del día ya desbloqueadas para la línea de tiempo de 'Nosotros'.
+ * PRIVACIDAD: Nunca devuelve cartas de fechas futuras ni cartas dirigidas a otra persona.
  */
 export const getPastMessages = async (profile: UserProfile): Promise<Message[]> => {
   try {
@@ -149,7 +151,9 @@ export const getPastMessages = async (profile: UserProfile): Promise<Message[]> 
     return messages
       .filter((m) => {
         const recipient = m.recipient === 'Ella' ? 'Karla' : m.recipient;
-        return (!recipient || recipient === profile) && toLocalDateString(m.scheduled_date) < todayStr;
+        const isTargetRecipient = recipient ? recipient === profile : m.sender !== profile;
+        const isUnlocked = toLocalDateString(m.scheduled_date) <= todayStr;
+        return isTargetRecipient && isUnlocked;
       })
       .sort((a, b) =>
         toLocalDateString(b.scheduled_date).localeCompare(toLocalDateString(a.scheduled_date))
@@ -160,13 +164,22 @@ export const getPastMessages = async (profile: UserProfile): Promise<Message[]> 
 };
 
 /**
- * Cartas enviadas por este perfil (para que en 'Escribir' pueda ver lo que ha preparado)
+ * Cartas enviadas por este perfil (para ver en 'Escribir' > 'Enviadas').
+ * PRIVACIDAD: Si la fecha es futura, el contenido de la carta se enmascara
+ * como '🔒 Sorpresa sellada 💌' para evitar cualquier filtración antes de tiempo.
  */
 export const getSentMessages = async (profile: UserProfile): Promise<Message[]> => {
   try {
     const messages = await getCachedMessages();
+    const todayStr = toLocalDateString(new Date());
     return messages
       .filter((m) => m.sender === profile)
+      .map((m) => {
+        const isFuture = toLocalDateString(m.scheduled_date) > todayStr;
+        return isFuture
+          ? { ...m, content: '🔒 Sorpresa sellada 💌' }
+          : m;
+      })
       .sort((a, b) =>
         toLocalDateString(b.scheduled_date).localeCompare(toLocalDateString(a.scheduled_date))
       );

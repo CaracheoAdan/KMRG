@@ -78,8 +78,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((savedId) => {
       if (savedId) {
-        const found = THEME_COLOR_PRESETS.find((p) => p.id === savedId);
-        if (found) setCurrentTheme(found);
+        // Si el usuario tenía guardado el tema antiguo 'black' por defecto heredado, migrar a Rosa Coral cálido
+        if (savedId === 'black') {
+          setCurrentTheme(THEME_COLOR_PRESETS[0]);
+          void AsyncStorage.setItem(STORAGE_KEY, 'coral');
+        } else {
+          const found = THEME_COLOR_PRESETS.find((p) => p.id === savedId);
+          if (found) setCurrentTheme(found);
+        }
       } else {
         setCurrentTheme(THEME_COLOR_PRESETS[0]);
       }

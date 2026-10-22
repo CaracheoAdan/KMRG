@@ -345,9 +345,24 @@ export const MemoriesScreen: React.FC = () => {
               <Text style={styles.pagerBtnText}>Anterior</Text>
             </TouchableOpacity>
 
-            <Text style={styles.pagerIndicator}>
-              Página {safePage + 1} de {totalPages}
-            </Text>
+            <View style={{ alignItems: 'center', gap: 3 }}>
+              <Text style={styles.pagerIndicator}>
+                Página {safePage + 1} de {totalPages}
+              </Text>
+              <View style={styles.pagerDotsRow}>
+                {Array.from({ length: totalPages }).map((_, dotIdx) => (
+                  <View
+                    key={dotIdx}
+                    style={[
+                      styles.pagerDot,
+                      dotIdx === safePage
+                        ? [styles.pagerDotActive, { backgroundColor: primaryColor }]
+                        : { backgroundColor: colors.border },
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
 
             <TouchableOpacity
               disabled={safePage >= totalPages - 1}
@@ -463,7 +478,17 @@ export const MemoriesScreen: React.FC = () => {
                 </View>
 
                 <PressableScale
-                  onPress={() => setSelectedLetter(item)}
+                  onPress={() => {
+                    const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
+                    if (isSealed) {
+                      Alert.alert(
+                        'Carta Sellada con Candado 🔒',
+                        `Esta carta fue preparada para ti y se abrirá el ${formattedDate}.`
+                      );
+                      return;
+                    }
+                    setSelectedLetter(item);
+                  }}
                   style={styles.memoryCardWrapper}
                   scaleTo={0.98}
                   accessibilityLabel={`Leer carta del ${formattedDate}`}
@@ -537,9 +562,24 @@ export const MemoriesScreen: React.FC = () => {
               <Text style={styles.pagerBtnText}>Anterior</Text>
             </TouchableOpacity>
 
-            <Text style={styles.pagerIndicator}>
-              Página {safePage + 1} de {totalPages}
-            </Text>
+            <View style={{ alignItems: 'center', gap: 3 }}>
+              <Text style={styles.pagerIndicator}>
+                Página {safePage + 1} de {totalPages}
+              </Text>
+              <View style={styles.pagerDotsRow}>
+                {Array.from({ length: totalPages }).map((_, dotIdx) => (
+                  <View
+                    key={dotIdx}
+                    style={[
+                      styles.pagerDot,
+                      dotIdx === safePage
+                        ? [styles.pagerDotActive, { backgroundColor: primaryColor }]
+                        : { backgroundColor: colors.border },
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
 
             <TouchableOpacity
               disabled={safePage >= totalPages - 1}
@@ -1057,6 +1097,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     marginTop: 1,
   },
   viewToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: c.surfaceAlt,
     borderRadius: 14,
     padding: 3,
@@ -1064,6 +1106,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     marginVertical: 6,
     borderWidth: 1,
     borderColor: c.border,
+    gap: 4,
   },
   viewToggleScroll: {
     flexDirection: 'row',
@@ -1072,12 +1115,13 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     paddingHorizontal: 2,
   },
   viewToggleBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    gap: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 2,
     borderRadius: 10,
     borderWidth: 1,
   },
@@ -1208,6 +1252,21 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: c.textSecondary,
+  },
+  pagerDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  pagerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  pagerDotActive: {
+    width: 14,
+    borderRadius: 3,
   },
   emptyAlbumBox: {
     flex: 1,

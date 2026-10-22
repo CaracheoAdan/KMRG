@@ -107,6 +107,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   const [mapStyle, setMapStyle] = useState<'voyager' | 'dark'>('voyager');
   const [showRouteLines, setShowRouteLines] = useState<boolean>(true);
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
+  const [mapLayout, setMapLayout] = useState({
+    width: INLINE_MAP_WIDTH,
+    height: INLINE_MAP_HEIGHT,
+  });
+  const [tileError, setTileError] = useState(false);
 
   // Modo interactivo para pinear tocando cualquier calle del mapa real
   const [isPinDropMode, setIsPinDropMode] = useState<boolean>(false);
@@ -597,6 +602,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             <Image
               key={t.key}
               source={{ uri: t.url, headers: { 'User-Agent': 'KMRG-App/1.0' } }}
+              onError={() => setTileError(true)}
               style={{
                 position: 'absolute',
                 left: t.left,
@@ -831,6 +837,23 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             <Ionicons name="remove" size={19} color="#1e293b" />
           </TouchableOpacity>
         </View>
+
+        {tileError && (
+          <View pointerEvents="box-none" style={styles.tileErrorBanner}>
+            <View style={[styles.tileErrorCard, { backgroundColor: colors.surface }]}>
+              <Ionicons name="cloud-offline-outline" size={15} color={primaryColor} />
+              <Text style={[styles.tileErrorText, { color: colors.textSecondary }]}>
+                Mapa sin conexión
+              </Text>
+              <TouchableOpacity
+                onPress={() => setTileError(false)}
+                style={[styles.tileRetryBtn, { backgroundColor: primaryColor }]}
+              >
+                <Text style={styles.tileRetryText}>Reintentar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     );
   };
@@ -989,8 +1012,20 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       </View>
 
       {/* ================= MAPA REAL INTERACTIVO (ARRASTRAR, ZOOM Y TOCAR PARA PINEAR) ================= */}
-      <View style={styles.mapFrame}>
-        {renderRealTileMap(INLINE_MAP_WIDTH, INLINE_MAP_HEIGHT, inlinePanResponder.panHandlers)}
+      <View
+        style={styles.mapFrame}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          if (width > 60 && height > 60) {
+            setMapLayout((prev) =>
+              Math.abs(prev.width - width) > 2 || Math.abs(prev.height - height) > 2
+                ? { width: Math.round(width), height: Math.round(height) }
+                : prev
+            );
+          }
+        }}
+      >
+        {renderRealTileMap(mapLayout.width, mapLayout.height, inlinePanResponder.panHandlers)}
       </View>
 
       {/* ================= TARJETA COMPACTA DEL LUGAR SELECCIONADO CON NAVEGACIÓN DE PINES ================= */}
@@ -1448,20 +1483,58 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   mapFrame: {
     width: '100%',
-    height: INLINE_MAP_HEIGHT,
+    flex: 1,
+    minHeight: 200,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: c.border,
     overflow: 'hidden',
     shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   realMapViewport: {
     position: 'relative',
     overflow: 'hidden',
+  },
+  tileErrorBanner: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  tileErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tileErrorText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tileRetryBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  tileRetryText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   routeSegment: {
     position: 'absolute',

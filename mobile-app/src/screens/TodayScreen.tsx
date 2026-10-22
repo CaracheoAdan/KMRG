@@ -126,7 +126,7 @@ export const TodayScreen: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      await syncSupabaseMessages();
+      await syncSupabaseMessages(currentProfile);
     } catch {
       // Continuar con caché
     }
@@ -1096,7 +1096,7 @@ export const TodayScreen: React.FC = () => {
 const makeStyles = (c: ThemePalette) => StyleSheet.create({
   dsContent: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 16,
     gap: 12,
   },
   dsHero: {

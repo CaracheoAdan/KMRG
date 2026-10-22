@@ -59,12 +59,21 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
       const diffMs = Math.max(0, target.getTime() - Date.now());
       const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       Alert.alert(
-        'Cápsula Sellada con Candado',
+        'Cápsula Sellada con Candado 🔒',
         `Esta cápsula fue programada por ${
           cap.sender === 'Karla' ? 'Karlita' : 'Javier'
         } para abrirse el ${formatDisplayDate(cap.unlockDate)}.\n\nFaltan ${days} ${
           days === 1 ? 'día' : 'días'
-        } para desbloquear su contenido.`
+        } para desbloquear su contenido secreto.`
+      );
+      return;
+    }
+
+    // Si la cápsula fue dirigida a la pareja, solo el destinatario o el autor pueden verla tras desbloquear
+    if (cap.recipient && cap.recipient !== currentProfile && cap.sender !== currentProfile) {
+      Alert.alert(
+        'Cápsula Privada 💌',
+        `Esta cápsula está dedicada a ${cap.recipient === 'Karla' ? 'Karlita' : 'Javier'}.`
       );
       return;
     }
@@ -336,6 +345,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
             <DatePickerModal
               visible={showDatePicker}
               value={unlockDate}
+              minDate={toLocalDateString(new Date(Date.now() + 86400000))}
               onSelect={(d) => setUnlockDate(d)}
               onClose={() => setShowDatePicker(false)}
               title="Fecha de desbloqueo de la cápsula"

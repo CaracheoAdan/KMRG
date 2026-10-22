@@ -383,8 +383,14 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                           </Text>
                         </View>
                       </View>
-                      <Text style={styles.sentSnippet} numberOfLines={2}>
-                        “{letter.content}”
+                      <Text
+                        style={[
+                          styles.sentSnippet,
+                          isFuture && { fontStyle: 'italic', color: colors.textMuted },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {isFuture ? '🔒 Sorpresa sellada 💌' : `“${letter.content}”`}
                       </Text>
                     </View>
                   );

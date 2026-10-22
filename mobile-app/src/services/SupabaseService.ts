@@ -9,18 +9,36 @@ import {
 } from './StorageService';
 
 /**
- * Sincroniza mensajes desde Supabase
+ * Sincroniza mensajes desde Supabase con blindaje de privacidad:
+ * En una arquitectura de 2 teléfonos, solo se descargan cartas cuya fecha ya llegó
+ * (scheduled_date <= HOY) o aquellas que fueron redactadas por el propio usuario actual.
+ * Las cartas futuras dirigidas a este usuario quedan en el servidor hasta su fecha de apertura.
  */
-export const syncSupabaseMessages = async (): Promise<Message[]> => {
+export const syncSupabaseMessages = async (currentProfile?: UserProfile): Promise<Message[]> => {
   try {
-    const { data, error } = await supabase
+    const todayStr = toLocalDateString(new Date());
+    let query = supabase
       .from('messages')
       .select('*')
       .order('scheduled_date', { ascending: true });
 
+    if (currentProfile) {
+      const alias = currentProfile === 'Karla' ? 'Ella' : currentProfile;
+      query = query.or(`scheduled_date.lte.${todayStr},sender.eq.${currentProfile},sender.eq.${alias}`);
+    } else {
+      query = query.lte('scheduled_date', todayStr);
+    }
+
+    const { data, error } = await query;
+
     if (!error && Array.isArray(data)) {
-      await saveCachedMessages(data as Message[]);
-      return data as Message[];
+      const local = await getCachedMessages();
+      const map = new Map<string, Message>();
+      local.forEach((m) => map.set(m.id, m));
+      (data as Message[]).forEach((m) => map.set(m.id, m));
+      const merged = Array.from(map.values());
+      await saveCachedMessages(merged);
+      return merged;
     }
   } catch (error) {
     console.log('[SupabaseSync] Modo sin conexión. Usando caché local de mensajes.');

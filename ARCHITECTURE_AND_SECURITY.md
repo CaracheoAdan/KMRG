@@ -111,3 +111,17 @@ KMRG/
 5. **Logs Estructurados y Redacción de Secretos**:
    - El backend utiliza `pino` y `pino-http` asignando un `X-Request-Id` por solicitud y redactando automáticamente `req.headers.authorization`, `req.headers.cookie`, `req.headers["x-api-key"]` y `res.headers["set-cookie"]`.
    - En `NODE_ENV=production`, el servidor aborta el arranque si detecta valores por defecto de desarrollo en `DATABASE_URL`, `JWT_SECRET` o `MOBILE_API_KEY`.
+
+6. **Privacidad de Cartas y Sorpresas (Modelo Multi-Dispositivo vs Dispositivo Único)**:
+   - **Regla Fundamental**: Una carta sorpresa o cápsula del tiempo solo debe ser visible en su totalidad por su destinatario una vez que la fecha de apertura programada sea menor o igual a la fecha actual local (`scheduled_date <= HOY`).
+   - **Escenario 1: Dos teléfonos independientes (Karlita en su móvil, Javier en el suyo)**:
+     - Cada dispositivo ejecuta la app con su perfil activo (`currentProfile`).
+     - Al sincronizar con la base de datos (Supabase / API), la consulta filtra a nivel de red con `scheduled_date.lte.HOY,sender.eq.currentProfile`.
+     - *Garantía de Privacidad*: El dispositivo de la pareja nunca recibe por la red los paquetes ni el texto de cartas futuras dirigidas a ella antes de su fecha. No pueden extraerse inspeccionando tráfico ni la memoria del dispositivo.
+   - **Escenario 2: Un solo teléfono compartido (Alternancia de perfil local)**:
+     - Si ambos usuarios comparten el mismo dispositivo físico y alternan entre 'Karla' y 'Javier' en el menú de perfil:
+     - `StorageService` (`getTodayMessage`, `getPastMessages` y `getSentMessages`) aplica filtrado estricto en memoria:
+       - `getTodayMessage` y `getPastMessages`: Solo cartas con `recipient == currentProfile` y `scheduled_date <= HOY`.
+       - `getSentMessages`: Solo cartas con `sender == currentProfile`. Para toda carta con `scheduled_date > HOY`, el contenido se censura automáticamente como `'🔒 Sorpresa sellada 💌'`.
+       - `TimeCapsulesWidget`: Bloquea la apertura de cápsulas mientras `unlockDate > HOY`, mostrando únicamente el contador de días restantes y candado cerrado.
+
