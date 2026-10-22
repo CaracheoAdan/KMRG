@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './ui/Icon';
 import { formatDisplayDate } from '../services/StorageService';
 import { useTheme } from '../contexts/ThemeContext';
 

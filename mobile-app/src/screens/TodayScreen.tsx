@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
   Text,
@@ -16,7 +17,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '../components/ui/Icon';
+import { FadeSection, PressableScale, HeartbeatButton } from '../components/ui/Kit';
 import { Message, HomeState } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -55,8 +58,9 @@ const SERIF_FONT = Platform.select({
 });
 
 export const TodayScreen: React.FC = () => {
+  const { colors, isDark, primaryColor } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const { profile, getDisplayName, getAvatarUri } = useProfile();
-  const { primaryColor } = useTheme();
   const currentProfile = profile || 'Karla';
 
   const [message, setMessage] = useState<Message | null>(null);
@@ -348,187 +352,243 @@ export const TodayScreen: React.FC = () => {
     setIsNextEventModalOpen(false);
   };
 
-  const backgroundColor = `${primaryColor}08`;
   const voiceCount = (homeState.voiceNotes || []).length;
   const capsulesCount = (homeState.timeCapsules || []).length;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+  const NEGATIVE_FEELINGS = ['triste', 'enojado', 'cansado'];
+  const POSITIVE_FEELINGS = ['feliz', 'enamorado', 'divertido', 'tranquilo'];
+  const POSITIVE_TEXT = /(feliz|content|alegr|ganas de verte|enamorad|genial|emocionad|de maravilla)/i;
+  const NEGATIVE_TEXT = /(triste|enoj|molest|frustrad|agotad|estres|mal día|deprim)/i;
+  const hasMoodMismatch = (feeling: string, status?: string) => {
+    if (!status) return false;
+    if (NEGATIVE_FEELINGS.includes(feeling) && POSITIVE_TEXT.test(status)) return true;
+    if (POSITIVE_FEELINGS.includes(feeling) && NEGATIVE_TEXT.test(status)) return true;
+    return false;
+  };
+
+  const partnerRoleForLabel = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+  const quickCards = [
+    {
+      key: 'pet',
+      title: petInfo.name,
+      subtitle: `${petInfo.effectiveHappiness}% · Nv. ${petInfo.level}`,
+      onPress: () => {
+        setPetNameDraft(petInfo.name || 'Pochito');
+        setIsEditingPetName(false);
+        setIsPetModalOpen(true);
+      },
+    },
+    {
+      key: 'voice',
+      title: 'Voz',
+      subtitle: plural(voiceCount, 'nota', 'notas'),
+      icon: 'mic',
+      onPress: () => setIsVoiceModalOpen(true),
+    },
+    {
+      key: 'capsules',
+      title: 'Cápsulas',
+      subtitle: plural(capsulesCount, 'sellada', 'selladas'),
+      icon: 'hourglass',
+      onPress: () => setIsCapsulesModalOpen(true),
+    },
+  ];
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor }]}>
-      <StatusBar style="dark" />
-      <AppHeader streakCount={homeState.streakCount || 1} />
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+      edges={['top']}
+    >
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <AppHeader />
 
-      {/* ================= PANEL PRINCIPAL SIN SCROLL (ONE-VIEWPORT BENTO) ================= */}
-      <View style={styles.bentoViewport}>
-        {/* 1. CARTA DEL DÍA + CORAZÓN DE LATIDO EN TIEMPO REAL */}
-        <View style={[styles.heroCard, { borderTopColor: primaryColor }]}>
-          <View style={styles.heroTopRow}>
-            <View style={[styles.headerBadge, { backgroundColor: `${primaryColor}18` }]}>
-              <Ionicons name="sparkles" size={12} color={primaryColor} />
-              <Text style={[styles.headerBadgeText, { color: primaryColor }]}>
-                {currentProfile === 'Karla' ? 'Para ti Karlita, mi amor' : 'Carta del Día'}
-              </Text>
-            </View>
-            <Text style={styles.dateText}>
-              {message ? formatDisplayDate(message.scheduled_date) : 'Hoy'}
-            </Text>
-          </View>
-
-          <View style={styles.heroBodyRow}>
-            <TouchableOpacity
-              onPress={() => message && setIsLetterModalOpen(true)}
-              activeOpacity={0.85}
-              style={{ flex: 1, paddingRight: 10 }}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color={primaryColor} />
-              ) : (
-                <>
-                  <Text style={styles.messageContent} numberOfLines={3}>
-                    “
-                    {message
-                      ? message.content
-                      : currentProfile === 'Karla'
-                      ? 'Cada instante de mi día estás en mi mente y en mi corazón, mi vida.'
-                      : 'Programa una nueva carta sorpresa para Karlita desde la pestaña Escribir.'}
-                    ”
-                  </Text>
-                  {message && message.content.length > 95 && (
-                    <Text style={[styles.readMoreHint, { color: primaryColor }]}>
-                      Toca para leer completa
-                    </Text>
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Botón de Latido integrado */}
-            <View style={styles.heartColumn}>
-              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                <TouchableOpacity
-                  onPress={() => void handleHeartPress()}
-                  activeOpacity={0.85}
-                  style={[
-                    styles.heartButton,
-                    { backgroundColor: primaryColor, shadowColor: primaryColor },
-                  ]}
-                >
-                  <Ionicons name="heart" size={24} color="#ffffff" />
-                </TouchableOpacity>
-              </Animated.View>
-              <Text style={styles.heartButtonLabel}>Latido</Text>
-            </View>
-          </View>
-
-          {interactionFeedback && (
-            <Animated.View style={[styles.feedbackPill, { opacity: feedbackOpacity }]}>
-              <Ionicons name="heart" size={12} color={primaryColor} />
-              <Text style={[styles.feedbackText, { color: primaryColor }]}>
-                {interactionFeedback.text}
-              </Text>
-            </Animated.View>
-          )}
-        </View>
-
-        {/* 2. FILA BENTO: TIEMPO JUNTOS + PRÓXIMA CITA (LADO A LADO) */}
-        <View style={styles.bentoRow}>
-          {/* Tarjeta Izquierda: Tiempo Juntos */}
-          <TouchableOpacity
-            onPress={() => setShowAnniversaryPicker(true)}
-            style={styles.bentoHalfCard}
-            activeOpacity={0.85}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.dsContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* 1. CARTA DEL DÍA: protagonista, con el latido animado */}
+        <FadeSection index={0}>
+          <LinearGradient
+            colors={[colors.primaryLight, colors.surface]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.dsHero}
           >
-            <View style={styles.bentoCardHeader}>
-              <View style={[styles.miniIconCircle, { backgroundColor: `${primaryColor}18` }]}>
-                <Ionicons name="infinite" size={14} color={primaryColor} />
-              </View>
-              <Text style={styles.bentoLabel}>TIEMPO JUNTOS</Text>
-            </View>
-            <Text style={[styles.bentoBigNumber, { color: primaryColor }]}>
-              {timeTogether.totalDays} <Text style={styles.bentoUnitText}>días</Text>
-            </Text>
-            <Text style={styles.bentoSubText}>
-              {timeTogether.years}a • {timeTogether.months}m • {timeTogether.days}d
-            </Text>
-          </TouchableOpacity>
+            <Text style={[styles.dsQuoteMark, { color: colors.primary }]}>“</Text>
 
-          {/* Tarjeta Derecha: Próxima Cita */}
-          <TouchableOpacity
+            <View style={styles.heroTopRow}>
+              <View style={[styles.dsBadge, { backgroundColor: colors.surface }]}>
+                <Ionicons name="sparkles" size={14} color={colors.primary} />
+                <Text style={[styles.dsBadgeText, { color: colors.primary }]} numberOfLines={1}>
+                  {currentProfile === 'Karla'
+                    ? `Para ti, ${getDisplayName(currentProfile)}`
+                    : 'Carta del día'}
+                </Text>
+              </View>
+              <Text style={styles.dsDate}>
+                {message ? formatDisplayDate(message.scheduled_date) : 'Hoy'}
+              </Text>
+            </View>
+
+            <View style={styles.heroBodyRow}>
+              <TouchableOpacity
+                onPress={() => message && setIsLetterModalOpen(true)}
+                activeOpacity={0.85}
+                style={styles.dsLetterTouch}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Text style={styles.dsLetterText} numberOfLines={5}>
+                      {message
+                        ? message.content
+                        : currentProfile === 'Karla'
+                        ? 'Cada instante de mi día estás en mi mente y en mi corazón, mi vida.'
+                        : `Programa una carta sorpresa para ${getDisplayName('Karla')} desde la pestaña Escribir.`}
+                    </Text>
+                    {message && message.content.length > 140 && (
+                      <Text style={[styles.readMoreHint, { color: colors.primary }]}>
+                        Toca para leer completa
+                      </Text>
+                    )}
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <HeartbeatButton
+                onPress={() => void handleHeartPress()}
+                disabled={sendingInteraction}
+                size={68}
+              />
+            </View>
+
+            {interactionFeedback && (
+              <Animated.View style={[styles.feedbackPill, { opacity: feedbackOpacity }]}>
+                <Ionicons name="heart" size={14} color={colors.primary} />
+                <Text style={[styles.feedbackText, { color: colors.primary }]} numberOfLines={2}>
+                  {interactionFeedback.text}
+                </Text>
+              </Animated.View>
+            )}
+          </LinearGradient>
+        </FadeSection>
+
+        {/* 2. TIEMPO JUNTOS + PRÓXIMA CITA */}
+        <FadeSection index={1} style={styles.dsRow}>
+          <PressableScale
+            onPress={() => setShowAnniversaryPicker(true)}
+            style={styles.dsCard}
+            accessibilityLabel="Cambiar fecha de aniversario"
+          >
+            <View style={styles.dsCardHeader}>
+              <View style={[styles.dsIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <Ionicons name="infinite" size={16} color={colors.primary} />
+              </View>
+              <Text style={styles.dsCardLabel} numberOfLines={2}>
+                Tiempo juntos
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={[styles.dsBigNumber, { color: colors.primary }]}>
+                {timeTogether.totalDays}
+              </Text>
+              <Text style={styles.dsBigUnit}>días</Text>
+            </View>
+            <View style={styles.dsChipsRow}>
+              {[
+                plural(timeTogether.years, 'año', 'años'),
+                plural(timeTogether.months, 'mes', 'meses'),
+                plural(timeTogether.days, 'día', 'días'),
+              ].map((txt) => (
+                <View key={txt} style={[styles.dsMiniChip, { backgroundColor: colors.primaryLight }]}>
+                  <Text style={[styles.dsMiniChipText, { color: colors.primary }]}>{txt}</Text>
+                </View>
+              ))}
+            </View>
+          </PressableScale>
+
+          <PressableScale
             onPress={() => {
               setTempEventTitle(homeState.nextEventTitle);
               setTempEventDate(homeState.nextEventDate);
               setIsNextEventModalOpen(true);
             }}
-            style={styles.bentoHalfCard}
-            activeOpacity={0.85}
+            style={styles.dsCard}
+            accessibilityLabel="Editar próxima cita"
           >
-            <View style={styles.bentoCardHeader}>
-              <View style={[styles.miniIconCircle, { backgroundColor: `${primaryColor}18` }]}>
-                <Ionicons name="calendar" size={14} color={primaryColor} />
+            <View style={styles.dsCardHeader}>
+              <View style={[styles.dsIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <Ionicons name="calendar" size={16} color={colors.primary} />
               </View>
-              <Text style={styles.bentoLabel}>PRÓXIMA CITA</Text>
+              <Text style={styles.dsCardLabel} numberOfLines={2}>
+                Nuestra próxima cita
+              </Text>
             </View>
-            <Text style={styles.bentoEventTitle} numberOfLines={1}>
+            <Text style={styles.dsEventTitle} numberOfLines={2}>
               {homeState.nextEventTitle}
             </Text>
-            <View style={styles.bentoEventBottom}>
-              <Text style={styles.bentoSubText} numberOfLines={1}>
-                {formatDisplayDate(homeState.nextEventDate, { day: 'numeric', month: 'short' })}
+            <Text style={styles.dsEventDate}>
+              {formatDisplayDate(homeState.nextEventDate, { day: 'numeric', month: 'long' })}
+            </Text>
+            <View style={[styles.dsCountdownPill, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.dsCountdownText, { color: colors.primaryOn }]}>
+                {daysUntilNextEvent === 0
+                  ? '¡Es hoy!'
+                  : `Faltan ${plural(daysUntilNextEvent, 'día', 'días')}`}
               </Text>
-              <View style={[styles.daysLeftMiniPill, { backgroundColor: primaryColor }]}>
-                <Text style={styles.daysLeftMiniText}>Faltan {daysUntilNextEvent}d</Text>
-              </View>
             </View>
-          </TouchableOpacity>
-        </View>
+          </PressableScale>
+        </FadeSection>
 
-        {/* 3. NUESTRO ESTADO HOY CON EL MONITO (2 COLUMNAS LADO A LADO) */}
-        <View style={styles.moodSectionWrap}>
+        {/* 3. NUESTRO ESTADO HOY */}
+        <FadeSection index={2} style={{ gap: 8 }}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Nuestro Estado Hoy</Text>
-            <TouchableOpacity onPress={openMyMoodEditor} style={styles.sectionActionBtn}>
-              <Ionicons name="create-outline" size={14} color={primaryColor} />
-              <Text style={[styles.sectionActionText, { color: primaryColor }]}>
-                Cambiar mi estado
-              </Text>
-            </TouchableOpacity>
+            <Text style={styles.dsSectionTitle}>Nuestro estado hoy</Text>
+            <PressableScale onPress={openMyMoodEditor} style={styles.dsLinkBtn} scaleTo={0.94}>
+              <Ionicons name="create-outline" size={16} color={colors.primary} />
+              <Text style={[styles.dsLinkText, { color: colors.primary }]}>Cambiar mi estado</Text>
+            </PressableScale>
           </View>
 
-          <View style={styles.bentoRow}>
+          <View style={styles.dsRow}>
             {(['Karla', 'Javier'] as const).map((person) => {
               const m = homeState.moods[person];
               const isMe = currentProfile === person;
               const feelingType = resolveFeelingType(m?.feeling, m?.emoji, m?.status);
               const feelingObj = PRESET_FEELINGS.find((f) => f.id === feelingType);
+              const mismatch = hasMoodMismatch(feelingType, m?.status);
 
               return (
-                <TouchableOpacity
+                <PressableScale
                   key={person}
                   onPress={isMe ? openMyMoodEditor : undefined}
-                  activeOpacity={isMe ? 0.8 : 1}
+                  disabled={!isMe}
+                  scaleTo={0.97}
                   style={[
-                    styles.moodBentoCard,
-                    isMe && { borderColor: `${primaryColor}45`, borderWidth: 1.5 },
+                    styles.dsCard,
+                    isMe && { borderWidth: 1.5, borderColor: colors.primary },
                   ]}
                 >
                   <View style={styles.moodBentoTop}>
-                    <MoodMascot feeling={feelingType} size="sm" accentColor={primaryColor} />
+                    <MoodMascot feeling={feelingType} size="sm" accentColor={colors.primary} />
                     <View style={{ flex: 1, marginLeft: 8 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         {getAvatarUri(person) && (
                           <Image
                             source={{ uri: getAvatarUri(person)! }}
-                            style={{ width: 16, height: 16, borderRadius: 8 }}
+                            style={{ width: 18, height: 18, borderRadius: 9 }}
                           />
                         )}
                         <Text style={styles.moodPersonName} numberOfLines={1}>
                           {getDisplayName(person)}
                         </Text>
                       </View>
-                      <View style={[styles.feelingChip, { backgroundColor: `${primaryColor}14` }]}>
-                        <Text
-                          style={[styles.feelingChipText, { color: primaryColor }]}
-                          numberOfLines={1}
-                        >
+                      <View style={[styles.feelingChip, { backgroundColor: colors.primaryLight }]}>
+                        <Text style={[styles.feelingChipText, { color: colors.primary }]} numberOfLines={1}>
                           {feelingObj?.label || 'Feliz'}
                         </Text>
                       </View>
@@ -538,73 +598,55 @@ export const TodayScreen: React.FC = () => {
                   <Text style={styles.moodStatusMessage} numberOfLines={2}>
                     {m?.status || 'Pensando en ti'}
                   </Text>
-                </TouchableOpacity>
+
+                  {mismatch && (
+                    <View style={[styles.mismatchBox, { backgroundColor: colors.surfaceAlt }]}>
+                      <Ionicons name="info" size={14} color={colors.warning} />
+                      <Text style={[styles.mismatchText, { color: colors.warning }]} numberOfLines={3}>
+                        {isMe
+                          ? 'Tu emoción y tu mensaje no coinciden. Toca para actualizarlos.'
+                          : 'Su emoción y su mensaje no coinciden. Pregúntale cómo está.'}
+                      </Text>
+                    </View>
+                  )}
+                </PressableScale>
               );
             })}
           </View>
-        </View>
+        </FadeSection>
 
-        {/* 4. DOCK INFERIOR: MASCOTA DE PAREJA (POU), NOTAS DE VOZ Y CÁPSULAS (SIN SCROLL) */}
-        <View style={styles.bottomDockRow}>
-          <TouchableOpacity
-            onPress={() => {
-              setPetNameDraft(petInfo.name || 'Pochito');
-              setIsEditingPetName(false);
-              setIsPetModalOpen(true);
-            }}
-            style={[styles.dockButton, { borderColor: `${primaryColor}45` }]}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.pouMiniAvatar, { backgroundColor: '#fde68a' }]}>
-              <View style={styles.pouMiniEyesRow}>
-                <View style={styles.pouMiniEye} />
-                <View style={styles.pouMiniEye} />
-              </View>
-              <View style={styles.pouMiniSmile} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dockTitle} numberOfLines={1}>
-                {petInfo.name}
+        {/* 4. ACCESOS RÁPIDOS: tarjetas iguales en altura */}
+        <FadeSection index={3} style={styles.dsRow}>
+          {quickCards.map((card) => (
+            <PressableScale
+              key={card.key}
+              onPress={card.onPress}
+              style={styles.dsQuickCard}
+              accessibilityLabel={card.title}
+            >
+              {card.key === 'pet' ? (
+                <View style={[styles.pouMiniAvatar, { backgroundColor: '#fde68a' }]}>
+                  <View style={styles.pouMiniEyesRow}>
+                    <View style={styles.pouMiniEye} />
+                    <View style={styles.pouMiniEye} />
+                  </View>
+                  <View style={styles.pouMiniSmile} />
+                </View>
+              ) : (
+                <View style={[styles.dsQuickIcon, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name={card.icon as string} size={20} color={colors.primary} />
+                </View>
+              )}
+              <Text style={styles.dsQuickTitle} numberOfLines={1}>
+                {card.title}
               </Text>
-              <Text style={[styles.dockSub, { color: primaryColor, fontWeight: '700' }]}>
-                ♥ {petInfo.effectiveHappiness}% • Nv.{petInfo.level}
+              <Text style={styles.dsQuickSub} numberOfLines={1}>
+                {card.subtitle}
               </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setIsVoiceModalOpen(true)}
-            style={[styles.dockButton, { borderColor: `${primaryColor}35` }]}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.dockIconBox, { backgroundColor: `${primaryColor}15` }]}>
-              <Ionicons name="mic" size={16} color={primaryColor} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dockTitle} numberOfLines={1}>
-                Voz
-              </Text>
-              <Text style={styles.dockSub}>{voiceCount} notas</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setIsCapsulesModalOpen(true)}
-            style={[styles.dockButton, { borderColor: `${primaryColor}35` }]}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.dockIconBox, { backgroundColor: `${primaryColor}15` }]}>
-              <Ionicons name="hourglass" size={16} color={primaryColor} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dockTitle} numberOfLines={1}>
-                Cápsulas
-              </Text>
-              <Text style={styles.dockSub}>{capsulesCount} selladas</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
+            </PressableScale>
+          ))}
+        </FadeSection>
+      </ScrollView>
 
       {/* ================= MODAL: MASCOTA DE PAREJA (ESTILO POU) ================= */}
       <Modal
@@ -1021,7 +1063,218 @@ export const TodayScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
+  dsContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  dsHero: {
+    backgroundColor: c.surface,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+    overflow: 'hidden',
+  },
+  dsQuoteMark: {
+    position: 'absolute',
+    top: -10,
+    left: 10,
+    fontSize: 80,
+    fontFamily: SERIF_FONT,
+    opacity: 0.12,
+    lineHeight: 80,
+  },
+  dsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  dsBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dsDate: {
+    fontSize: 12,
+    color: c.textMuted,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  dsLetterTouch: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  dsLetterText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: c.text,
+    fontFamily: SERIF_FONT,
+  },
+  dsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dsCard: {
+    flex: 1,
+    backgroundColor: c.surface,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    justifyContent: 'space-between',
+  },
+  dsCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  dsIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dsCardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: c.textMuted,
+    flex: 1,
+  },
+  dsBigNumber: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: c.text,
+    fontFamily: SERIF_FONT,
+    lineHeight: 36,
+  },
+  dsBigUnit: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.textMuted,
+    marginLeft: 4,
+  },
+  dsChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  dsMiniChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  dsMiniChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dsEventTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: c.text,
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  dsEventDate: {
+    fontSize: 12,
+    color: c.textMuted,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  dsCountdownPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  dsCountdownText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  dsSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: c.text,
+    fontFamily: SERIF_FONT,
+  },
+  dsLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  dsLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mismatchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  mismatchText: {
+    fontSize: 11,
+    fontWeight: '500',
+    flex: 1,
+  },
+  dsQuickCard: {
+    flex: 1,
+    backgroundColor: c.surface,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+    alignItems: 'center',
+    minHeight: 96,
+    justifyContent: 'center',
+  },
+  dsQuickIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  dsQuickTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: c.text,
+    textAlign: 'center',
+  },
+  dsQuickSub: {
+    fontSize: 11,
+    color: c.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
   safeArea: {
     flex: 1,
   },
@@ -1032,13 +1285,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   heroCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 22,
     padding: 16,
     borderTopWidth: 4,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    shadowColor: '#000',
+    borderColor: c.border,
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
@@ -1064,7 +1317,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: c.textMuted,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
@@ -1076,7 +1329,7 @@ const styles = StyleSheet.create({
   messageContent: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   readMoreHint: {
@@ -1102,7 +1355,7 @@ const styles = StyleSheet.create({
   heartButtonLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
     marginTop: 4,
   },
   feedbackPill: {
@@ -1113,7 +1366,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 6,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: c.border,
   },
   feedbackText: {
     fontSize: 11,
@@ -1125,11 +1378,11 @@ const styles = StyleSheet.create({
   },
   bentoHalfCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
     justifyContent: 'space-between',
   },
   bentoCardHeader: {
@@ -1148,7 +1401,7 @@ const styles = StyleSheet.create({
   bentoLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#64748b',
+    color: c.textSecondary,
     letterSpacing: 0.5,
   },
   bentoBigNumber: {
@@ -1158,18 +1411,18 @@ const styles = StyleSheet.create({
   bentoUnitText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   bentoSubText: {
     fontSize: 11,
-    color: '#64748b',
+    color: c.textSecondary,
     fontWeight: '600',
     marginTop: 2,
   },
   bentoEventTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   bentoEventBottom: {
@@ -1186,7 +1439,7 @@ const styles = StyleSheet.create({
   daysLeftMiniText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   moodSectionWrap: {
     gap: 6,
@@ -1199,7 +1452,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   sectionActionBtn: {
@@ -1213,11 +1466,11 @@ const styles = StyleSheet.create({
   },
   moodBentoCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
   },
   moodBentoTop: {
     flexDirection: 'row',
@@ -1227,7 +1480,7 @@ const styles = StyleSheet.create({
   moodPersonName: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   feelingChip: {
@@ -1243,7 +1496,7 @@ const styles = StyleSheet.create({
   },
   moodStatusMessage: {
     fontSize: 12,
-    color: '#475569',
+    color: c.textSecondary,
     lineHeight: 16,
   },
   bottomDockRow: {
@@ -1255,7 +1508,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 16,
     paddingVertical: 10,
     paddingHorizontal: 9,
@@ -1271,11 +1524,11 @@ const styles = StyleSheet.create({
   dockTitle: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
   },
   dockSub: {
     fontSize: 10,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   pouMiniAvatar: {
     width: 30,
@@ -1315,7 +1568,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   pouStatsTopRow: {
     flexDirection: 'row',
@@ -1331,12 +1584,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   pouBadgeText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#334155',
+    color: c.textSecondary,
   },
   pouBodyLarge: {
     width: 112,
@@ -1377,7 +1630,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 24,
     borderRadius: 11,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderWidth: 2,
     borderColor: '#1e293b',
     alignItems: 'center',
@@ -1397,7 +1650,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
   },
   pouCheeksRow: {
     flexDirection: 'row',
@@ -1434,7 +1687,7 @@ const styles = StyleSheet.create({
   pouMoodComment: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#334155',
+    color: c.textSecondary,
     textAlign: 'center',
     marginTop: 10,
     marginBottom: 12,
@@ -1451,7 +1704,7 @@ const styles = StyleSheet.create({
   pouBarLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#475569',
+    color: c.textSecondary,
   },
   pouBarPercent: {
     fontSize: 11,
@@ -1478,7 +1731,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 390,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 20,
   },
@@ -1491,25 +1744,25 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   modalSubtitle: {
     fontSize: 12,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   closeBtn: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fullLetterText: {
     fontSize: 17,
     lineHeight: 26,
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
     marginVertical: 10,
   },
@@ -1530,39 +1783,39 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
+    borderColor: c.border,
+    backgroundColor: c.surfaceAlt,
   },
   feelingOptionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    color: c.textSecondary,
   },
   inputLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#475569',
+    color: c.textSecondary,
     marginBottom: 6,
     marginTop: 6,
   },
   textInput: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1e293b',
+    color: c.text,
     marginBottom: 10,
   },
   dateSelectorBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -1571,7 +1824,7 @@ const styles = StyleSheet.create({
   dateSelectorText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1e293b',
+    color: c.text,
   },
   primaryBtn: {
     flexDirection: 'row',
@@ -1585,6 +1838,6 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
 });

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
   Text,
@@ -18,7 +19,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../components/ui/Icon';
+import { PressableScale } from '../components/ui/Kit';
 import * as ImagePicker from 'expo-image-picker';
 import { PhotoCalendar } from '../components/PhotoCalendar';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -53,8 +55,9 @@ const GRID_IMAGE_SIZE = (width - 36 - 16) / 3; // 3 columnas para estilo Google 
 type ViewMode = 'timeline' | 'album' | 'calendar' | 'map';
 
 export const MemoriesScreen: React.FC = () => {
+  const { colors, isDark, primaryColor } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const { profile } = useProfile();
-  const { primaryColor, openThemeModal } = useTheme();
   const currentProfile = profile || 'Karla';
 
   const [memories, setMemories] = useState<Message[]>([]);
@@ -505,8 +508,8 @@ export const MemoriesScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* Encabezado Superior con Branding KMRG */}
       <AppHeader />
@@ -518,111 +521,64 @@ export const MemoriesScreen: React.FC = () => {
             <Text style={styles.screenSubtitle}>Cada recuerdo, cada lugar y cada fotografía</Text>
           </View>
           <View style={styles.headerButtonsRow}>
-            <TouchableOpacity
+            <PressableScale
               onPress={() => setIsModalOpen(true)}
               style={[styles.headerAddBtn, { backgroundColor: primaryColor }]}
-              activeOpacity={0.8}
+              scaleTo={0.92}
               accessibilityLabel="Agregar recuerdo"
             >
-              <Ionicons name="add" size={20} color="#ffffff" />
-            </TouchableOpacity>
+              <Ionicons name="add" size={20} color={colors.primaryOn} />
+            </PressableScale>
           </View>
         </View>
       </View>
 
-      {/* Selector de Modos de Vista: Álbum | Mapa | Calendario | Cartas */}
-      <View style={styles.viewToggleContainer}>
-        <TouchableOpacity
-          onPress={() => setViewMode('album')}
-          style={[
-            styles.viewToggleBtn,
-            viewMode === 'album' && [styles.viewToggleBtnActive, { backgroundColor: `${primaryColor}18` }],
-          ]}
-          activeOpacity={0.8}
+      {/* Selector de Modos de Vista: Álbum | Mapa | Calendario | Cartas (Sin solapamiento) */}
+      <View style={[styles.viewToggleContainer, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.viewToggleScroll}
         >
-          <Ionicons
-            name="images"
-            size={14}
-            color={viewMode === 'album' ? primaryColor : '#6c757d'}
-          />
-          <Text
-            style={[
-              styles.viewToggleText,
-              viewMode === 'album' && [styles.viewToggleTextActive, { color: primaryColor }],
-            ]}
-          >
-            Álbum
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setViewMode('map')}
-          style={[
-            styles.viewToggleBtn,
-            viewMode === 'map' && [styles.viewToggleBtnActive, { backgroundColor: `${primaryColor}18` }],
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="map"
-            size={14}
-            color={viewMode === 'map' ? primaryColor : '#6c757d'}
-          />
-          <Text
-            style={[
-              styles.viewToggleText,
-              viewMode === 'map' && [styles.viewToggleTextActive, { color: primaryColor }],
-            ]}
-          >
-            Mapa
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setViewMode('calendar')}
-          style={[
-            styles.viewToggleBtn,
-            viewMode === 'calendar' && [styles.viewToggleBtnActive, { backgroundColor: `${primaryColor}18` }],
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="calendar"
-            size={14}
-            color={viewMode === 'calendar' ? primaryColor : '#6c757d'}
-          />
-          <Text
-            style={[
-              styles.viewToggleText,
-              viewMode === 'calendar' && [styles.viewToggleTextActive, { color: primaryColor }],
-            ]}
-          >
-            Calendario
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setViewMode('timeline')}
-          style={[
-            styles.viewToggleBtn,
-            viewMode === 'timeline' && [styles.viewToggleBtnActive, { backgroundColor: `${primaryColor}18` }],
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="mail-open-outline"
-            size={14}
-            color={viewMode === 'timeline' ? primaryColor : '#6c757d'}
-          />
-          <Text
-            style={[
-              styles.viewToggleText,
-              viewMode === 'timeline' && [styles.viewToggleTextActive, { color: primaryColor }],
-            ]}
-          >
-            Cartas
-          </Text>
-        </TouchableOpacity>
+          {[
+            { id: 'album', label: 'Álbum', icon: 'images' },
+            { id: 'map', label: 'Mapa', icon: 'map' },
+            { id: 'calendar', label: 'Calendario', icon: 'calendar' },
+            { id: 'timeline', label: 'Cartas', icon: 'mail-open-outline' },
+          ].map((item) => {
+            const active = viewMode === item.id;
+            return (
+              <PressableScale
+                key={item.id}
+                onPress={() => setViewMode(item.id as ViewMode)}
+                style={[
+                  styles.viewToggleBtn,
+                  active
+                    ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                    : { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+                scaleTo={0.95}
+              >
+                <Ionicons
+                  name={item.icon as any}
+                  size={14}
+                  color={active ? colors.primaryOn : colors.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.viewToggleText,
+                    active
+                      ? { color: colors.primaryOn, fontWeight: '800' }
+                      : { color: colors.textSecondary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.label}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {loading ? (
@@ -839,10 +795,10 @@ export const MemoriesScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#faf9f9',
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 18,
@@ -871,47 +827,49 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#e63946',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#e63946',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
     elevation: 2,
   },
   screenTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   screenSubtitle: {
     fontSize: 11,
-    color: '#64748b',
+    color: c.textSecondary,
     marginTop: 1,
   },
   viewToggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f3f5',
+    backgroundColor: c.surfaceAlt,
     borderRadius: 14,
     padding: 3,
-    marginHorizontal: 18,
+    marginHorizontal: 16,
     marginVertical: 6,
-    gap: 3,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  viewToggleScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
   },
   viewToggleBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    paddingVertical: 7,
-    borderRadius: 11,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
   },
   viewToggleBtnActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
+    backgroundColor: c.surface,
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
@@ -919,12 +877,12 @@ const styles = StyleSheet.create({
   },
   viewToggleText: {
     fontSize: 11.5,
-    fontWeight: '600',
-    color: '#6c757d',
+    fontWeight: '700',
+    color: c.textSecondary,
   },
   viewToggleTextActive: {
-    color: '#e63946',
-    fontWeight: '700',
+    color: c.primary,
+    fontWeight: '800',
   },
   fixedViewport: {
     flex: 1,
@@ -945,7 +903,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 13,
-    color: '#8d99ae',
+    color: c.textMuted,
     fontStyle: 'italic',
   },
   // Estilo Álbum Cero Scroll
@@ -966,11 +924,11 @@ const styles = StyleSheet.create({
   albumDateText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
   },
   albumCountText: {
     fontSize: 11,
-    color: '#adb5bd',
+    color: c.textMuted,
   },
   albumGrid: {
     flex: 1,
@@ -1002,7 +960,7 @@ const styles = StyleSheet.create({
   },
   albumItemTitle: {
     fontSize: 10,
-    color: '#ffffff',
+    color: c.primaryOn,
     fontWeight: '700',
   },
   albumItemDateText: {
@@ -1023,19 +981,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   pagerBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#334155',
+    color: c.textSecondary,
   },
   pagerIndicator: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   emptyAlbumBox: {
     flex: 1,
@@ -1053,29 +1011,29 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#f1f3f5',
-    shadowColor: '#000',
+    borderColor: c.border,
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
   calendarDaySection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#f1f3f5',
+    borderColor: c.border,
   },
   calendarDayHeader: {
     paddingBottom: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f3f5',
+    borderBottomColor: c.border,
   },
   calendarDayHeaderText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
     textTransform: 'capitalize',
   },
   emptyDayBox: {
@@ -1087,7 +1045,7 @@ const styles = StyleSheet.create({
   },
   emptyDayText: {
     fontSize: 12,
-    color: '#adb5bd',
+    color: c.textMuted,
     fontWeight: '600',
   },
   dayPhotosRow: {
@@ -1112,11 +1070,11 @@ const styles = StyleSheet.create({
   dayPhotoTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
   },
   dayPhotoSub: {
     fontSize: 10.5,
-    color: '#8d99ae',
+    color: c.textMuted,
     marginTop: 1,
   },
   // Línea de tiempo Cero Scroll
@@ -1133,7 +1091,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
   },
   timelineRow: {
     flexDirection: 'row',
@@ -1149,7 +1107,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     zIndex: 1,
   },
   timelineNodeInner: {
@@ -1190,14 +1148,14 @@ const styles = StyleSheet.create({
   },
   readCheck: {
     fontSize: 10,
-    color: '#adb5bd',
+    color: c.textMuted,
   },
   memoryCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 11,
     borderLeftWidth: 4,
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -1227,14 +1185,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
     textAlign: 'center',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
     lineHeight: 22,
-    color: '#6c757d',
+    color: c.textSecondary,
     textAlign: 'center',
   },
   // Modal de Detalle de Tarjeta
@@ -1248,10 +1206,10 @@ const styles = StyleSheet.create({
   detailCard: {
     width: width - 40,
     maxWidth: 380,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
@@ -1295,7 +1253,7 @@ const styles = StyleSheet.create({
   detailTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
     fontFamily: SERIF_FONT,
     lineHeight: 26,
     marginBottom: 20,
@@ -1306,7 +1264,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#f1f3f5',
+    borderTopColor: c.border,
   },
   deleteMilestoneBtn: {
     flexDirection: 'row',
@@ -1340,7 +1298,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 24,
@@ -1355,12 +1313,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   modalSubtitle: {
     fontSize: 12,
-    color: '#6c757d',
+    color: c.textSecondary,
     marginTop: 2,
   },
   modalCloseBtn: {
@@ -1382,7 +1340,7 @@ const styles = StyleSheet.create({
   },
   imagePickerBoxFilled: {
     borderStyle: 'solid',
-    borderColor: '#f1f3f5',
+    borderColor: c.border,
   },
   imagePreviewContainer: {
     width: '100%',
@@ -1408,7 +1366,7 @@ const styles = StyleSheet.create({
   },
   changeImageText: {
     fontSize: 11,
-    color: '#ffffff',
+    color: c.primaryOn,
     fontWeight: '600',
   },
   emptyPickerContent: {
@@ -1418,7 +1376,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -1435,7 +1393,7 @@ const styles = StyleSheet.create({
   },
   pickerSubtitle: {
     fontSize: 12,
-    color: '#8d99ae',
+    color: c.textMuted,
     marginTop: 2,
   },
   inputGroup: {
@@ -1455,7 +1413,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#2b2d42',
+    color: c.text,
   },
   datePickerInputButton: {
     flexDirection: 'row',
@@ -1484,12 +1442,12 @@ const styles = StyleSheet.create({
   datePickerSelectedText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2b2d42',
+    color: c.text,
     textTransform: 'capitalize',
   },
   datePickerHint: {
     fontSize: 11,
-    color: '#adb5bd',
+    color: c.textMuted,
     marginTop: 1,
   },
   modalActions: {
@@ -1529,6 +1487,6 @@ const styles = StyleSheet.create({
   modalSubmitText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
 });

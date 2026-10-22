@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './ui/Icon';
 import { TimeCapsuleItem, UserProfile } from '../types';
 import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
 import { DatePickerModal } from './DatePickerModal';
@@ -178,7 +178,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
                   </View>
                 </View>
 
-                <Text style={styles.capsuleTitle} numberOfLines={1}>
+                <Text style={styles.capsuleTitle} numberOfLines={2}>
                   {cap.title}
                 </Text>
                 <Text style={styles.capsuleMeta}>

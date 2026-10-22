@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
   Text,
@@ -15,7 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '../components/ui/Icon';
+import { PressableScale, EmptyState } from '../components/ui/Kit';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppHeader } from '../components/AppHeader';
@@ -48,8 +51,9 @@ const GENRES = [
 type SubTab = 'pending' | 'watched' | 'bucket' | 'roulette';
 
 export const MoviesScreen: React.FC = () => {
+  const { colors, isDark, primaryColor } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const { profile } = useProfile();
-  const { primaryColor } = useTheme();
   const currentProfile = profile || 'Karla';
 
   const [state, setState] = useState<MoviesAndPlansState>(DEFAULT_MOVIES_STATE);
@@ -196,17 +200,53 @@ export const MoviesScreen: React.FC = () => {
   };
 
   const handleQuickAddMovie = async () => {
-    if (!quickTitle.trim()) {
+    const rawTitle = quickTitle.trim();
+    if (!rawTitle) {
       Alert.alert('Título requerido', 'Escribe el nombre de la película o serie.');
       return;
     }
 
+    let posterUrl: string | undefined;
+    let year: string | undefined;
+    let director: string | undefined;
+    let synopsis: string | undefined;
+
+    if (catalogResults.length > 0) {
+      const top = catalogResults[0];
+      posterUrl = top.posterUrl;
+      year = top.year;
+      director = top.director;
+      synopsis = top.synopsis;
+    } else {
+      try {
+        const response = await fetch(
+          `https://itunes.apple.com/search?term=${encodeURIComponent(rawTitle)}&media=movie&entity=movie&limit=1&country=mx`
+        );
+        const data = await response.json();
+        if (Array.isArray(data?.results) && data.results.length > 0) {
+          const r = data.results[0];
+          posterUrl = r.artworkUrl100
+            ? String(r.artworkUrl100).replace('100x100bb', '600x900bb')
+            : undefined;
+          year = r.releaseDate ? String(r.releaseDate).slice(0, 4) : undefined;
+          director = r.artistName || undefined;
+          synopsis = r.longDescription || r.shortDescription || undefined;
+        }
+      } catch {
+        // Fallback gracefully without throwing
+      }
+    }
+
     const item: MovieItem = {
       id: `mov-${Date.now()}`,
-      title: quickTitle.trim(),
+      title: rawTitle,
       genre: quickGenre,
       addedBy: currentProfile,
       watched: false,
+      posterUrl,
+      year,
+      director,
+      synopsis,
     };
 
     const nextState: MoviesAndPlansState = {
@@ -412,95 +452,108 @@ export const MoviesScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 
       {/* Contenedor Fijo SIN Scroll Vertical */}
       <View style={styles.fixedViewport}>
-        {/* Selector de 4 Sub-Pestañas Compactas */}
-        <View style={styles.tabsContainer}>
-          {[
-            { id: 'pending', label: `Por Ver (${pendingMovies.length})`, icon: 'film-outline' },
-            { id: 'watched', label: `Vistas (${watchedMovies.length})`, icon: 'star-outline' },
-            {
-              id: 'bucket',
-              label: `Sueños (${completedBucketCount}/${state.bucketList.length})`,
-              icon: 'sparkles-outline',
-            },
-            { id: 'roulette', label: 'Comida', icon: 'restaurant-outline' },
-          ].map((t) => {
-            const active = subTab === t.id;
-            return (
-              <TouchableOpacity
-                key={t.id}
-                onPress={() => {
-                  setMoviePage(0);
-                  setBucketPage(0);
-                  setSubTab(t.id as SubTab);
-                }}
-                style={[
-                  styles.tabBtn,
-                  active && { backgroundColor: primaryColor },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={t.icon as any}
-                  size={13}
-                  color={active ? '#ffffff' : '#64748b'}
-                />
-                <Text
+        {/* Selector de 4 Sub-Pestañas Segmentadas */}
+        <View style={styles.tabsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsScroll}
+          >
+            {[
+              { id: 'pending', label: `Por Ver (${pendingMovies.length})`, icon: 'film-outline' },
+              { id: 'watched', label: `Vistas (${watchedMovies.length})`, icon: 'star-outline' },
+              {
+                id: 'bucket',
+                label: `Sueños (${completedBucketCount}/${state.bucketList.length})`,
+                icon: 'sparkles-outline',
+              },
+              { id: 'roulette', label: 'Comida', icon: 'restaurant-outline' },
+            ].map((t) => {
+              const active = subTab === t.id;
+              return (
+                <PressableScale
+                  key={t.id}
+                  onPress={() => {
+                    setMoviePage(0);
+                    setBucketPage(0);
+                    setSubTab(t.id as SubTab);
+                  }}
                   style={[
-                    styles.tabBtnText,
-                    active && { color: '#ffffff', fontWeight: '800' },
+                    styles.tabBtn,
+                    active
+                      ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                      : { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
-                  numberOfLines={1}
+                  scaleTo={0.96}
                 >
-                  {t.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+                  <Ionicons
+                    name={t.icon as any}
+                    size={13}
+                    color={active ? colors.primaryOn : colors.textMuted}
+                  />
+                  <Text
+                    style={[
+                      styles.tabBtnText,
+                      active
+                        ? { color: colors.primaryOn, fontWeight: '800' }
+                        : { color: colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {t.label}
+                  </Text>
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
         </View>
 
         {/* ================= VISTAS 1 Y 2: PELÍCULAS POR VER / YA VISTAS ================= */}
         {(subTab === 'pending' || subTab === 'watched') && (
           <View style={styles.contentArea}>
             {/* Barra Superior Rápida con Autocompletado Mientras Escribes */}
-            <View style={[styles.quickAddCard, { borderColor: `${primaryColor}30` }]}>
+            <View style={[styles.quickAddCard, { borderColor: colors.border }]}>
               <View style={styles.quickAddInputRow}>
+                <Ionicons name="search" size={16} color={colors.textMuted} style={{ marginLeft: 4 }} />
                 <TextInput
                   value={quickTitle}
                   onChangeText={setQuickTitle}
-                  placeholder="Escribe una película (resultados en vivo)..."
-                  placeholderTextColor="#94a3b8"
-                  style={styles.quickAddInput}
+                  placeholder="Buscar película o serie…"
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.quickAddInput, { color: colors.text }]}
                   returnKeyType="done"
                   onSubmitEditing={() => void handleQuickAddMovie()}
                 />
                 {isSearchingCatalog && (
                   <View style={{ justifyContent: 'center', paddingHorizontal: 4 }}>
-                    <ActivityIndicator size="small" color={primaryColor} />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   </View>
                 )}
-                <TouchableOpacity
+                <PressableScale
                   onPress={handleSpinMovieRoulette}
                   style={[
                     styles.quickAddSubmitBtn,
-                    { backgroundColor: `${primaryColor}18` },
+                    { backgroundColor: colors.primaryLight },
                   ]}
-                  activeOpacity={0.85}
+                  scaleTo={0.92}
+                  accessibilityLabel="Elegir película al azar"
                 >
-                  <Ionicons name="shuffle" size={18} color={primaryColor} />
-                </TouchableOpacity>
-                <TouchableOpacity
+                  <Ionicons name="shuffle" size={18} color={colors.primary} />
+                </PressableScale>
+                <PressableScale
                   onPress={() => void handleQuickAddMovie()}
-                  style={[styles.quickAddSubmitBtn, { backgroundColor: primaryColor }]}
-                  activeOpacity={0.85}
+                  style={[styles.quickAddSubmitBtn, { backgroundColor: colors.primary }]}
+                  scaleTo={0.92}
+                  accessibilityLabel="Agregar película"
                 >
-                  <Ionicons name="add" size={20} color="#ffffff" />
-                </TouchableOpacity>
+                  <Ionicons name="add" size={20} color={colors.primaryOn} />
+                </PressableScale>
               </View>
 
               {/* Chips Horizontales de Género */}
@@ -512,26 +565,34 @@ export const MoviesScreen: React.FC = () => {
                 {GENRES.map((g) => {
                   const active = quickGenre === g;
                   return (
-                    <TouchableOpacity
+                    <PressableScale
                       key={g}
                       onPress={() => setQuickGenre(g)}
                       style={[
                         styles.quickGenreChip,
-                        active && {
-                          backgroundColor: `${primaryColor}20`,
-                          borderColor: primaryColor,
-                        },
+                        active
+                          ? {
+                              backgroundColor: colors.primaryLight,
+                              borderColor: colors.primary,
+                            }
+                          : {
+                              backgroundColor: colors.surfaceAlt,
+                              borderColor: colors.border,
+                            },
                       ]}
+                      scaleTo={0.95}
                     >
                       <Text
                         style={[
                           styles.quickGenreText,
-                          active && { color: primaryColor, fontWeight: '800' },
+                          active
+                            ? { color: colors.primary, fontWeight: '800' }
+                            : { color: colors.textSecondary },
                         ]}
                       >
                         {g}
                       </Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   );
                 })}
               </ScrollView>
@@ -540,7 +601,7 @@ export const MoviesScreen: React.FC = () => {
               {catalogResults.length > 0 && (
                 <View style={styles.liveCatalogOverlay}>
                   <View style={styles.liveCatalogHeader}>
-                    <Text style={[styles.liveCatalogTitle, { color: primaryColor }]}>
+                    <Text style={[styles.liveCatalogTitle, { color: colors.primary }]}>
                       Resultados en vivo (toca uno para agregar):
                     </Text>
                     <TouchableOpacity onPress={() => setCatalogResults([])}>
@@ -554,11 +615,11 @@ export const MoviesScreen: React.FC = () => {
                     contentContainerStyle={{ gap: 10 }}
                   >
                     {catalogResults.map((item, idx) => (
-                      <TouchableOpacity
+                      <PressableScale
                         key={`${item.title}-${idx}`}
                         onPress={() => void handleSelectCatalogMovie(item)}
                         style={styles.posterResultCard}
-                        activeOpacity={0.85}
+                        scaleTo={0.95}
                       >
                         {item.posterUrl ? (
                           <Image
@@ -573,7 +634,7 @@ export const MoviesScreen: React.FC = () => {
                         <Text style={styles.posterResultMeta} numberOfLines={1}>
                           {item.year} • {item.genre}
                         </Text>
-                      </TouchableOpacity>
+                      </PressableScale>
                     ))}
                   </ScrollView>
                 </View>
@@ -583,17 +644,15 @@ export const MoviesScreen: React.FC = () => {
             {/* Tarjetas de Películas Paginadas (Cero Scroll) */}
             <View style={styles.cardsDeck}>
               {visibleMovies.length === 0 ? (
-                <View style={styles.emptyBox}>
-                  <Ionicons name="film-outline" size={38} color={primaryColor} />
-                  <Text style={styles.emptyTitle}>
-                    {subTab === 'pending'
-                      ? 'No hay películas en espera'
-                      : 'Aún no han calificado películas'}
-                  </Text>
-                  <Text style={styles.emptySub}>
-                    Escribe arriba el nombre de cualquier película y agrégala con su póster oficial.
-                  </Text>
-                </View>
+                <EmptyState
+                  icon={subTab === 'pending' ? 'film-outline' : 'sparkles-outline'}
+                  title={subTab === 'pending' ? 'Sin películas pendientes' : 'Aún no han calificado'}
+                  message={
+                    subTab === 'pending'
+                      ? 'Escribe arriba el título para agregar su próxima peli juntos con póster oficial.'
+                      : 'Cuando terminen de ver una película, toquen "Calificar" para guardarla.'
+                  }
+                />
               ) : (
                 visibleMovies.map((movie) => {
                   const avg =
@@ -602,11 +661,11 @@ export const MoviesScreen: React.FC = () => {
                       : null;
 
                   return (
-                    <TouchableOpacity
+                    <PressableScale
                       key={movie.id}
                       onPress={() => openRateModal(movie)}
                       style={styles.movieCard}
-                      activeOpacity={0.85}
+                      scaleTo={0.98}
                     >
                       <View style={styles.movieCardTop}>
                         {movie.posterUrl ? (
@@ -616,32 +675,41 @@ export const MoviesScreen: React.FC = () => {
                             resizeMode="cover"
                           />
                         ) : (
-                          <View
-                            style={[
-                              styles.moviePosterPlaceholder,
-                              { backgroundColor: `${primaryColor}14` },
-                            ]}
+                          <LinearGradient
+                            colors={[colors.primaryLight, colors.surfaceAlt]}
+                            style={styles.moviePosterPlaceholder}
                           >
-                            <Ionicons name="film" size={20} color={primaryColor} />
-                          </View>
+                            <Ionicons name="film" size={20} color={colors.primary} />
+                            <Text
+                              style={[styles.posterPlaceholderTitle, { color: colors.primary }]}
+                              numberOfLines={1}
+                            >
+                              {movie.title.slice(0, 10)}
+                            </Text>
+                          </LinearGradient>
                         )}
 
-                        <View style={{ flex: 1 }}>
+                        <View style={{ flex: 1, paddingRight: 6 }}>
                           <View style={styles.genreRow}>
-                            <Text
+                            <View
                               style={[
                                 styles.genreBadge,
-                                { backgroundColor: `${primaryColor}14`, color: primaryColor },
+                                { backgroundColor: colors.primaryLight },
                               ]}
                             >
-                              {movie.genre}
-                            </Text>
-                            <Text style={styles.addedByText}>
+                              <Text
+                                style={[styles.genreBadgeText, { color: colors.primary }]}
+                                numberOfLines={1}
+                              >
+                                {movie.genre}
+                              </Text>
+                            </View>
+                            <Text style={styles.addedByText} numberOfLines={1}>
                               {movie.year ? `${movie.year} • ` : ''}Por{' '}
                               {movie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
                             </Text>
                           </View>
-                          <Text style={styles.movieTitle} numberOfLines={1}>
+                          <Text style={styles.movieTitle} numberOfLines={2}>
                             {movie.title}
                           </Text>
                           {movie.notes ? (
@@ -657,43 +725,48 @@ export const MoviesScreen: React.FC = () => {
 
                         <View style={styles.cardRightActions}>
                           {movie.watched && avg ? (
-                            <View style={[styles.avgBadge, { backgroundColor: primaryColor }]}>
-                              <Ionicons name="star" size={12} color="#ffffff" />
-                              <Text style={styles.avgBadgeText}>{avg}</Text>
+                            <View style={[styles.avgBadge, { backgroundColor: colors.primary }]}>
+                              <Ionicons name="star" size={12} color={colors.primaryOn} />
+                              <Text style={[styles.avgBadgeText, { color: colors.primaryOn }]}>
+                                {avg}
+                              </Text>
                             </View>
                           ) : (
                             <View
                               style={[
                                 styles.markWatchedBtn,
-                                { borderColor: primaryColor, backgroundColor: `${primaryColor}10` },
+                                {
+                                  borderColor: colors.primary,
+                                  backgroundColor: colors.primaryLight,
+                                },
                               ]}
                             >
-                              <Ionicons name="star-outline" size={12} color={primaryColor} />
-                              <Text style={[styles.markWatchedText, { color: primaryColor }]}>
+                              <Ionicons name="star" size={12} color={colors.primary} />
+                              <Text style={[styles.markWatchedText, { color: colors.primary }]}>
                                 Calificar
                               </Text>
                             </View>
                           )}
 
-                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                             {movie.watched && (
                               <TouchableOpacity
                                 onPress={() => handleRemoveMovieReview(movie)}
-                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
                                 <Ionicons name="arrow-undo-outline" size={15} color="#e11d48" />
                               </TouchableOpacity>
                             )}
                             <TouchableOpacity
                               onPress={() => handleDeleteMovie(movie)}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
-                              <Ionicons name="trash-outline" size={15} color="#94a3b8" />
+                              <Ionicons name="trash-outline" size={15} color={colors.textMuted} />
                             </TouchableOpacity>
                           </View>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </PressableScale>
                   );
                 })
               )}
@@ -753,44 +826,55 @@ export const MoviesScreen: React.FC = () => {
             </View>
 
             <View style={styles.cardsDeck}>
-              {visibleBuckets.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => void handleToggleBucketItem(item.id)}
-                  style={[styles.bucketItem, item.completed && styles.bucketItemCompleted]}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.checkboxCircle,
-                      item.completed && {
-                        backgroundColor: primaryColor,
-                        borderColor: primaryColor,
-                      },
-                    ]}
+              {visibleBuckets.length === 0 ? (
+                <EmptyState
+                  icon="sparkles-outline"
+                  title="Sin sueños todavía"
+                  message="Escriban sus viajes, metas y planes por cumplir juntos."
+                />
+              ) : (
+                visibleBuckets.map((item) => (
+                  <PressableScale
+                    key={item.id}
+                    onPress={() => void handleToggleBucketItem(item.id)}
+                    style={[styles.bucketItem, item.completed && styles.bucketItemCompleted]}
+                    scaleTo={0.98}
                   >
-                    {item.completed && <Ionicons name="checkmark" size={14} color="#ffffff" />}
-                  </View>
-                  <View style={{ flex: 1, marginHorizontal: 10 }}>
-                    <Text
+                    <View
                       style={[
-                        styles.bucketTitle,
-                        item.completed && styles.bucketTitleCompleted,
+                        styles.checkboxCircle,
+                        item.completed && {
+                          backgroundColor: colors.primary,
+                          borderColor: colors.primary,
+                        },
                       ]}
-                      numberOfLines={1}
                     >
-                      {item.title}
-                    </Text>
-                    <Text style={styles.bucketMeta}>
-                      Por {item.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
-                      {item.completedDate ? ' • Cumplido' : ''}
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => void handleDeleteBucketItem(item.id)}>
-                    <Ionicons name="trash-outline" size={16} color="#cbd5e1" />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
+                      {item.completed && <Ionicons name="checkmark" size={14} color={colors.primaryOn} />}
+                    </View>
+                    <View style={{ flex: 1, marginHorizontal: 10 }}>
+                      <Text
+                        style={[
+                          styles.bucketTitle,
+                          item.completed && styles.bucketTitleCompleted,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text style={styles.bucketMeta}>
+                        Por {item.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
+                        {item.completedDate ? ' • Cumplido' : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => void handleDeleteBucketItem(item.id)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </PressableScale>
+                ))
+              )}
             </View>
 
             {totalBucketPages > 1 && (
@@ -826,7 +910,7 @@ export const MoviesScreen: React.FC = () => {
         {subTab === 'roulette' && (
           <View style={styles.foodWheelCard}>
             <View style={{ alignItems: 'center' }}>
-              <Ionicons name="restaurant" size={32} color={primaryColor} />
+              <Ionicons name="restaurant" size={32} color={colors.primary} />
               <Text style={styles.foodWheelTitle}>¿Qué Comemos o Cenamos Hoy?</Text>
               <Text style={styles.foodWheelSub}>
                 Gira la ruleta para decidir sin discutir
@@ -836,28 +920,28 @@ export const MoviesScreen: React.FC = () => {
             <View
               style={[
                 styles.foodResultBox,
-                { borderColor: primaryColor, backgroundColor: `${primaryColor}10` },
+                { borderColor: colors.primary, backgroundColor: colors.primaryLight },
               ]}
             >
-              <Text style={styles.foodResultLabel}>
+              <Text style={[styles.foodResultLabel, { color: colors.textMuted }]}>
                 {selectedFoodResult ? 'HOY TOCA DISFRUTAR:' : 'LISTO PARA GIRAR'}
               </Text>
-              <Text style={[styles.foodResultValue, { color: primaryColor }]}>
+              <Text style={[styles.foodResultValue, { color: colors.primary }]}>
                 {selectedFoodResult || 'Toca el botón de abajo'}
               </Text>
             </View>
 
-            <TouchableOpacity
+            <PressableScale
               onPress={handleSpinFoodWheel}
               disabled={isSpinning}
-              style={[styles.spinWheelBtn, { backgroundColor: primaryColor }]}
-              activeOpacity={0.85}
+              style={[styles.spinWheelBtn, { backgroundColor: colors.primary }]}
+              scaleTo={0.96}
             >
-              <Ionicons name="sync" size={18} color="#ffffff" />
-              <Text style={styles.spinWheelBtnText}>
+              <Ionicons name="sync" size={18} color={colors.primaryOn} />
+              <Text style={[styles.spinWheelBtnText, { color: colors.primaryOn }]}>
                 {isSpinning ? 'Eligiendo...' : 'Girar Ruleta de Comida'}
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
 
             <View style={{ width: '100%' }}>
               <View style={styles.quickAddInputRow}>
@@ -865,17 +949,18 @@ export const MoviesScreen: React.FC = () => {
                   value={newFoodOption}
                   onChangeText={setNewFoodOption}
                   placeholder="Agregar antojo (ej. Ramen, Crepas...)"
-                  placeholderTextColor="#94a3b8"
-                  style={styles.quickAddInput}
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.quickAddInput, { color: colors.text }]}
                   returnKeyType="done"
                   onSubmitEditing={() => void handleAddFoodOption()}
                 />
-                <TouchableOpacity
+                <PressableScale
                   onPress={() => void handleAddFoodOption()}
-                  style={[styles.quickAddSubmitBtn, { backgroundColor: primaryColor }]}
+                  style={[styles.quickAddSubmitBtn, { backgroundColor: colors.primary }]}
+                  scaleTo={0.92}
                 >
-                  <Ionicons name="add" size={20} color="#ffffff" />
-                </TouchableOpacity>
+                  <Ionicons name="add" size={20} color={colors.primaryOn} />
+                </PressableScale>
               </View>
 
               <ScrollView
@@ -886,8 +971,11 @@ export const MoviesScreen: React.FC = () => {
                 {state.foodOptions.map((opt) => (
                   <View key={opt} style={styles.foodChip}>
                     <Text style={styles.foodChipText}>{opt}</Text>
-                    <TouchableOpacity onPress={() => void handleRemoveFoodOption(opt)}>
-                      <Ionicons name="close-circle" size={15} color="#94a3b8" />
+                    <TouchableOpacity
+                      onPress={() => void handleRemoveFoodOption(opt)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Ionicons name="close-circle" size={15} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -977,10 +1065,10 @@ export const MoviesScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#faf9f9',
+    backgroundColor: c.background,
   },
   fixedViewport: {
     flex: 1,
@@ -988,40 +1076,49 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     justifyContent: 'space-between',
   },
+  tabsWrapper: {
+    marginBottom: 8,
+  },
+  tabsScroll: {
+    gap: 8,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+  },
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 4,
     gap: 4,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
     marginBottom: 8,
   },
   tabBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    borderRadius: 10,
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   tabBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   contentArea: {
     flex: 1,
     justifyContent: 'space-between',
   },
   quickAddCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 18,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     marginBottom: 8,
     zIndex: 30,
   },
@@ -1032,14 +1129,14 @@ const styles = StyleSheet.create({
   },
   quickAddInput: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 13,
-    color: '#0f172a',
+    color: c.text,
   },
   quickAddSubmitBtn: {
     width: 38,
@@ -1056,20 +1153,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   quickGenreText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   liveCatalogOverlay: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: c.border,
   },
   liveCatalogHeader: {
     flexDirection: 'row',
@@ -1083,15 +1180,15 @@ const styles = StyleSheet.create({
   liveCatalogClose: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   posterResultCard: {
     width: 96,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderRadius: 10,
     padding: 5,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   posterResultImg: {
     width: '100%',
@@ -1102,11 +1199,11 @@ const styles = StyleSheet.create({
   posterResultName: {
     fontSize: 10.5,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   posterResultMeta: {
     fontSize: 9.5,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   cardsDeck: {
     flex: 1,
@@ -1115,52 +1212,64 @@ const styles = StyleSheet.create({
   },
   emptyBox: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
     marginTop: 8,
   },
   emptySub: {
     fontSize: 12,
-    color: '#64748b',
+    color: c.textSecondary,
     textAlign: 'center',
     marginTop: 4,
   },
   movieCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   movieCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   movieCardPoster: {
-    width: 44,
-    height: 62,
-    borderRadius: 8,
+    width: 48,
+    height: 68,
+    borderRadius: 10,
     marginRight: 10,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
   },
   moviePosterPlaceholder: {
-    width: 44,
-    height: 62,
-    borderRadius: 8,
+    width: 48,
+    height: 68,
+    borderRadius: 10,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 4,
+  },
+  posterPlaceholderTitle: {
+    fontSize: 9,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 2,
   },
   genreRow: {
     flexDirection: 'row',
@@ -1169,31 +1278,33 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   genreBadge: {
-    fontSize: 9.5,
-    fontWeight: '800',
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
   },
+  genreBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
   addedByText: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: c.textMuted,
     fontWeight: '600',
   },
   movieTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#0f172a',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   movieDirectorText: {
     fontSize: 10.5,
-    color: '#64748b',
+    color: c.textSecondary,
     marginTop: 1,
   },
   movieNotesInline: {
     fontSize: 10.5,
-    color: '#475569',
+    color: c.textSecondary,
     fontStyle: 'italic',
     marginTop: 2,
   },
@@ -1214,7 +1325,7 @@ const styles = StyleSheet.create({
   avgBadgeText: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   markWatchedBtn: {
     flexDirection: 'row',
@@ -1239,79 +1350,79 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   pageBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   pageIndicator: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   bucketItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
   },
   bucketItemCompleted: {
     opacity: 0.75,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
   },
   checkboxCircle: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bucketTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   bucketTitleCompleted: {
     textDecorationLine: 'line-through',
-    color: '#94a3b8',
+    color: c.textMuted,
   },
   bucketMeta: {
     fontSize: 10.5,
-    color: '#94a3b8',
+    color: c.textMuted,
     marginTop: 2,
   },
   foodWheelCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 22,
     padding: 18,
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
   },
   foodWheelTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#0f172a',
+    color: c.text,
     fontFamily: SERIF_FONT,
     marginTop: 6,
   },
   foodWheelSub: {
     fontSize: 12,
-    color: '#64748b',
+    color: c.textSecondary,
     marginTop: 2,
   },
   foodResultBox: {
@@ -1324,7 +1435,7 @@ const styles = StyleSheet.create({
   foodResultLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#64748b',
+    color: c.textSecondary,
     letterSpacing: 1,
   },
   foodResultValue: {
@@ -1346,23 +1457,23 @@ const styles = StyleSheet.create({
   spinWheelBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   foodChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   foodChipText: {
     fontSize: 11.5,
     fontWeight: '600',
-    color: '#334155',
+    color: c.textSecondary,
   },
   modalOverlay: {
     flex: 1,
@@ -1374,7 +1485,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 20,
   },
@@ -1387,29 +1498,29 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#0f172a',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   modalSubtitle: {
     fontSize: 11,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   inputLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#475569',
+    color: c.textSecondary,
     marginBottom: 6,
     marginTop: 8,
   },
   modalInput: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#0f172a',
+    color: c.text,
   },
   starsPickerRow: {
     flexDirection: 'row',
@@ -1428,6 +1539,6 @@ const styles = StyleSheet.create({
   modalPrimaryBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
 });

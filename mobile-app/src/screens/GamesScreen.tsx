@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
   Text,
@@ -14,7 +15,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../components/ui/Icon';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppHeader } from '../components/AppHeader';
@@ -191,6 +192,8 @@ const PIECE_VALUES: Record<string, number> = {
 };
 
 export const GamesScreen: React.FC = () => {
+  const { colors: themeColors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(themeColors), [themeColors]);
   const { profile, getDisplayName } = useProfile();
   const { primaryColor } = useTheme();
   const currentProfile = profile || 'Karla';
@@ -3244,7 +3247,7 @@ export const GamesScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#faf9f9',
@@ -3260,7 +3263,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -3289,7 +3292,7 @@ const styles = StyleSheet.create({
   playerName: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   pointsValue: {
     fontSize: 14,
@@ -3299,7 +3302,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 6,
@@ -3307,7 +3310,7 @@ const styles = StyleSheet.create({
   vsBadgeText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   gamesSelectorGrid: {
     flexDirection: 'row',
@@ -3320,7 +3323,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 12,
     paddingVertical: 7,
     paddingHorizontal: 3,
@@ -3330,15 +3333,15 @@ const styles = StyleSheet.create({
   gameTabTitle: {
     fontSize: 9.5,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
   },
   arenaCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#f1f3f5',
+    borderColor: c.border,
     justifyContent: 'space-between',
   },
   arenaCardFull: {
@@ -3354,12 +3357,12 @@ const styles = StyleSheet.create({
   arenaTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   arenaSubtitle: {
     fontSize: 11,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   fullScreenToggleBtn: {
     flexDirection: 'row',
@@ -3400,7 +3403,7 @@ const styles = StyleSheet.create({
   tttCell: {
     width: '31.5%',
     height: '31.5%',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3420,7 +3423,7 @@ const styles = StyleSheet.create({
   primaryGameBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   secondaryGameBtn: {
     flexDirection: 'row',
@@ -3431,7 +3434,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1.5,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
   },
   secondaryGameBtnText: {
     fontSize: 12,
@@ -3453,13 +3456,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#f8fafc',
+    borderColor: c.border,
+    backgroundColor: c.surfaceAlt,
   },
   diffChipText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#475569',
+    color: c.textSecondary,
   },
   sudokuToolsMiniRow: {
     flexDirection: 'row',
@@ -3469,7 +3472,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3478,7 +3481,7 @@ const styles = StyleSheet.create({
     borderColor: '#0f172a',
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
   },
   sudokuRow: {
     flexDirection: 'row',
@@ -3492,7 +3495,7 @@ const styles = StyleSheet.create({
   },
   sudokuNotesText: {
     fontSize: 7,
-    color: '#64748b',
+    color: c.textSecondary,
     textAlign: 'center',
   },
   sudokuKeypadRow: {
@@ -3506,7 +3509,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 10,
     borderWidth: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
   },
   sudokuKeyDigit: {
@@ -3515,7 +3518,7 @@ const styles = StyleSheet.create({
   },
   sudokuKeyLeft: {
     fontSize: 8,
-    color: '#94a3b8',
+    color: c.textMuted,
     fontWeight: '700',
   },
   // Ajedrez
@@ -3538,7 +3541,7 @@ const styles = StyleSheet.create({
   checkWarningText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   advantageTag: {
     fontSize: 10,
@@ -3590,7 +3593,7 @@ const styles = StyleSheet.create({
   hangmanStageCompact: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderRadius: 14,
     padding: 8,
     width: '100%',
@@ -3697,7 +3700,7 @@ const styles = StyleSheet.create({
   },
   hangmanHintBox: {
     fontSize: 11,
-    color: '#334155',
+    color: c.textSecondary,
     fontStyle: 'italic',
     lineHeight: 15,
   },
@@ -3729,16 +3732,16 @@ const styles = StyleSheet.create({
     width: 29,
     height: 29,
     borderRadius: 7,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   azKeyText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
   },
   fullScreenModalContainer: {
     flex: 1,
@@ -3759,12 +3762,12 @@ const styles = StyleSheet.create({
   victoryCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 32,
     padding: 26,
     alignItems: 'center',
     borderWidth: 3,
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.35,
     shadowRadius: 24,
@@ -3792,14 +3795,14 @@ const styles = StyleSheet.create({
   victoryWinnerTitle: {
     fontSize: 30,
     fontWeight: '900',
-    color: '#0f172a',
+    color: c.text,
     fontFamily: SERIF_FONT,
     textAlign: 'center',
     marginTop: 4,
   },
   victorySubtitle: {
     fontSize: 14,
-    color: '#475569',
+    color: c.textSecondary,
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 20,
@@ -3816,7 +3819,7 @@ const styles = StyleSheet.create({
   victoryRewardText: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#ffffff',
+    color: c.primaryOn,
     letterSpacing: 0.6,
   },
   victoryButtonsRow: {
@@ -3835,7 +3838,7 @@ const styles = StyleSheet.create({
   victoryPlayAgainText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   victoryCloseBtn: {
     paddingVertical: 10,
@@ -3844,7 +3847,7 @@ const styles = StyleSheet.create({
   victoryCloseText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
   modalOverlay: {
     flex: 1,
@@ -3856,7 +3859,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 370,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 22,
   },
@@ -3869,7 +3872,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#2b2d42',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   inputLabel: {
@@ -3880,14 +3883,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   modalInput: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#0f172a',
+    color: c.text,
   },
   // Modo Consola de Juego Profesional Independiente (Modo Zoom Pro)
   arenaCardProDark: {
@@ -3905,7 +3908,7 @@ const styles = StyleSheet.create({
   proLiveBadgeText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#ffffff',
+    color: c.primaryOn,
     letterSpacing: 1,
   },
   proConsoleModalContainer: {
@@ -3988,13 +3991,13 @@ const styles = StyleSheet.create({
   proGameTabBtnText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#64748b',
+    color: c.textSecondary,
     letterSpacing: 0.4,
   },
   // Battleship 10x10 Pro (Batalla Naval de Mesa Completa)
   bsInviteCard: {
     width: '100%',
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderRadius: 20,
     padding: 18,
     alignItems: 'center',
@@ -4019,13 +4022,13 @@ const styles = StyleSheet.create({
   bsInviteTitle: {
     fontSize: 17,
     fontWeight: '900',
-    color: '#0f172a',
+    color: c.text,
     textAlign: 'center',
     fontFamily: SERIF_FONT,
   },
   bsInviteDesc: {
     fontSize: 12,
-    color: '#475569',
+    color: c.textSecondary,
     textAlign: 'center',
     lineHeight: 17,
   },
@@ -4041,7 +4044,7 @@ const styles = StyleSheet.create({
   bsActionLaunchText: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   bsSetupTopBar: {
     width: '100%',
@@ -4054,7 +4057,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 10.5,
     fontWeight: '800',
-    color: '#334155',
+    color: c.textSecondary,
   },
   bsRotateBtn: {
     flexDirection: 'row',
@@ -4082,15 +4085,15 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 3,
     borderRadius: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     alignItems: 'center',
   },
   bsShipPickerText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#334155',
+    color: c.textSecondary,
   },
   bsTopRow: {
     width: '100%',
@@ -4115,11 +4118,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 10,
     fontWeight: '800',
-    color: '#0f172a',
+    color: c.text,
   },
   bsModeSwitch: {
     flexDirection: 'row',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
     borderRadius: 10,
     padding: 2,
     gap: 2,
@@ -4132,7 +4135,7 @@ const styles = StyleSheet.create({
   bsModeBtnText: {
     fontSize: 9.5,
     fontWeight: '800',
-    color: '#475569',
+    color: c.textSecondary,
   },
   bsFleetSilhouettesBar: {
     width: '100%',

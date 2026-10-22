@@ -34,6 +34,85 @@ export const COLORS = {
   javierLight: '#e0f2fe',
 };
 
+// ================= SISTEMA DE DISEÑO KMRG =================
+// Espaciado base de 8px
+export const SPACING = { xs: 8, sm: 16, md: 24, lg: 32 } as const;
+
+// Radios de borde consistentes
+export const RADII = { sm: 12, md: 16, lg: 24, pill: 999 } as const;
+
+// Escala tipográfica fija: serif solo para títulos, sans para texto y UI
+export const TYPE_SCALE = {
+  title: { fontSize: 24, lineHeight: 30, fontFamily: FONTS.serif, fontWeight: '800' as const },
+  subtitle: { fontSize: 16, lineHeight: 22, fontFamily: FONTS.serif, fontWeight: '700' as const },
+  body: { fontSize: 14, lineHeight: 20, fontFamily: FONTS.sans, fontWeight: '500' as const },
+  caption: { fontSize: 12, lineHeight: 16, fontFamily: FONTS.sans, fontWeight: '600' as const },
+} as const;
+
+// Área táctil mínima recomendada
+export const MIN_TOUCH = 44;
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function mix(hexA: string, hexB: string, t: number): string {
+  const a = hexToRgb(hexA);
+  const b = hexToRgb(hexB);
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+export interface ThemePalette {
+  primary: string;
+  primaryLight: string;
+  primaryDark: string;
+  primaryOn: string;
+  background: string;
+  surface: string;
+  surfaceAlt: string;
+  paper: string;
+  border: string;
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  danger: string;
+  warning: string;
+  success: string;
+  shadow: string;
+  isDark: boolean;
+}
+
+/**
+ * Construye todos los tokens del tema a partir del color primario elegido por el usuario.
+ * Ningún color de marca se hardcodea: todo se deriva de la paleta seleccionada.
+ */
+export function buildPalette(primary: string, isDark: boolean): ThemePalette {
+  const dark = isDark;
+  return {
+    primary,
+    primaryLight: dark ? mix('#111111', primary, 0.28) : mix('#ffffff', primary, 0.12),
+    primaryDark: mix(primary, '#000000', 0.25),
+    primaryOn: '#ffffff',
+    background: dark ? mix('#0b0b0f', primary, 0.06) : mix('#fffaf7', primary, 0.04),
+    surface: dark ? mix('#16161c', primary, 0.07) : '#ffffff',
+    surfaceAlt: dark ? mix('#1f1f27', primary, 0.1) : mix('#ffffff', primary, 0.06),
+    paper: dark ? mix('#23201d', primary, 0.08) : '#fffdf6',
+    border: dark ? mix('#2a2a33', primary, 0.12) : mix('#ffffff', primary, 0.14),
+    text: dark ? '#f5f3f0' : mix('#1c1917', primary, 0.12),
+    textSecondary: dark ? '#c9c4be' : '#57534e',
+    textMuted: dark ? '#8b867f' : '#8d867f',
+    danger: dark ? '#fb7185' : '#e11d48',
+    warning: dark ? '#fbbf24' : '#d97706',
+    success: dark ? '#34d399' : '#059669',
+    shadow: dark ? '#000000' : mix('#1c1917', primary, 0.4),
+    isDark: dark,
+  };
+}
+
 export const SHADOWS: Record<'sm' | 'md' | 'lg', ViewStyle> = {
   sm: {
     shadowColor: '#0f172a',

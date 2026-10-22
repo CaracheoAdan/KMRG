@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './ui/Icon';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface PhotoCalendarProps {

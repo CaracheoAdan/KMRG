@@ -10,7 +10,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './ui/Icon';
 import { VoiceNoteData, UserProfile } from '../types';
 import { FONTS } from '../theme/designSystem';
 

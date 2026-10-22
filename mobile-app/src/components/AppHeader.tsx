@@ -5,41 +5,31 @@ import {
   View,
   TouchableOpacity,
   Alert,
-  Platform,
   Modal,
   TextInput,
   Image,
+  Switch,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from './ui/Icon';
+import { PressableScale } from './ui/Kit';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useStreak } from '../hooks/useHomeState';
 import { CoupleWrappedModal } from './CoupleWrappedModal';
-
-const SERIF_FONT = Platform.select({
-  ios: 'Georgia',
-  android: 'serif',
-  default: 'Georgia, serif',
-});
+import { FONTS, MIN_TOUCH, RADII, SPACING, TYPE_SCALE } from '../theme/designSystem';
 
 interface AppHeaderProps {
+  /** Se mantiene por compatibilidad; la racha ahora sale de una única fuente de datos. */
   streakCount?: number;
   rightAction?: React.ReactNode;
 }
 
-export const AppHeader: React.FC<AppHeaderProps> = ({
-  streakCount = 1,
-  rightAction,
-}) => {
-  const {
-    profile,
-    setProfile,
-    logout,
-    getDisplayName,
-    getAvatarUri,
-    updatePartnerProfile,
-  } = useProfile();
-  const { primaryColor, openThemeModal } = useTheme();
+export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
+  const { profile, setProfile, logout, getDisplayName, getAvatarUri, updatePartnerProfile } =
+    useProfile();
+  const { colors, isDark, toggleDark, openThemeModal } = useTheme();
+  const streak = useStreak();
   const currentProfile = profile || 'Karla';
   const partnerRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
 
@@ -47,9 +37,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [myNameInput, setMyNameInput] = useState(getDisplayName(currentProfile));
   const [partnerNameInput, setPartnerNameInput] = useState(getDisplayName(partnerRole));
-  const [myAvatarDraft, setMyAvatarDraft] = useState<string | null>(
-    getAvatarUri(currentProfile)
-  );
+  const [myAvatarDraft, setMyAvatarDraft] = useState<string | null>(getAvatarUri(currentProfile));
 
   useEffect(() => {
     if (isProfileModalOpen) {
@@ -62,13 +50,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const handlePickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
-        'Permiso necesario',
-        'Necesitamos acceso a tu galería para elegir tu foto de perfil.'
-      );
+      Alert.alert('Permiso necesario', 'Necesitamos acceso a tu galería para elegir tu foto de perfil.');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
@@ -76,13 +60,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       quality: 0.45,
       base64: true,
     });
-
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      const uriToSave = asset.base64
-        ? `data:image/jpeg;base64,${asset.base64}`
-        : asset.uri;
-      setMyAvatarDraft(uriToSave);
+      setMyAvatarDraft(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri);
     }
   };
 
@@ -92,9 +72,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       avatarUri: myAvatarDraft,
     });
     if (partnerNameInput.trim()) {
-      await updatePartnerProfile(partnerRole, {
-        displayName: partnerNameInput.trim(),
-      });
+      await updatePartnerProfile(partnerRole, { displayName: partnerNameInput.trim() });
     }
     setIsProfileModalOpen(false);
   };
@@ -110,100 +88,72 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const javierName = getDisplayName('Javier');
 
   return (
-    <View style={[styles.headerContainer, { borderBottomColor: `${primaryColor}25` }]}>
+    <View
+      style={[
+        styles.headerContainer,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
+          shadowColor: colors.shadow,
+          paddingTop: SPACING.xs,
+        },
+      ]}
+    >
       <View style={styles.topRow}>
-        {/* Izquierda: Paleta, Estadísticas (Wrapped) y Racha */}
-        <View style={styles.leftActions}>
-          <TouchableOpacity
-            onPress={openThemeModal}
-            style={[
-              styles.iconButton,
-              { backgroundColor: `${primaryColor}14`, borderColor: `${primaryColor}30` },
-            ]}
-            activeOpacity={0.75}
-            accessibilityLabel="Cambiar tema de color"
-          >
-            <Ionicons name="color-palette-outline" size={16} color={primaryColor} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setIsWrappedOpen(true)}
-            style={[
-              styles.iconButton,
-              { backgroundColor: `${primaryColor}14`, borderColor: `${primaryColor}30` },
-            ]}
-            activeOpacity={0.75}
-            accessibilityLabel="Ver estadísticas de pareja"
-          >
-            <Ionicons name="stats-chart-outline" size={15} color={primaryColor} />
-          </TouchableOpacity>
-
-          <View style={[styles.streakBadge, { backgroundColor: `${primaryColor}12` }]}>
-            <Ionicons name="flame" size={12} color="#f97316" />
-            <Text style={styles.streakText}>{streakCount}</Text>
-          </View>
-        </View>
-
-        {/* Centro: Nombre de la Aplicación KMRG */}
-        <TouchableOpacity
-          onPress={() => setIsWrappedOpen(true)}
-          activeOpacity={0.85}
-          style={styles.brandCenter}
-        >
+        {/* Marca KMRG compacta */}
+        <View style={styles.brand}>
           <View style={styles.titleWithEmblem}>
-            <Text style={[styles.brandTitle, { color: primaryColor }]}>KMRG</Text>
-            <Ionicons name="heart" size={11} color={primaryColor} style={{ marginLeft: 3 }} />
+            <Text style={[styles.brandTitle, { color: colors.primary }]}>KMRG</Text>
+            <Ionicons name="heart" size={12} color={colors.primary} />
           </View>
-          <Text style={styles.brandSubtitle} numberOfLines={1}>
+          <Text style={[styles.brandSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
             {karlaName} & {javierName}
           </Text>
-        </TouchableOpacity>
+        </View>
 
-        {/* Derecha: Perfil Activo con Avatar Personalizable */}
         <View style={styles.rightActions}>
+          {/* Racha: única fuente de datos */}
+          <View style={[styles.streakBadge, { backgroundColor: colors.primaryLight }]}>
+            <Ionicons name="flame" size={14} color={colors.warning} />
+            <Text style={[styles.streakText, { color: colors.text }]}>{streak}</Text>
+          </View>
+
           {rightAction ? (
             rightAction
           ) : (
-            <TouchableOpacity
+            <PressableScale
               onPress={() => setIsProfileModalOpen(true)}
               onLongPress={() => setIsProfileModalOpen(true)}
+              accessibilityLabel={`Perfil activo: ${myDisplayName}`}
               style={[
                 styles.profilePill,
-                {
-                  borderColor: currentProfile === 'Karla' ? '#c084fc' : '#7dd3fc',
-                  backgroundColor: currentProfile === 'Karla' ? '#f3e8ff' : '#e0f2fe',
-                },
+                { backgroundColor: colors.primaryLight, borderColor: colors.border },
               ]}
-              activeOpacity={0.75}
-              accessibilityLabel={`Perfil activo: ${myDisplayName}`}
             >
               {myAvatarUri ? (
                 <Image source={{ uri: myAvatarUri }} style={styles.profileAvatarMini} />
               ) : (
-                <View
-                  style={[
-                    styles.profileDot,
-                    { backgroundColor: currentProfile === 'Karla' ? '#9333ea' : '#0284c7' },
-                  ]}
-                />
+                <View style={[styles.profileInitial, { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.profileInitialText, { color: colors.primaryOn }]}>
+                    {myDisplayName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
               )}
-              <Text style={styles.profileText} numberOfLines={1}>
+              <Text style={[styles.profileText, { color: colors.text }]} numberOfLines={1}>
                 {myDisplayName}
               </Text>
-              <Ionicons name="person-circle-outline" size={13} color="#64748b" style={{ marginLeft: 3 }} />
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </View>
       </View>
 
-      {/* Modal Global: Estadísticas Wrapped */}
       <CoupleWrappedModal
         visible={isWrappedOpen}
         onClose={() => setIsWrappedOpen(false)}
-        primaryColor={primaryColor}
+        primaryColor={colors.primary}
       />
 
-      {/* Modal Global: Personalizar Perfil de Pareja (Nombre + Foto + Cambio de Rol) */}
+      {/* Menú de perfil y ajustes: paleta, estadísticas, modo oscuro, nombre y foto */}
       <Modal
         visible={isProfileModalOpen}
         transparent
@@ -211,105 +161,127 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         onRequestClose={() => setIsProfileModalOpen(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Perfil de Pareja</Text>
+              <Text style={[TYPE_SCALE.title, { color: colors.text, fontSize: 20 }]}>Perfil y ajustes</Text>
               <TouchableOpacity
                 onPress={() => setIsProfileModalOpen(false)}
-                style={styles.closeBtn}
+                style={[styles.closeBtn, { backgroundColor: colors.surfaceAlt }]}
+                accessibilityLabel="Cerrar"
               >
-                <Ionicons name="close" size={18} color="#475569" />
+                <Ionicons name="close" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            {/* Avatar + Selector de Foto */}
-            <View style={styles.avatarEditorSection}>
+            <View
+              style={[
+                styles.avatarEditorSection,
+                { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+              ]}
+            >
               <TouchableOpacity
                 onPress={() => void handlePickAvatar()}
                 activeOpacity={0.85}
                 style={[
                   styles.avatarCircleLarge,
-                  {
-                    borderColor: currentProfile === 'Karla' ? '#9333ea' : '#0284c7',
-                    backgroundColor: currentProfile === 'Karla' ? '#f3e8ff' : '#e0f2fe',
-                  },
+                  { borderColor: colors.primary, backgroundColor: colors.primaryLight },
                 ]}
               >
                 {myAvatarDraft ? (
                   <Image source={{ uri: myAvatarDraft }} style={styles.avatarImageLarge} />
                 ) : (
-                  <Text
-                    style={[
-                      styles.avatarInitialText,
-                      { color: currentProfile === 'Karla' ? '#9333ea' : '#0284c7' },
-                    ]}
-                  >
+                  <Text style={[styles.avatarInitialText, { color: colors.primary }]}>
                     {(myNameInput || 'K').charAt(0).toUpperCase()}
                   </Text>
                 )}
-                <View style={[styles.cameraBadge, { backgroundColor: primaryColor }]}>
-                  <Ionicons name="camera" size={12} color="#fff" />
+                <View style={[styles.cameraBadge, { backgroundColor: colors.primary, borderColor: colors.surface }]}>
+                  <Ionicons name="camera" size={12} color={colors.primaryOn} />
                 </View>
               </TouchableOpacity>
 
               <View style={{ flex: 1 }}>
-                <Text style={styles.avatarHelperTitle}>Foto de Perfil</Text>
-                <Text style={styles.avatarHelperSub}>
-                  Toca el círculo para elegir tu foto o personalizar cómo apareces en toda la app.
+                <Text style={[TYPE_SCALE.body, { color: colors.text, fontWeight: '800' }]}>Foto de perfil</Text>
+                <Text style={[TYPE_SCALE.caption, { color: colors.textSecondary, fontWeight: '500' }]}>
+                  Toca el círculo para elegir tu foto.
                 </Text>
                 {myAvatarDraft && (
-                  <TouchableOpacity
-                    onPress={() => setMyAvatarDraft(null)}
-                    style={{ marginTop: 4 }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#ef4444' }}>
-                      Quitar foto actual
-                    </Text>
+                  <TouchableOpacity onPress={() => setMyAvatarDraft(null)} style={{ paddingVertical: 4 }}>
+                    <Text style={[TYPE_SCALE.caption, { color: colors.danger }]}>Quitar foto actual</Text>
                   </TouchableOpacity>
                 )}
               </View>
             </View>
 
-            {/* Mi Nombre / Apodo */}
-            <Text style={styles.inputLabel}>Tu Nombre o Apodo</Text>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Tu nombre o apodo</Text>
             <TextInput
               value={myNameInput}
               onChangeText={setMyNameInput}
               placeholder={currentProfile === 'Karla' ? 'Karlita' : 'Javier'}
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.textMuted}
               maxLength={22}
-              style={styles.nameInput}
+              style={[styles.nameInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
             />
 
-            {/* Nombre de tu Pareja */}
-            <Text style={styles.inputLabel}>Nombre de tu Pareja</Text>
+            <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Nombre de tu pareja</Text>
             <TextInput
               value={partnerNameInput}
               onChangeText={setPartnerNameInput}
               placeholder={partnerRole === 'Karla' ? 'Karlita' : 'Javier'}
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.textMuted}
               maxLength={22}
-              style={styles.nameInput}
+              style={[styles.nameInput, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text }]}
             />
 
-            <TouchableOpacity
+            {/* Accesos movidos desde el header: paleta y estadísticas */}
+            <View style={styles.menuRow}>
+              <PressableScale
+                onPress={() => {
+                  setIsProfileModalOpen(false);
+                  setTimeout(openThemeModal, 250);
+                }}
+                style={[styles.menuTile, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+              >
+                <Ionicons name="color-palette-outline" size={18} color={colors.primary} />
+                <Text style={[styles.menuTileText, { color: colors.text }]}>Paleta de colores</Text>
+              </PressableScale>
+              <PressableScale
+                onPress={() => {
+                  setIsProfileModalOpen(false);
+                  setTimeout(() => setIsWrappedOpen(true), 250);
+                }}
+                style={[styles.menuTile, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+              >
+                <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
+                <Text style={[styles.menuTileText, { color: colors.text }]}>Estadísticas</Text>
+              </PressableScale>
+            </View>
+
+            <View style={[styles.darkRow, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+              <Ionicons name={isDark ? 'moon-outline' : 'sunny-outline'} size={18} color={colors.primary} />
+              <Text style={[styles.menuTileText, { color: colors.text, flex: 1 }]}>Modo oscuro</Text>
+              <Switch
+                value={isDark}
+                onValueChange={toggleDark}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#ffffff"
+              />
+            </View>
+
+            <PressableScale
               onPress={() => void handleSaveProfileChanges()}
-              style={[styles.saveBtn, { backgroundColor: primaryColor }]}
+              style={[styles.saveBtn, { backgroundColor: colors.primary }]}
             >
-              <Ionicons name="checkmark-circle" size={16} color="#fff" />
-              <Text style={styles.saveBtnText}>Guardar Perfil</Text>
-            </TouchableOpacity>
+              <Ionicons name="checkmark-circle" size={16} color={colors.primaryOn} />
+              <Text style={[styles.saveBtnText, { color: colors.primaryOn }]}>Guardar perfil</Text>
+            </PressableScale>
 
-            <View style={styles.divider} />
-
-            {/* Acciones de cambio de cuenta */}
             <View style={styles.bottomProfileActions}>
               <TouchableOpacity
                 onPress={() => void handleSwitchProfileRole()}
-                style={styles.switchRoleBtn}
+                style={[styles.switchRoleBtn, { backgroundColor: colors.surfaceAlt }]}
               >
-                <Ionicons name="swap-horizontal" size={15} color="#334155" />
-                <Text style={styles.switchRoleText}>
+                <Ionicons name="swap-horizontal" size={15} color={colors.textSecondary} />
+                <Text style={[styles.switchRoleText, { color: colors.text }]} numberOfLines={1}>
                   Cambiar a {getDisplayName(partnerRole)}
                 </Text>
               </TouchableOpacity>
@@ -319,10 +291,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   setIsProfileModalOpen(false);
                   void logout();
                 }}
-                style={styles.logoutBtn}
+                style={[styles.logoutBtn, { backgroundColor: colors.surfaceAlt }]}
               >
-                <Ionicons name="lock-closed-outline" size={14} color="#ef4444" />
-                <Text style={styles.logoutText}>Bloquear</Text>
+                <Ionicons name="lock-closed-outline" size={14} color={colors.danger} />
+                <Text style={[styles.logoutText, { color: colors.danger }]}>Bloquear</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -334,154 +306,93 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
 const styles = StyleSheet.create({
   headerContainer: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    paddingHorizontal: SPACING.sm,
+    paddingBottom: SPACING.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
     elevation: 3,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: MIN_TOUCH,
   },
-  leftActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1.2,
+  brand: { flexShrink: 1 },
+  titleWithEmblem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  brandTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    fontFamily: FONTS.serif,
+    letterSpacing: 2,
   },
-  iconButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  brandSubtitle: { ...TYPE_SCALE.caption, marginTop: -2 },
+  rightActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 4,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: RADII.pill,
   },
-  streakText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  brandCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1.3,
-  },
-  titleWithEmblem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brandTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    fontFamily: SERIF_FONT,
-    letterSpacing: 2.2,
-  },
-  brandSubtitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#64748b',
-    letterSpacing: 0.8,
-    marginTop: -1,
-  },
-  rightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 6,
-    flex: 1.2,
-  },
+  streakText: { ...TYPE_SCALE.body, fontWeight: '800' },
   profilePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 14,
+    gap: 8,
+    paddingLeft: 4,
+    paddingRight: 12,
+    height: 40,
+    borderRadius: RADII.pill,
     borderWidth: 1,
-    maxWidth: 118,
+    maxWidth: 140,
   },
-  profileAvatarMini: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    marginRight: 5,
-  },
-  profileDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    marginRight: 4,
-  },
-  profileText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#334155',
-    flexShrink: 1,
-  },
+  profileAvatarMini: { width: 32, height: 32, borderRadius: 16 },
+  profileInitial: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  profileInitialText: { fontSize: 14, fontWeight: '800' },
+  profileText: { ...TYPE_SCALE.body, fontWeight: '700', flexShrink: 1 },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    backgroundColor: 'rgba(15, 15, 20, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: SPACING.sm,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 18,
+    maxWidth: 380,
+    borderRadius: RADII.lg,
+    padding: SPACING.sm + 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 12,
   },
   modalHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    fontFamily: SERIF_FONT,
+    marginBottom: SPACING.xs,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f1f5f9',
+    width: MIN_TOUCH,
+    height: MIN_TOUCH,
+    borderRadius: MIN_TOUCH / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarEditorSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 14,
+    gap: SPACING.sm,
+    padding: SPACING.xs + 4,
+    borderRadius: RADII.md,
+    marginBottom: SPACING.xs,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
   },
   avatarCircleLarge: {
     width: 64,
@@ -490,112 +401,80 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
   },
-  avatarImageLarge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  avatarInitialText: {
-    fontSize: 24,
-    fontWeight: '900',
-  },
+  avatarImageLarge: { width: 60, height: 60, borderRadius: 30 },
+  avatarInitialText: { fontSize: 24, fontWeight: '800' },
   cameraBadge: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
   },
-  avatarHelperTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1e293b',
-  },
-  avatarHelperSub: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 2,
-    lineHeight: 15,
-  },
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#475569',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 5,
-  },
+  inputLabel: { ...TYPE_SCALE.caption, marginBottom: 4, marginTop: 4 },
   nameInput: {
-    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 14,
+    borderRadius: RADII.sm,
+    paddingHorizontal: SPACING.sm,
+    height: MIN_TOUCH,
+    ...TYPE_SCALE.body,
     fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 12,
+  },
+  menuRow: { flexDirection: 'row', gap: SPACING.xs, marginTop: SPACING.xs },
+  menuTile: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: MIN_TOUCH,
+    paddingHorizontal: 12,
+    borderRadius: RADII.sm,
+    borderWidth: 1,
+  },
+  menuTileText: { ...TYPE_SCALE.caption, fontWeight: '700', flexShrink: 1 },
+  darkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: MIN_TOUCH,
+    paddingHorizontal: 12,
+    borderRadius: RADII.sm,
+    borderWidth: 1,
+    marginTop: SPACING.xs,
   },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 11,
-    borderRadius: 14,
-    marginTop: 2,
-  },
-  saveBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#e2e8f0',
-    marginVertical: 14,
-  },
-  bottomProfileActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
+    minHeight: MIN_TOUCH + 4,
+    borderRadius: RADII.md,
+    marginTop: SPACING.sm,
   },
+  saveBtnText: { ...TYPE_SCALE.body, fontWeight: '800' },
+  bottomProfileActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.xs },
   switchRoleBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#f1f5f9',
-    paddingVertical: 10,
-    borderRadius: 12,
+    minHeight: MIN_TOUCH,
+    borderRadius: RADII.sm,
   },
-  switchRoleText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-  },
+  switchRoleText: { ...TYPE_SCALE.caption, fontWeight: '700' },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: '#fef2f2',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    minHeight: MIN_TOUCH,
+    borderRadius: RADII.sm,
   },
-  logoutText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ef4444',
-  },
+  logoutText: { ...TYPE_SCALE.caption, fontWeight: '700' },
 });

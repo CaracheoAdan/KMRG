@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import type { ThemePalette } from '../theme/designSystem';
+import { useTheme as useThemeTokens } from '../contexts/ThemeContext';
 import {
   StyleSheet,
   Text,
@@ -17,7 +19,7 @@ import {
   KeyboardAvoidingView,
   PanResponder,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './ui/Icon';
 import * as ImagePicker from 'expo-image-picker';
 import { SpecialPlace, PlaceCategory, UserProfile } from '../types';
 import {
@@ -95,6 +97,8 @@ interface Props {
 }
 
 export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor }) => {
+  const { colors: themeColors } = useThemeTokens();
+  const styles = React.useMemo(() => makeStyles(themeColors), [themeColors]);
   const [places, setPlaces] = useState<SpecialPlace[]>(DEFAULT_SPECIAL_PLACES);
   const [selectedPlace, setSelectedPlace] = useState<SpecialPlace | null>(
     DEFAULT_SPECIAL_PLACES[0] || null
@@ -1336,7 +1340,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'space-between',
@@ -1376,7 +1380,7 @@ const styles = StyleSheet.create({
   newPinBannerBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
     fontFamily: FONTS.sans,
   },
   searchBoxWrapper: {
@@ -1386,18 +1390,18 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     gap: 7,
   },
   searchInput: {
     flex: 1,
     fontSize: 12.5,
-    color: '#1e293b',
+    color: c.text,
     fontFamily: FONTS.sans,
     paddingVertical: 0,
   },
@@ -1406,12 +1410,12 @@ const styles = StyleSheet.create({
     top: 40,
     left: 0,
     right: 0,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
     shadowRadius: 8,
@@ -1425,16 +1429,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: c.border,
   },
   suggestionTitle: {
     fontSize: 12.5,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   suggestionSub: {
     fontSize: 10.5,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   suggestionAction: {
     fontSize: 10.5,
@@ -1451,14 +1455,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   categoryChipText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#475569',
+    color: c.textSecondary,
     fontFamily: FONTS.sans,
   },
   mapFrame: {
@@ -1466,9 +1470,9 @@ const styles = StyleSheet.create({
     height: INLINE_MAP_HEIGHT,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
@@ -1498,7 +1502,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 14,
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 5,
@@ -1507,13 +1511,13 @@ const styles = StyleSheet.create({
   draftPinActionText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   draftPinDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderWidth: 3.5,
     marginTop: 3,
   },
@@ -1537,7 +1541,7 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -1559,7 +1563,7 @@ const styles = StyleSheet.create({
   pinOrderText: {
     fontSize: 8,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   pinLabelTag: {
     marginTop: 4,
@@ -1571,7 +1575,7 @@ const styles = StyleSheet.create({
   pinLabelText: {
     fontSize: 9.5,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
     fontFamily: FONTS.sans,
   },
   centerCrosshair: {
@@ -1598,7 +1602,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   bottomMapBar: {
     position: 'absolute',
@@ -1617,7 +1621,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 16,
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
@@ -1626,7 +1630,7 @@ const styles = StyleSheet.create({
   pinHereBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   pinCenterBtn: {
     flexDirection: 'row',
@@ -1636,7 +1640,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.95)',
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 5,
@@ -1645,7 +1649,7 @@ const styles = StyleSheet.create({
   pinCenterBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#0f172a',
+    color: c.text,
   },
   mapRightControls: {
     position: 'absolute',
@@ -1661,7 +1665,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.16,
     shadowRadius: 4,
@@ -1669,7 +1673,7 @@ const styles = StyleSheet.create({
   },
   fullScreenContainer: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
   },
   fullScreenHeader: {
     flexDirection: 'row',
@@ -1679,29 +1683,29 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 50 : 24,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: c.border,
   },
   fullScreenTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: FONTS.serif,
   },
   fullScreenSub: {
     fontSize: 12,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   selectedPlaceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 9,
     marginTop: 6,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    shadowColor: '#000',
+    borderColor: c.border,
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -1712,11 +1716,11 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   selectedPlaceMainTouch: {
     flex: 1,
@@ -1742,18 +1746,18 @@ const styles = StyleSheet.create({
   },
   selectedDateText: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: c.textMuted,
     fontFamily: FONTS.sans,
   },
   selectedPlaceTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: FONTS.serif,
   },
   selectedPlaceAddress: {
     fontSize: 11,
-    color: '#64748b',
+    color: c.textSecondary,
     fontFamily: FONTS.sans,
   },
   modalOverlay: {
@@ -1766,7 +1770,7 @@ const styles = StyleSheet.create({
   detailCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 20,
   },
@@ -1792,7 +1796,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1805,17 +1809,17 @@ const styles = StyleSheet.create({
   detailTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: FONTS.serif,
   },
   detailAddress: {
     fontSize: 13,
-    color: '#64748b',
+    color: c.textSecondary,
     marginTop: 3,
   },
   detailNotes: {
     fontSize: 14,
-    color: '#334155',
+    color: c.textSecondary,
     fontStyle: 'italic',
     marginTop: 10,
     lineHeight: 20,
@@ -1838,7 +1842,7 @@ const styles = StyleSheet.create({
   detailPrimaryBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   detailDeleteBtn: {
     width: 44,
@@ -1852,46 +1856,46 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     maxHeight: '90%',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 20,
   },
   addModalTitle: {
     fontSize: 19,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: FONTS.serif,
   },
   addModalSub: {
     fontSize: 12,
-    color: '#64748b',
+    color: c.textSecondary,
     marginTop: 2,
   },
   fieldLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#475569',
+    color: c.textSecondary,
     marginBottom: 6,
     marginTop: 10,
   },
   textInput: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1e293b',
+    color: c.text,
     marginBottom: 8,
   },
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1900,7 +1904,7 @@ const styles = StyleSheet.create({
   dateButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1e293b',
+    color: c.text,
     textTransform: 'capitalize',
   },
   photoPickerBtn: {
@@ -1912,7 +1916,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#cbd5e1',
+    borderColor: c.border,
     marginTop: 8,
   },
   photoPickerBtnText: {
@@ -1931,6 +1935,6 @@ const styles = StyleSheet.create({
   savePlaceBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
 });

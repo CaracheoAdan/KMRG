@@ -692,14 +692,31 @@ export const getHomeState = (): Promise<HomeState> =>
     mergeHomeStates
   );
 
-export const saveHomeState = (sender: UserProfile, state: HomeState): Promise<void> =>
-  saveAndBroadcastState<HomeState>(
+// Fuente única de verdad para el estado de Hoy (racha, mascota, perfiles): los listeners se notifican en cada guardado
+const homeStateListeners = new Set<(s: HomeState) => void>();
+
+export function subscribeHomeState(listener: (s: HomeState) => void): () => void {
+  homeStateListeners.add(listener);
+  return () => {
+    homeStateListeners.delete(listener);
+  };
+}
+
+export function notifyHomeState(state: HomeState): void {
+  const clean = normalizeHomeState(state);
+  homeStateListeners.forEach((l) => l(clean));
+}
+
+export const saveHomeState = async (sender: UserProfile, state: HomeState): Promise<void> => {
+  notifyHomeState(state);
+  await saveAndBroadcastState<HomeState>(
     sender,
     'sync_home_state',
     HOME_STATE_KEY,
     state,
     normalizeHomeState
   );
+};
 
 export const getMoviesState = (): Promise<MoviesAndPlansState> =>
   fetchLatestSyncedState<MoviesAndPlansState>(

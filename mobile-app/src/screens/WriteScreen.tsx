@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
   Text,
@@ -12,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../components/ui/Icon';
+import { PressableScale, EmptyState } from '../components/ui/Kit';
 import { UserProfile, Message } from '../types';
 import { createSupabaseMessage } from '../services/SupabaseService';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -40,7 +42,8 @@ const PRESET_COLORS = [
 ];
 
 export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const { primaryColor } = useTheme();
+  const { colors, isDark, primaryColor } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [profile, setProfile] = useState<UserProfile>('Javier');
   const [activeTab, setActiveTab] = useState<'write' | 'sent'>('write');
   const [content, setContent] = useState('');
@@ -109,8 +112,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const visibleSent = sentLetters.slice(sentPage * PAGE_SIZE, (sentPage + 1) * PAGE_SIZE);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 
       <KeyboardAvoidingView
@@ -124,24 +127,25 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text style={styles.subtitle}>Cartas sorpresa con fecha de apertura</Text>
           </View>
 
-          <View style={styles.tabSwitch}>
-            <TouchableOpacity
+          <View style={[styles.tabSwitch, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderWidth: 1 }]}>
+            <PressableScale
               onPress={() => setActiveTab('write')}
               style={[
                 styles.tabBtn,
                 activeTab === 'write' && { backgroundColor: primaryColor },
               ]}
+              scaleTo={0.96}
             >
               <Text
                 style={[
                   styles.tabBtnText,
-                  activeTab === 'write' && { color: '#ffffff' },
+                  activeTab === 'write' ? { color: colors.primaryOn, fontWeight: '800' } : { color: colors.textSecondary },
                 ]}
               >
                 Escribir
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            </PressableScale>
+            <PressableScale
               onPress={() => {
                 setSentPage(0);
                 setActiveTab('sent');
@@ -150,74 +154,104 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 styles.tabBtn,
                 activeTab === 'sent' && { backgroundColor: primaryColor },
               ]}
+              scaleTo={0.96}
             >
               <Text
                 style={[
                   styles.tabBtnText,
-                  activeTab === 'sent' && { color: '#ffffff' },
+                  activeTab === 'sent' ? { color: colors.primaryOn, fontWeight: '800' } : { color: colors.textSecondary },
                 ]}
               >
                 Enviadas ({sentLetters.length})
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
 
         {activeTab === 'write' ? (
-          <View style={styles.formCard}>
-            <View style={styles.labelRow}>
-              <Text style={styles.inputLabel}>Tu Carta de Amor</Text>
-              <Text style={styles.charCounter}>{content.length} caracteres</Text>
-            </View>
-
-            <TextInput
-              multiline
-              value={content}
-              onChangeText={setContent}
-              placeholder={`Escribe aquí lo que sientes por ${recipientDisplay}...`}
-              placeholderTextColor="#adb5bd"
-              style={[styles.textArea, { borderColor: `${themeColor}40` }]}
-              textAlignVertical="top"
-            />
-
-            {/* Fila Compacta: Fecha + Color */}
-            <View style={styles.optionsRow}>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                style={styles.datePickerCompact}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="calendar" size={16} color={primaryColor} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.dateLabelMini}>APERTURA</Text>
-                  <Text style={styles.datePickerSelectedText} numberOfLines={1}>
-                    {formatDisplayDate(scheduledDate, {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+          <View style={styles.writeViewport}>
+            {/* Hoja de Carta / Papel con Estética Callejera y Cálida */}
+            <View style={[styles.paperSheet, { backgroundColor: colors.paper, borderColor: colors.border }]}>
+              {/* Encabezado decorativo de la carta */}
+              <View style={styles.paperHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="heart" size={14} color={themeColor} />
+                  <Text style={[styles.paperRecipient, { color: colors.textSecondary }]}>
+                    Para {recipientDisplay}
                   </Text>
                 </View>
-              </TouchableOpacity>
+                <Text style={[styles.paperDateStamp, { color: colors.textMuted }]}>
+                  {formatDisplayDate(toLocalDateString(new Date()), { day: 'numeric', month: 'short' })}
+                </Text>
+              </View>
 
-              <View style={styles.colorRow}>
-                {PRESET_COLORS.map((color) => {
-                  const isSelected = themeColor === color.hex;
-                  return (
-                    <TouchableOpacity
-                      key={color.hex}
-                      onPress={() => setThemeColor(color.hex)}
-                      style={[
-                        styles.colorDot,
-                        { backgroundColor: color.hex },
-                        isSelected && styles.colorDotSelected,
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      {isSelected && <Ionicons name="checkmark" size={14} color="#ffffff" />}
-                    </TouchableOpacity>
-                  );
-                })}
+              {/* Área de texto en la hoja */}
+              <TextInput
+                multiline
+                value={content}
+                onChangeText={setContent}
+                placeholder={`Escribe aquí lo que sientes por ${recipientDisplay}...`}
+                placeholderTextColor={colors.textMuted}
+                style={[styles.paperTextInput, { color: colors.text }]}
+                textAlignVertical="top"
+              />
+
+              {/* Pie de la hoja: contador discreto */}
+              <View style={styles.paperFooter}>
+                <Text style={[styles.paperCharCounter, { color: colors.textMuted }]}>
+                  {content.length > 0 ? `${content.length} caracteres` : 'Escribe con el corazón'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Opciones: Fecha de apertura y selector de color con etiqueta clara */}
+            <View style={[styles.envelopeConfigCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.envelopeConfigRow}>
+                {/* Selector de Fecha */}
+                <PressableScale
+                  onPress={() => setShowDatePicker(true)}
+                  style={[styles.datePickerCompact, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                  scaleTo={0.96}
+                >
+                  <Ionicons name="calendar" size={16} color={themeColor} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.dateLabelMini, { color: colors.textMuted }]}>APERTURA</Text>
+                    <Text style={[styles.datePickerSelectedText, { color: colors.text }]} numberOfLines={1}>
+                      {formatDisplayDate(scheduledDate, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                </PressableScale>
+
+                {/* Color del sobre / carta con etiqueta */}
+                <View style={styles.colorPickerContainer}>
+                  <Text style={[styles.colorPickerLabel, { color: colors.textMuted }]}>
+                    Color del sobre / carta
+                  </Text>
+                  <View style={styles.colorRow}>
+                    {PRESET_COLORS.map((color) => {
+                      const isSelected = themeColor === color.hex;
+                      return (
+                        <PressableScale
+                          key={color.hex}
+                          onPress={() => setThemeColor(color.hex)}
+                          style={[
+                            styles.colorDot,
+                            { backgroundColor: color.hex },
+                            isSelected && styles.colorDotSelected,
+                          ]}
+                          scaleTo={0.9}
+                          accessibilityLabel={`Color ${color.label}`}
+                        >
+                          {isSelected && <Ionicons name="checkmark" size={13} color="#ffffff" />}
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -229,7 +263,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               title="Fecha de Desbloqueo"
             />
 
-            <TouchableOpacity
+            <PressableScale
               onPress={() => void handleSubmit()}
               disabled={isSubmitting}
               style={[
@@ -237,7 +271,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 { backgroundColor: themeColor },
                 isSubmitting && { opacity: 0.7 },
               ]}
-              activeOpacity={0.85}
+              scaleTo={0.97}
             >
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#ffffff" />
@@ -247,16 +281,17 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   <Text style={styles.submitButtonText}>Programar con Candado</Text>
                 </>
               )}
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         ) : (
           <View style={styles.sentContainer}>
             <View style={{ flex: 1, justifyContent: 'flex-start', gap: 10 }}>
               {visibleSent.length === 0 ? (
-                <View style={styles.emptyBox}>
-                  <Ionicons name="mail-outline" size={38} color={primaryColor} />
-                  <Text style={styles.emptyText}>Aún no has programado cartas.</Text>
-                </View>
+                <EmptyState
+                  icon="mail-outline"
+                  title="Sin cartas enviadas"
+                  message="Aún no has programado cartas sorpresa. Escribe una para que se abra en una fecha especial."
+                />
               ) : (
                 visibleSent.map((letter) => {
                   const isFuture =
@@ -334,10 +369,10 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#faf9f9',
+    backgroundColor: c.background,
   },
   fixedViewport: {
     flex: 1,
@@ -354,12 +389,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#1e293b',
+    color: c.text,
     fontFamily: SERIF_FONT,
   },
   subtitle: {
     fontSize: 11,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   tabSwitch: {
     flexDirection: 'row',
@@ -376,15 +411,102 @@ const styles = StyleSheet.create({
   tabBtnText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#475569',
+    color: c.textSecondary,
+  },
+  writeViewport: {
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  paperSheet: {
+    backgroundColor: c.paper,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: 16,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 3,
+    minHeight: 220,
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  paperHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: c.border,
+    marginBottom: 8,
+  },
+  paperRecipient: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: SERIF_FONT,
+  },
+  paperDateStamp: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  paperTextInput: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 24,
+    color: c.text,
+    fontFamily: SERIF_FONT,
+    textAlignVertical: 'top',
+    paddingVertical: 4,
+  },
+  paperFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+    marginTop: 6,
+  },
+  paperCharCounter: {
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  envelopeConfigCard: {
+    backgroundColor: c.surface,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  envelopeConfigRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  colorPickerContainer: {
+    alignItems: 'flex-end',
+  },
+  colorPickerLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   formCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 22,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#f1f3f5',
+    borderColor: c.border,
     justifyContent: 'space-between',
   },
   labelRow: {
@@ -400,7 +522,7 @@ const styles = StyleSheet.create({
   },
   charCounter: {
     fontSize: 11,
-    color: '#adb5bd',
+    color: c.textMuted,
   },
   textArea: {
     flex: 1,
@@ -409,7 +531,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     fontSize: 15,
-    color: '#2b2d42',
+    color: c.text,
     fontFamily: SERIF_FONT,
     lineHeight: 22,
     marginBottom: 12,
@@ -436,12 +558,12 @@ const styles = StyleSheet.create({
   dateLabelMini: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#94a3b8',
+    color: c.textMuted,
   },
   datePickerSelectedText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#2b2d42',
+    color: c.text,
     textTransform: 'capitalize',
   },
   colorRow: {
@@ -472,7 +594,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#ffffff',
+    color: c.primaryOn,
   },
   sentContainer: {
     flex: 1,
@@ -486,14 +608,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 13,
-    color: '#64748b',
+    color: c.textSecondary,
   },
   sentCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#f1f3f5',
+    borderColor: c.border,
   },
   sentTopRow: {
     flexDirection: 'row',
@@ -514,7 +636,7 @@ const styles = StyleSheet.create({
   sentDateText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6c757d',
+    color: c.textSecondary,
     textTransform: 'capitalize',
   },
   lockStatusBadge: {
@@ -545,21 +667,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   pageBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   pageIndicator: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
+    color: c.textSecondary,
   },
 });

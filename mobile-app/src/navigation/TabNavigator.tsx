@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { createBottomTabNavigator, BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '../components/ui/Icon';
 import { RootTabParamList } from '../types';
 import { TodayScreen } from '../screens/TodayScreen';
 import { MoviesScreen } from '../screens/MoviesScreen';
@@ -9,6 +9,7 @@ import { WriteScreen } from '../screens/WriteScreen';
 import { GamesScreen } from '../screens/GamesScreen';
 import { MemoriesScreen } from '../screens/MemoriesScreen';
 import { useTheme } from '../contexts/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
@@ -30,15 +31,17 @@ const createAccessibleTabButton = (label: string, hint: string) => {
 };
 
 export const TabNavigator: React.FC = () => {
-  const { primaryColor } = useTheme();
+  const { primaryColor, colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: primaryColor,
-        tabBarInactiveTintColor: '#8d99ae',
-        tabBarStyle: styles.tabBar,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: [styles.tabBar, { backgroundColor: colors.surface, borderTopColor: colors.border, shadowColor: colors.shadow, height: 64 + insets.bottom, paddingBottom: 8 + insets.bottom }],
+        animation: 'shift',
         tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
@@ -139,17 +142,13 @@ export const TabNavigator: React.FC = () => {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f3f5',
-    height: 66,
-    paddingBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 6,
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
   },
   tabBarLabel: {
     fontSize: 11,

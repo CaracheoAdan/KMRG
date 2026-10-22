@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ThemePalette } from '../theme/designSystem';
 import {
   StyleSheet,
   Text,
@@ -7,11 +8,13 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from './ui/Icon';
 import { useTheme, THEME_COLOR_PRESETS } from '../contexts/ThemeContext';
 import { FONTS, COLORS } from '../theme/designSystem';
 
 export const ThemeSelectorModal: React.FC = () => {
+  const { colors: themeColors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(themeColors), [themeColors]);
   const { isThemeModalOpen, closeThemeModal, currentTheme, setThemeById, primaryColor } = useTheme();
 
   return (
@@ -114,7 +117,7 @@ export const ThemeSelectorModal: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
@@ -126,10 +129,10 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 380,
     maxHeight: '85%',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
@@ -208,7 +211,7 @@ const styles = StyleSheet.create({
   },
   previewBadgeText: {
     fontSize: 11,
-    color: '#ffffff',
+    color: c.primaryOn,
     fontWeight: '700',
     fontFamily: FONTS.sans,
   },
@@ -233,7 +236,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   colorItemSelected: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
   },
   colorCircle: {
     width: 28,
@@ -268,7 +271,7 @@ const styles = StyleSheet.create({
   doneBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#ffffff',
+    color: c.primaryOn,
     fontFamily: FONTS.sans,
   },
 });
