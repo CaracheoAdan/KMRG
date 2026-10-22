@@ -772,28 +772,7 @@ export const MoviesScreen: React.FC = () => {
                           <Text style={[styles.movieTitle, { color: colors.text }]} numberOfLines={2}>
                             {movie.title}
                           </Text>
-                          {movie.watched && (movie.ratingKarla || movie.ratingJavier) ? (
-                            <View style={styles.movieRatingPillsRow}>
-                              {movie.ratingKarla && (
-                                <View style={[styles.miniRatingPill, { backgroundColor: '#f3e8ff' }]}>
-                                  <Text style={[styles.miniRatingText, { color: '#9333ea' }]}>
-                                    Karlita: ★ {movie.ratingKarla}
-                                  </Text>
-                                </View>
-                              )}
-                              {movie.ratingJavier && (
-                                <View style={[styles.miniRatingPill, { backgroundColor: '#e0f2fe' }]}>
-                                  <Text style={[styles.miniRatingText, { color: '#0284c7' }]}>
-                                    Javier: ★ {movie.ratingJavier}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          ) : movie.notes ? (
-                            <Text style={[styles.movieNotesInline, { color: colors.textSecondary }]} numberOfLines={2}>
-                              “{movie.notes}”
-                            </Text>
-                          ) : movie.director ? (
+                          {movie.director ? (
                             <Text style={[styles.movieDirectorText, { color: colors.textMuted }]} numberOfLines={1}>
                               Dir. {movie.director}
                             </Text>
@@ -844,6 +823,35 @@ export const MoviesScreen: React.FC = () => {
                           </View>
                         </View>
                       </View>
+
+                      {(movie.watched || movie.notes) && (
+                        <View style={[styles.watchedReviewSection, { borderTopColor: `${colors.border}80` }]}>
+                          {movie.watched && (movie.ratingKarla || movie.ratingJavier) ? (
+                            <View style={styles.movieRatingPillsRow}>
+                              {movie.ratingKarla ? (
+                                <View style={[styles.miniRatingPill, { backgroundColor: '#fdf2f8' }]}>
+                                  <Text style={[styles.miniRatingText, { color: '#db2777' }]}>
+                                    Karlita: ★ {movie.ratingKarla}
+                                  </Text>
+                                </View>
+                              ) : null}
+                              {movie.ratingJavier ? (
+                                <View style={[styles.miniRatingPill, { backgroundColor: '#f0f9ff' }]}>
+                                  <Text style={[styles.miniRatingText, { color: '#0284c7' }]}>
+                                    Javier: ★ {movie.ratingJavier}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          ) : null}
+
+                          {movie.notes ? (
+                            <Text style={[styles.movieNotesInline, { color: colors.textSecondary }]}>
+                              “{movie.notes}”
+                            </Text>
+                          ) : null}
+                        </View>
+                      )}
                     </PressableScale>
                   );
                 })
@@ -1286,22 +1294,29 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   cardsScrollContent: {
     gap: 10,
-    paddingBottom: 24,
-    paddingTop: 2,
+    paddingBottom: 120,
+    paddingTop: 4,
+    paddingHorizontal: 2,
+  },
+  watchedReviewSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    gap: 6,
   },
   movieRatingPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   miniRatingPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   miniRatingText: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '800',
   },
   emptyBox: {

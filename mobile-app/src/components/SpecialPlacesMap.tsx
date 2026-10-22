@@ -547,8 +547,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const wrappedTx = ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
         const left = Math.round(viewportW / 2 + (tx * TILE_SIZE - centerWorld.x));
         const top = Math.round(viewportH / 2 + (ty * TILE_SIZE - centerWorld.y));
-        const sub = ['a', 'b', 'c', 'd'][(Math.abs(tx + ty)) % 4];
-        const url = `https://${sub}.basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}.png`;
+        const sub = ['a', 'b', 'c'][(Math.abs(tx + ty)) % 3];
+        const url = `https://${sub}.tile.openstreetmap.org/${zoom}/${wrappedTx}/${ty}.png`;
 
         tiles.push({
           key: `${zoom}-${tx}-${ty}-${mapStyle}`,
@@ -598,8 +598,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           {tiles.map((t) => (
             <Image
               key={t.key}
-              source={{ uri: t.url, headers: { 'User-Agent': 'KMRG-App/1.0' } }}
-              onError={() => setTileError(true)}
+              source={{ uri: t.url }}
               style={{
                 position: 'absolute',
                 left: t.left,
@@ -832,7 +831,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
         {/* Atribución CARTO / OpenStreetMap */}
         <View pointerEvents="none" style={styles.mapAttributionBox}>
-          <Text style={styles.mapAttributionText}>© OpenStreetMap contributors © CARTO</Text>
+          <Text style={styles.mapAttributionText}>© OpenStreetMap contributors</Text>
         </View>
 
         {tileError && (

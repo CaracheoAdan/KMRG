@@ -433,7 +433,7 @@ export const MemoriesScreen: React.FC = () => {
     );
   };
 
-  // Renderizador de Cartas Paginadas (Cero Scroll)
+  // Renderizador de Cartas Guardadas (Scroll Fluido y Tarjetas Completas Sin Cortes)
   const renderTimelinePaginatedView = () => {
     if (memories.length === 0) {
       return (
@@ -445,14 +445,6 @@ export const MemoriesScreen: React.FC = () => {
       );
     }
 
-    const pageSize = 3;
-    const totalPages = Math.max(1, Math.ceil(memories.length / pageSize));
-    const safePage = Math.min(timelinePage, totalPages - 1);
-    const visibleMemories = memories.slice(
-      safePage * pageSize,
-      safePage * pageSize + pageSize
-    );
-
     return (
       <View style={styles.timelineFixedContainer}>
         <View style={styles.sectionTitleRow}>
@@ -460,14 +452,20 @@ export const MemoriesScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Cartas Guardadas ({memories.length})</Text>
         </View>
 
-        <View style={{ flex: 1, justifyContent: 'flex-start', gap: 8, marginTop: 6 }}>
-          {visibleMemories.map((item, idx) => {
-            const isLast = idx === visibleMemories.length - 1;
+        <ScrollView
+          style={{ flex: 1, marginTop: 6 }}
+          contentContainerStyle={styles.timelineScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {memories.map((item, idx) => {
+            const isLast = idx === memories.length - 1;
             const formattedDate = formatDisplayDate(item.scheduled_date, {
               day: 'numeric',
               month: 'short',
               year: 'numeric',
             });
+            const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
+
             return (
               <View key={item.id} style={styles.timelineRow}>
                 <View style={styles.timelineTrack}>
@@ -479,7 +477,6 @@ export const MemoriesScreen: React.FC = () => {
 
                 <PressableScale
                   onPress={() => {
-                    const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
                     if (isSealed) {
                       Alert.alert(
                         'Carta Sellada con Candado 🔒',
@@ -510,87 +507,49 @@ export const MemoriesScreen: React.FC = () => {
                     )}
                   </View>
 
-                  {(() => {
-                    const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
-                    return (
-                      <View
-                        style={[
-                          styles.memoryCard,
-                          {
-                            backgroundColor: colors.paper,
-                            borderColor: colors.border,
-                            borderLeftColor: item.theme_color || primaryColor,
-                            borderLeftWidth: 4,
-                          },
-                        ]}
-                      >
-                        {isSealed ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-                            <Ionicons name="lock-closed" size={14} color={colors.primary} />
-                            <Text style={[styles.memoryContent, { color: colors.primary, fontWeight: '700', fontStyle: 'italic' }]}>
-                              Sellada con candado hasta el {formattedDate}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text
-                            style={[
-                              styles.memoryContent,
-                              { color: colors.text, fontFamily: SERIF_FONT },
-                            ]}
-                            numberOfLines={3}
-                          >
-                            “{item.content || 'Sin contenido'}”
-                          </Text>
-                        )}
+                  <View
+                    style={[
+                      styles.memoryCard,
+                      {
+                        backgroundColor: colors.paper,
+                        borderColor: colors.border,
+                        borderLeftColor: item.theme_color || primaryColor,
+                        borderLeftWidth: 4,
+                      },
+                    ]}
+                  >
+                    {isSealed ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+                        <Ionicons name="lock-closed" size={14} color={colors.primary} />
+                        <Text style={[styles.memoryContent, { color: colors.primary, fontWeight: '700', fontStyle: 'italic' }]}>
+                          Sellada con candado hasta el {formattedDate}
+                        </Text>
                       </View>
-                    );
-                  })()}
+                    ) : (
+                      <>
+                        <Text
+                          style={[
+                            styles.memoryContent,
+                            { color: colors.text, fontFamily: SERIF_FONT },
+                          ]}
+                          numberOfLines={4}
+                        >
+                          “{item.content || 'Sin contenido'}”
+                        </Text>
+                        <View style={styles.readMoreRow}>
+                          <Ionicons name="mail-open-outline" size={13} color={primaryColor} />
+                          <Text style={[styles.readMoreText, { color: primaryColor }]}>
+                            Toca para leer carta completa
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
                 </PressableScale>
               </View>
             );
           })}
-        </View>
-
-        {totalPages > 1 && (
-          <View style={styles.pagerRow}>
-            <TouchableOpacity
-              disabled={safePage === 0}
-              onPress={() => setTimelinePage((p) => Math.max(0, p - 1))}
-              style={[styles.pagerBtn, safePage === 0 && { opacity: 0.35 }]}
-            >
-              <Ionicons name="chevron-back" size={17} color="#334155" />
-              <Text style={styles.pagerBtnText}>Anterior</Text>
-            </TouchableOpacity>
-
-            <View style={{ alignItems: 'center', gap: 3 }}>
-              <Text style={styles.pagerIndicator}>
-                Página {safePage + 1} de {totalPages}
-              </Text>
-              <View style={styles.pagerDotsRow}>
-                {Array.from({ length: totalPages }).map((_, dotIdx) => (
-                  <View
-                    key={dotIdx}
-                    style={[
-                      styles.pagerDot,
-                      dotIdx === safePage
-                        ? [styles.pagerDotActive, { backgroundColor: primaryColor }]
-                        : { backgroundColor: colors.border },
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-
-            <TouchableOpacity
-              disabled={safePage >= totalPages - 1}
-              onPress={() => setTimelinePage((p) => Math.min(totalPages - 1, p + 1))}
-              style={[styles.pagerBtn, safePage >= totalPages - 1 && { opacity: 0.35 }]}
-            >
-              <Text style={styles.pagerBtnText}>Siguiente</Text>
-              <Ionicons name="chevron-forward" size={17} color="#334155" />
-            </TouchableOpacity>
-          </View>
-        )}
+        </ScrollView>
       </View>
     );
   };
@@ -1379,6 +1338,20 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: c.text,
+  },
+  timelineScrollContent: {
+    paddingBottom: 60,
+    gap: 12,
+  },
+  readMoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  readMoreText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   timelineRow: {
     flexDirection: 'row',
