@@ -9,12 +9,14 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { UserProfile } from '../types';
 import { setCurrentProfile } from '../services/StorageService';
+import { useProfile } from '../contexts/ProfileContext';
 import { FONTS, COLORS } from '../theme/designSystem';
 
 // PIN de acceso privado de pareja
@@ -25,6 +27,7 @@ const LOCKOUT_SECONDS = 30;
 export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfile) => void }> = ({
   onAuthenticated,
 }) => {
+  const { getDisplayName, getAvatarUri } = useProfile();
   const [selectedRole, setSelectedRole] = useState<UserProfile | null>(null);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -118,15 +121,22 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
               ]}
               activeOpacity={0.85}
             >
-              <View style={[styles.heartCircle, { backgroundColor: '#e0f2fe' }]}>
-                <Ionicons
-                  name="heart"
-                  size={48}
-                  color={selectedRole === 'Javier' ? '#0284c7' : '#38bdf8'}
-                />
+              <View style={[styles.heartCircle, { backgroundColor: '#e0f2fe', overflow: 'hidden' }]}>
+                {getAvatarUri('Javier') ? (
+                  <Image
+                    source={{ uri: getAvatarUri('Javier')! }}
+                    style={{ width: '100%', height: '100%', borderRadius: 48 }}
+                  />
+                ) : (
+                  <Ionicons
+                    name="heart"
+                    size={48}
+                    color={selectedRole === 'Javier' ? '#0284c7' : '#38bdf8'}
+                  />
+                )}
               </View>
               <Text style={[styles.roleName, selectedRole === 'Javier' && styles.roleNameActiveBlue]}>
-                Javier
+                {getDisplayName('Javier')}
               </Text>
               <Text style={styles.roleSubtext}>Perfil de Él</Text>
             </TouchableOpacity>
@@ -140,12 +150,19 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
               ]}
               activeOpacity={0.85}
             >
-              <View style={[styles.heartCircle, { backgroundColor: '#f3e8ff' }]}>
-                <Ionicons
-                  name="heart"
-                  size={48}
-                  color={selectedRole === 'Karla' ? '#9333ea' : '#c084fc'}
-                />
+              <View style={[styles.heartCircle, { backgroundColor: '#f3e8ff', overflow: 'hidden' }]}>
+                {getAvatarUri('Karla') ? (
+                  <Image
+                    source={{ uri: getAvatarUri('Karla')! }}
+                    style={{ width: '100%', height: '100%', borderRadius: 48 }}
+                  />
+                ) : (
+                  <Ionicons
+                    name="heart"
+                    size={48}
+                    color={selectedRole === 'Karla' ? '#9333ea' : '#c084fc'}
+                  />
+                )}
               </View>
               <Text
                 style={[
@@ -153,7 +170,7 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
                   selectedRole === 'Karla' && styles.roleNameActivePurple,
                 ]}
               >
-                Karlita
+                {getDisplayName('Karla')}
               </Text>
               <Text style={styles.roleSubtext}>Perfil de Ella</Text>
             </TouchableOpacity>
@@ -165,7 +182,9 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
               <View style={styles.pinHeader}>
                 <Ionicons name="lock-closed" size={18} color="#2b2d42" />
                 <Text style={styles.pinTitle}>
-                  {selectedRole === 'Karla' ? 'Bienvenida, Karlita' : 'Bienvenido, Javier'}
+                  {selectedRole === 'Karla'
+                    ? `Bienvenida, ${getDisplayName('Karla')}`
+                    : `Bienvenido, ${getDisplayName('Javier')}`}
                 </Text>
               </View>
               <Text style={styles.pinSubtitle}>

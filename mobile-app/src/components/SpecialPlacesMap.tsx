@@ -27,12 +27,12 @@ import {
 } from '../services/CoupleSyncService';
 import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
 import { DatePickerModal } from './DatePickerModal';
-import { FONTS, COLORS } from '../theme/designSystem';
+import { FONTS } from '../theme/designSystem';
 import { supabase } from '../config/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const INLINE_MAP_WIDTH = SCREEN_WIDTH - 48;
-const INLINE_MAP_HEIGHT = 390;
+const INLINE_MAP_WIDTH = SCREEN_WIDTH - 36;
+const INLINE_MAP_HEIGHT = Math.min(245, Math.max(190, Math.floor(SCREEN_HEIGHT * 0.29)));
 const TILE_SIZE = 256;
 
 const CATEGORIES: Array<{
@@ -106,6 +106,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
   // Modo interactivo para pinear tocando cualquier calle del mapa real
   const [isPinDropMode, setIsPinDropMode] = useState<boolean>(false);
+  const isPinDropModeRef = useRef<boolean>(false);
+  useEffect(() => {
+    isPinDropModeRef.current = isPinDropMode;
+  }, [isPinDropMode]);
+
   const [draftPinCoords, setDraftPinCoords] = useState<{ lat: number; lon: number } | null>(null);
 
   // Estado de la cámara del mapa real (Centro GPS + Nivel de Zoom 3..18)
@@ -192,7 +197,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   // Autocompletado en vivo mientras escribes una calle, restaurante o ciudad en el buscador del mapa
   useEffect(() => {
     const q = mapSearchQuery.trim();
-    if (q.length < 3) {
+    if (q.length < 2) {
       setMapSearchSuggestions([]);
       setIsSearchingMap(false);
       return;
@@ -203,19 +208,44 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
     const timer = setTimeout(async () => {
       try {
+        // Primero intentamos Photon (OSM rápido y sin bloqueos de CORS/User-Agent) y fallback a Nominatim
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`,
-          {
-            headers: {
-              'Accept-Language': 'es',
-              'User-Agent': 'KMRG-CoupleApp/1.0',
-            },
-          }
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5`
         );
         const data = await res.json();
-        if (!cancelled && Array.isArray(data)) {
+        if (!cancelled && Array.isArray(data?.features) && data.features.length > 0) {
           setMapSearchSuggestions(
-            data.map((item: any) => {
+            data.features.map((f: any) => {
+              const props = f.properties || {};
+              const coords = f.geometry?.coordinates || [-99.1625, 19.4194];
+              const nameParts = [
+                props.name,
+                props.street,
+                props.district || props.city || props.town,
+                props.state,
+                props.country,
+              ].filter(Boolean);
+              return {
+                shortName: props.name || props.street || q,
+                displayName: nameParts.slice(0, 3).join(', ') || q,
+                lon: Number(coords[0]),
+                lat: Number(coords[1]),
+              };
+            })
+          );
+          setIsSearchingMap(false);
+          return;
+        }
+
+        const nomRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=es&q=${encodeURIComponent(
+            q
+          )}`
+        );
+        const nomData = await nomRes.json();
+        if (!cancelled && Array.isArray(nomData)) {
+          setMapSearchSuggestions(
+            nomData.map((item: any) => {
               const parts = String(item.display_name || '').split(',');
               return {
                 displayName: parts.slice(0, 3).join(',').trim(),
@@ -231,7 +261,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       } finally {
         if (!cancelled) setIsSearchingMap(false);
       }
-    }, 350);
+    }, 320);
 
     return () => {
       cancelled = true;
@@ -268,7 +298,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     return Math.round(total * 10) / 10;
   }, [filteredPlaces]);
 
-  // Referencias para el arrastre (Pan) y toque (Tap-to-Pin) sobre el mapa real
+  // Referencias para el arrastre (Pan) y toque (Tap-to-Pin) sobre el lienzo del mapa
   const centerRef = useRef({ lat: centerLat, lon: centerLon, zoom });
   useEffect(() => {
     centerRef.current = { lat: centerLat, lon: centerLon, zoom };
@@ -276,25 +306,30 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
   const dragStartWorldRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Al tocar el mapa real para poner un pin en esa coordenada exacta
-  const handleMapTapAtCoordinates = useCallback(
-    async (lat: number, lon: number) => {
+  // Al confirmar un punto del mapa para abrir el formulario de Nuevo Pin
+  const openAddPlaceModalAtCoordinates = useCallback(
+    async (lat: number, lon: number, prefilledAddress?: string, prefilledTitle?: string) => {
       setDraftPinCoords({ lat, lon });
       setNewLat(lat);
       setNewLon(lon);
       setCenterLat(lat);
       setCenterLon(lon);
+      if (prefilledTitle) {
+        setNewTitle(prefilledTitle);
+      }
+      if (prefilledAddress) {
+        setNewAddress(prefilledAddress);
+        setIsAddModalOpen(true);
+        return;
+      }
 
-      // Geocodificación inversa para obtener el nombre real de la calle/colonia
+      setNewAddress(`${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+      setIsAddModalOpen(true);
+
+      // Geocodificación inversa en segundo plano para autocompletar la calle/colonia real
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`,
-          {
-            headers: {
-              'Accept-Language': 'es',
-              'User-Agent': 'KMRG-CoupleApp/1.0',
-            },
-          }
+          `https://nominatim.openstreetmap.org/reverse?format=json&accept-language=es&lat=${lat}&lon=${lon}&zoom=18`
         );
         const data = await res.json();
         if (data?.display_name) {
@@ -304,25 +339,27 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             .join(',')
             .trim();
           setNewAddress(shortAddr);
-          if (!newTitle.trim() && data?.name) {
-            setNewTitle(String(data.name));
+          if (data?.name) {
+            setNewTitle((prev) => prev.trim() || String(data.name));
           }
-        } else {
-          setNewAddress(`${lat.toFixed(5)}, ${lon.toFixed(5)}`);
         }
       } catch {
-        setNewAddress(`${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+        // Mantiene las coordenadas formateadas si no hay red
       }
-
-      setIsAddModalOpen(true);
     },
-    [newTitle]
+    []
   );
 
-  const createMapPanResponder = (viewportW: number, viewportH: number) =>
+  const openModalRef = useRef(openAddPlaceModalAtCoordinates);
+  useEffect(() => {
+    openModalRef.current = openAddPlaceModalAtCoordinates;
+  }, [openAddPlaceModalAtCoordinates]);
+
+  // Creador de gestos exclusivo para el lienzo de teselas (con pointerEvents="box-only" para coordenadas 100% exactas y sin bloquear botones)
+  const createCanvasPanResponder = (viewportW: number, viewportH: number) =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.hypot(g.dx, g.dy) > 2,
       onPanResponderGrant: () => {
         const { lat, lon, zoom: z } = centerRef.current;
         dragStartWorldRef.current = latLonToWorldPixel(lat, lon, z);
@@ -337,8 +374,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       },
       onPanResponderRelease: (evt, gestureState) => {
         const movedDist = Math.hypot(gestureState.dx, gestureState.dy);
-        // Si fue un toque limpio (no arrastre) y está activo "Modo Pinear" (o toque directo)
-        if (movedDist < 6) {
+        if (movedDist < 8) {
           const { locationX, locationY } = evt.nativeEvent;
           if (typeof locationX === 'number' && typeof locationY === 'number') {
             const { lat, lon, zoom: z } = centerRef.current;
@@ -347,11 +383,10 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             const tapWorldY = centerWorld.y - viewportH / 2 + locationY;
             const tappedCoords = worldPixelToLatLon(tapWorldX, tapWorldY, z);
 
-            if (isPinDropMode) {
+            if (isPinDropModeRef.current) {
               setIsPinDropMode(false);
-              void handleMapTapAtCoordinates(tappedCoords.lat, tappedCoords.lon);
+              void openModalRef.current(tappedCoords.lat, tappedCoords.lon);
             } else {
-              // Mover suavemente el marcador borrador a ese punto
               setDraftPinCoords(tappedCoords);
             }
           }
@@ -360,19 +395,19 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     });
 
   const inlinePanResponder = useMemo(
-    () => createMapPanResponder(INLINE_MAP_WIDTH, INLINE_MAP_HEIGHT),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isPinDropMode, handleMapTapAtCoordinates]
+    () => createCanvasPanResponder(INLINE_MAP_WIDTH, INLINE_MAP_HEIGHT),
+    []
   );
 
+  const fullScreenMapHeight = SCREEN_HEIGHT - 170;
   const fullScreenPanResponder = useMemo(
-    () => createMapPanResponder(SCREEN_WIDTH, SCREEN_HEIGHT - 120),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isPinDropMode, handleMapTapAtCoordinates]
+    () => createCanvasPanResponder(SCREEN_WIDTH, fullScreenMapHeight),
+    [fullScreenMapHeight]
   );
 
   const focusPlaceOnMap = (place: SpecialPlace) => {
     setSelectedPlace(place);
+    setDraftPinCoords(null);
     setCenterLat(place.latitude);
     setCenterLon(place.longitude);
     if (zoom < 13) setZoom(14);
@@ -383,14 +418,9 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     setCenterLon(sug.lon);
     setZoom(16);
     setDraftPinCoords({ lat: sug.lat, lon: sug.lon });
-    setNewLat(sug.lat);
-    setNewLon(sug.lon);
-    setNewAddress(sug.displayName);
-    if (!newTitle.trim()) {
-      setNewTitle(sug.shortName);
-    }
     setMapSearchQuery('');
     setMapSearchSuggestions([]);
+    void openAddPlaceModalAtCoordinates(sug.lat, sug.lon, sug.displayName, sug.shortName);
   };
 
   const handlePickPlacePhoto = async () => {
@@ -404,10 +434,14 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [16, 10],
-        quality: 0.8,
+        quality: 0.5,
+        base64: true,
       });
       if (!res.canceled && res.assets?.length) {
-        setNewImageUri(res.assets[0].uri);
+        const asset = res.assets[0];
+        setNewImageUri(
+          asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri
+        );
       }
     } catch {
       // Ignorar
@@ -506,8 +540,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const top = Math.round(viewportH / 2 + (ty * TILE_SIZE - centerWorld.y));
         const url =
           mapStyle === 'dark'
-            ? `https://basemaps.cartocdn.com/dark_all/${zoom}/${wrappedTx}/${ty}@2x.png`
-            : `https://basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}@2x.png`;
+            ? `https://basemaps.cartocdn.com/dark_all/${zoom}/${wrappedTx}/${ty}.png`
+            : `https://basemaps.cartocdn.com/rastertiles/voyager/${zoom}/${wrappedTx}/${ty}.png`;
 
         tiles.push({
           key: `${zoom}-${tx}-${ty}-${mapStyle}`,
@@ -547,62 +581,76 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             backgroundColor: mapStyle === 'dark' ? '#0f172a' : '#e2e8f0',
           },
         ]}
-        {...panHandlers}
       >
-        {/* 1. Capa de Teselas Reales de Calles, Parques y Ciudades */}
-        {tiles.map((t) => (
-          <Image
-            key={t.key}
-            source={{ uri: t.url }}
-            style={{
-              position: 'absolute',
-              left: t.left,
-              top: t.top,
-              width: TILE_SIZE,
-              height: TILE_SIZE,
-            }}
-            resizeMode="cover"
-          />
-        ))}
+        {/* 1. LIENZO TÁCTIL DE TESELAS (pointerEvents="box-only" evita que las imágenes o botones rompan las coordenadas) */}
+        <View
+          pointerEvents="box-only"
+          style={StyleSheet.absoluteFill}
+          {...panHandlers}
+        >
+          {tiles.map((t) => (
+            <Image
+              key={t.key}
+              source={{ uri: t.url }}
+              style={{
+                position: 'absolute',
+                left: t.left,
+                top: t.top,
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+              }}
+              resizeMode="cover"
+            />
+          ))}
 
-        {/* 2. Líneas de Ruta Conectada entre sus Lugares */}
-        {showRouteLines &&
-          projectedPlaces.map((item, idx) => {
-            if (idx === projectedPlaces.length - 1) return null;
-            const next = projectedPlaces[idx + 1];
-            const dx = next.sx - item.sx;
-            const dy = next.sy - item.sy;
-            const length = Math.sqrt(dx * dx + dy * dy);
-            if (length > viewportW * 2) return null;
-            const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-            const midX = (item.sx + next.sx) / 2;
-            const midY = (item.sy + next.sy) / 2;
+          {/* 2. Líneas de Ruta Conectada entre sus Lugares */}
+          {showRouteLines &&
+            projectedPlaces.map((item, idx) => {
+              if (idx === projectedPlaces.length - 1) return null;
+              const next = projectedPlaces[idx + 1];
+              const dx = next.sx - item.sx;
+              const dy = next.sy - item.sy;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              if (length > viewportW * 2) return null;
+              const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const midX = (item.sx + next.sx) / 2;
+              const midY = (item.sy + next.sy) / 2;
 
-            return (
-              <View
-                key={`route-${item.place.id}-${next.place.id}`}
-                pointerEvents="none"
-                style={[
-                  styles.routeSegment,
-                  {
-                    width: length,
-                    left: midX - length / 2,
-                    top: midY - 1.5,
-                    backgroundColor: primaryColor,
-                    transform: [{ rotate: `${angleDeg}deg` }],
-                  },
-                ]}
-              />
-            );
-          })}
+              return (
+                <View
+                  key={`route-${item.place.id}-${next.place.id}`}
+                  style={[
+                    styles.routeSegment,
+                    {
+                      width: length,
+                      left: midX - length / 2,
+                      top: midY - 1.5,
+                      backgroundColor: primaryColor,
+                      transform: [{ rotate: `${angleDeg}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
 
-        {/* 3. Pin Temporal al tocar una calle o buscar un lugar */}
+          {/* Mira central sutil */}
+          <View style={styles.centerCrosshair}>
+            <Ionicons
+              name="add"
+              size={16}
+              color={mapStyle === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.35)'}
+            />
+          </View>
+        </View>
+
+        {/* 3. Pin Temporal al tocar cualquier calle (Fuera del PanResponder para que el botón siempre responda al toque) */}
         {draftScreenPt &&
           draftScreenPt.sx >= -30 &&
           draftScreenPt.sx <= viewportW + 30 &&
           draftScreenPt.sy >= -30 &&
           draftScreenPt.sy <= viewportH + 30 && (
             <View
+              pointerEvents="box-none"
               style={[
                 styles.draftPinAnchor,
                 { left: draftScreenPt.sx, top: draftScreenPt.sy },
@@ -611,20 +659,20 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
               <TouchableOpacity
                 onPress={() => {
                   if (draftPinCoords) {
-                    void handleMapTapAtCoordinates(draftPinCoords.lat, draftPinCoords.lon);
+                    void openAddPlaceModalAtCoordinates(draftPinCoords.lat, draftPinCoords.lon);
                   }
                 }}
                 style={[styles.draftPinActionBubble, { backgroundColor: primaryColor }]}
-                activeOpacity={0.9}
+                activeOpacity={0.85}
               >
-                <Ionicons name="add-circle" size={14} color="#ffffff" />
-                <Text style={styles.draftPinActionText}>Pinear aquí</Text>
+                <Ionicons name="add-circle" size={15} color="#ffffff" />
+                <Text style={styles.draftPinActionText}>Guardar Pin Aquí</Text>
               </TouchableOpacity>
               <View style={[styles.draftPinDot, { borderColor: primaryColor }]} />
             </View>
           )}
 
-        {/* 4. Pines Reales de sus Lugares Especiales */}
+        {/* 4. Pines Reales de sus Lugares Especiales (Fuera del PanResponder para que puedan tocarse libremente) */}
         {projectedPlaces.map(({ place, index, sx, sy }) => {
           if (sx < -50 || sx > viewportW + 50 || sy < -50 || sy > viewportH + 50) {
             return null;
@@ -636,6 +684,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           return (
             <View
               key={place.id}
+              pointerEvents="box-none"
               style={[
                 styles.pinAnchor,
                 {
@@ -660,9 +709,15 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
               )}
 
               <TouchableOpacity
-                onPress={() => setSelectedPlace(place)}
+                onPress={() => {
+                  if (isSelected) {
+                    setDetailModalPlace(place);
+                  } else {
+                    setSelectedPlace(place);
+                  }
+                }}
                 onLongPress={() => setDetailModalPlace(place)}
-                activeOpacity={0.9}
+                activeOpacity={0.88}
                 style={[
                   styles.pinBubble,
                   {
@@ -678,7 +733,9 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                 </View>
               </TouchableOpacity>
 
-              <View
+              <TouchableOpacity
+                onPress={() => setDetailModalPlace(place)}
+                activeOpacity={0.85}
                 style={[
                   styles.pinLabelTag,
                   {
@@ -691,19 +748,10 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                 <Text style={styles.pinLabelText} numberOfLines={1}>
                   {place.title}
                 </Text>
-              </View>
+              </TouchableOpacity>
             </View>
           );
         })}
-
-        {/* Mira central sutil para ubicar con precisión */}
-        <View pointerEvents="none" style={styles.centerCrosshair}>
-          <Ionicons
-            name="add"
-            size={16}
-            color={mapStyle === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.35)'}
-          />
-        </View>
 
         {/* Banner de Modo Pinear Activo */}
         {isPinDropMode && (
@@ -719,7 +767,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         )}
 
         {/* Botón inferior central para Pinear en el punto actual o activar toque */}
-        <View style={styles.bottomMapBar}>
+        <View pointerEvents="box-none" style={styles.bottomMapBar}>
           <TouchableOpacity
             onPress={() => setIsPinDropMode((prev) => !prev)}
             style={[
@@ -732,12 +780,12 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           >
             <Ionicons name="location" size={15} color="#ffffff" />
             <Text style={styles.pinHereBtnText}>
-              {isPinDropMode ? 'Toca el mapa para pinear' : 'Tocar mapa para pinear'}
+              {isPinDropMode ? 'Toca el mapa ahora...' : 'Tocar mapa para pinear'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => void handleMapTapAtCoordinates(centerLat, centerLon)}
+            onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
             style={styles.pinCenterBtn}
             activeOpacity={0.88}
           >
@@ -747,7 +795,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         </View>
 
         {/* Controles Flotantes Derechos (Zoom, Estilo, Ruta, Pantalla Completa) */}
-        <View style={styles.mapRightControls}>
+        <View pointerEvents="box-none" style={styles.mapRightControls}>
           <TouchableOpacity
             onPress={() => setIsFullScreen(!isFullScreen)}
             style={styles.mapControlBtn}
@@ -802,58 +850,80 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     );
   };
 
+  const currentPlaceIndex = useMemo(() => {
+    if (!selectedPlace) return 0;
+    const idx = filteredPlaces.findIndex((p) => p.id === selectedPlace.id);
+    return idx >= 0 ? idx : 0;
+  }, [filteredPlaces, selectedPlace]);
+
+  const stepPlace = (delta: number) => {
+    if (filteredPlaces.length === 0) return;
+    const nextIdx = (currentPlaceIndex + delta + filteredPlaces.length) % filteredPlaces.length;
+    focusPlaceOnMap(filteredPlaces[nextIdx]);
+  };
+
   return (
     <View style={styles.container}>
-      {/* ================= BANNER SUPERIOR DE ESTADÍSTICAS DEL MAPA ================= */}
+      {/* ================= BARRA SUPERIOR COMPACTA: STATS + NUEVO PIN + PANTALLA COMPLETA ================= */}
       <View style={styles.statsBanner}>
-        <View style={styles.statCol}>
-          <Text style={[styles.statVal, { color: primaryColor }]}>{places.length}</Text>
-          <Text style={styles.statLabel}>Lugares Pineados</Text>
+        <View style={styles.statRowLeft}>
+          <View style={[styles.statPill, { backgroundColor: `${primaryColor}14` }]}>
+            <Ionicons name="location" size={12} color={primaryColor} />
+            <Text style={[styles.statPillText, { color: primaryColor }]}>
+              {places.length} Pines · {totalRouteKm} km
+            </Text>
+          </View>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statCol}>
-          <Text style={[styles.statVal, { color: primaryColor }]}>{totalRouteKm} km</Text>
-          <Text style={styles.statLabel}>Ruta de Amor</Text>
+
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <TouchableOpacity
+            onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
+            style={[styles.newPinBannerBtn, { backgroundColor: '#0f172a' }]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add-circle-outline" size={13} color="#ffffff" />
+            <Text style={styles.newPinBannerBtnText}>Nuevo Pin</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setIsFullScreen(true)}
+            style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="expand-outline" size={13} color="#ffffff" />
+            <Text style={styles.newPinBannerBtnText}>Mapa Completo</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.statDivider} />
-        <TouchableOpacity
-          onPress={() => setIsFullScreen(true)}
-          style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="expand-outline" size={15} color="#ffffff" />
-          <Text style={styles.newPinBannerBtnText}>Mapa Completo</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ================= BUSCADOR EN VIVO DE CALLES, RESTAURANTES Y CIUDADES ================= */}
       <View style={styles.searchBoxWrapper}>
         <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={17} color={primaryColor} />
+          <Ionicons name="search-outline" size={16} color={primaryColor} />
           <TextInput
             value={mapSearchQuery}
             onChangeText={setMapSearchQuery}
-            placeholder="Busca un restaurante, parque, calle o ciudad..."
+            placeholder="Busca calle, restaurante o ciudad para pinear..."
             placeholderTextColor="#94a3b8"
             style={styles.searchInput}
           />
           {isSearchingMap && <ActivityIndicator size="small" color={primaryColor} />}
           {mapSearchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setMapSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color="#94a3b8" />
+              <Ionicons name="close-circle" size={17} color="#94a3b8" />
             </TouchableOpacity>
           )}
         </View>
 
         {mapSearchSuggestions.length > 0 && (
           <View style={styles.suggestionsDropdown}>
-            {mapSearchSuggestions.map((sug, i) => (
+            {mapSearchSuggestions.slice(0, 4).map((sug, i) => (
               <TouchableOpacity
                 key={`${sug.lat}-${sug.lon}-${i}`}
                 onPress={() => handleSelectSearchSuggestion(sug)}
                 style={styles.suggestionRow}
               >
-                <Ionicons name="location-outline" size={16} color={primaryColor} />
+                <Ionicons name="location-outline" size={15} color={primaryColor} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.suggestionTitle} numberOfLines={1}>
                     {sug.shortName}
@@ -872,197 +942,128 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       </View>
 
       {/* ================= FILTRO DE CATEGORÍAS ================= */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoriesScroll}
-      >
-        <TouchableOpacity
-          onPress={() => setActiveCategory('Todos')}
-          style={[
-            styles.categoryChip,
-            activeCategory === 'Todos' && {
-              backgroundColor: primaryColor,
-              borderColor: primaryColor,
-            },
-          ]}
+      <View style={{ height: 34, marginBottom: 6 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesScroll}
         >
-          <Ionicons
-            name="compass"
-            size={13}
-            color={activeCategory === 'Todos' ? '#ffffff' : '#64748b'}
-          />
-          <Text
+          <TouchableOpacity
+            onPress={() => setActiveCategory('Todos')}
             style={[
-              styles.categoryChipText,
-              activeCategory === 'Todos' && { color: '#ffffff', fontWeight: '700' },
+              styles.categoryChip,
+              activeCategory === 'Todos' && {
+                backgroundColor: primaryColor,
+                borderColor: primaryColor,
+              },
             ]}
           >
-            Todos ({places.length})
-          </Text>
-        </TouchableOpacity>
-
-        {CATEGORIES.map((cat) => {
-          const isSelected = activeCategory === cat.id;
-          return (
-            <TouchableOpacity
-              key={cat.id}
-              onPress={() => setActiveCategory(cat.id)}
+            <Ionicons
+              name="compass"
+              size={12}
+              color={activeCategory === 'Todos' ? '#ffffff' : '#64748b'}
+            />
+            <Text
               style={[
-                styles.categoryChip,
-                isSelected && { backgroundColor: cat.color, borderColor: cat.color },
+                styles.categoryChipText,
+                activeCategory === 'Todos' && { color: '#ffffff', fontWeight: '700' },
               ]}
             >
-              <Ionicons
-                name={cat.icon}
-                size={13}
-                color={isSelected ? '#ffffff' : cat.color}
-              />
-              <Text
+              Todos ({places.length})
+            </Text>
+          </TouchableOpacity>
+
+          {CATEGORIES.map((cat) => {
+            const isSelected = activeCategory === cat.id;
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                onPress={() => setActiveCategory(cat.id)}
                 style={[
-                  styles.categoryChipText,
-                  isSelected && { color: '#ffffff', fontWeight: '700' },
+                  styles.categoryChip,
+                  isSelected && { backgroundColor: cat.color, borderColor: cat.color },
                 ]}
               >
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+                <Ionicons
+                  name={cat.icon}
+                  size={12}
+                  color={isSelected ? '#ffffff' : cat.color}
+                />
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    isSelected && { color: '#ffffff', fontWeight: '700' },
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {/* ================= MAPA REAL INTERACTIVO (ARRASTRAR, ZOOM Y TOCAR PARA PINEAR) ================= */}
       <View style={styles.mapFrame}>
         {renderRealTileMap(INLINE_MAP_WIDTH, INLINE_MAP_HEIGHT, inlinePanResponder.panHandlers)}
       </View>
 
-      {/* ================= TARJETA DEL LUGAR SELECCIONADO ================= */}
+      {/* ================= TARJETA COMPACTA DEL LUGAR SELECCIONADO CON NAVEGACIÓN DE PINES ================= */}
       {selectedPlace && (
-        <TouchableOpacity
-          onPress={() => setDetailModalPlace(selectedPlace)}
-          activeOpacity={0.9}
+        <View
           style={[
             styles.selectedPlaceCard,
             { borderLeftColor: primaryColor, borderLeftWidth: 4 },
           ]}
         >
-          {selectedPlace.imageUri ? (
-            <Image
-              source={{ uri: selectedPlace.imageUri }}
-              style={styles.selectedPlaceThumb}
-            />
-          ) : (
-            <View
-              style={[
-                styles.selectedPlaceIconBox,
-                { backgroundColor: `${primaryColor}15` },
-              ]}
-            >
-              <Ionicons name="location" size={26} color={primaryColor} />
-            </View>
-          )}
+          <TouchableOpacity
+            onPress={() => stepPlace(-1)}
+            style={styles.stepPinBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-back" size={16} color="#475569" />
+          </TouchableOpacity>
 
-          <View style={styles.selectedPlaceInfo}>
+          <TouchableOpacity
+            style={styles.selectedPlaceMainTouch}
+            onPress={() => setDetailModalPlace(selectedPlace)}
+            activeOpacity={0.88}
+          >
             <View style={styles.selectedTopRow}>
               <Text style={[styles.selectedCategoryTag, { color: primaryColor }]}>
-                {selectedPlace.category.toUpperCase()}
+                #{currentPlaceIndex + 1}/{filteredPlaces.length} · {selectedPlace.category.toUpperCase()}
               </Text>
               <Text style={styles.selectedDateText}>
                 {formatDisplayDate(selectedPlace.date, {
                   day: 'numeric',
                   month: 'short',
-                  year: 'numeric',
                 })}
               </Text>
             </View>
-
             <Text style={styles.selectedPlaceTitle} numberOfLines={1}>
               {selectedPlace.title}
             </Text>
             <Text style={styles.selectedPlaceAddress} numberOfLines={1}>
               {selectedPlace.address}
             </Text>
-            <Text style={styles.selectedPlaceNotes} numberOfLines={2}>
-              “{selectedPlace.notes}”
-            </Text>
+          </TouchableOpacity>
 
-            <View style={styles.selectedPlaceActions}>
-              <TouchableOpacity
-                onPress={() => handleOpenExternalMaps(selectedPlace)}
-                style={[styles.gpsButton, { backgroundColor: `${primaryColor}15` }]}
-              >
-                <Ionicons name="navigate" size={12} color={primaryColor} />
-                <Text style={[styles.gpsButtonText, { color: primaryColor }]}>
-                  Abrir en Google Maps
-                </Text>
-              </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleOpenExternalMaps(selectedPlace)}
+            style={[styles.gpsMiniBtn, { backgroundColor: `${primaryColor}15` }]}
+          >
+            <Ionicons name="navigate" size={14} color={primaryColor} />
+          </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => handleDeletePlace(selectedPlace)}
-                style={styles.deletePlaceIconBtn}
-              >
-                <Ionicons name="trash-outline" size={15} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => stepPlace(1)}
+            style={styles.stepPinBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-forward" size={16} color="#475569" />
+          </TouchableOpacity>
+        </View>
       )}
-
-      {/* ================= CARRUSEL INFERIOR DE LUGARES GUARDADOS ================= */}
-      <View style={styles.placesListHeader}>
-        <Text style={styles.placesListTitle}>Bitácora de Lugares ({filteredPlaces.length})</Text>
-        <Text style={styles.placesListHint}>Toca uno para viajar a su ubicación</Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.placesCarousel}
-      >
-        {filteredPlaces.map((p, index) => {
-          const isSelected = selectedPlace?.id === p.id;
-          return (
-            <TouchableOpacity
-              key={p.id}
-              onPress={() => focusPlaceOnMap(p)}
-              style={[
-                styles.carouselCard,
-                isSelected && { borderColor: primaryColor, borderWidth: 1.5 },
-              ]}
-              activeOpacity={0.85}
-            >
-              <View style={styles.carouselTopRow}>
-                <View
-                  style={[
-                    styles.carouselIndexBadge,
-                    { backgroundColor: isSelected ? primaryColor : '#e2e8f0' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.carouselIndexText,
-                      { color: isSelected ? '#ffffff' : '#475569' },
-                    ]}
-                  >
-                    #{index + 1}
-                  </Text>
-                </View>
-                <View style={styles.starsRow}>
-                  {Array.from({ length: p.rating || 5 }).map((_, sIdx) => (
-                    <Ionicons key={sIdx} name="star" size={10} color="#f59e0b" />
-                  ))}
-                </View>
-              </View>
-              <Text style={styles.carouselCardTitle} numberOfLines={1}>
-                {p.title}
-              </Text>
-              <Text style={styles.carouselCardSub} numberOfLines={1}>
-                {p.address}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
 
       {/* ================= MODAL DE MAPA EN PANTALLA COMPLETA ================= */}
       <Modal
@@ -1072,10 +1073,10 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       >
         <View style={styles.fullScreenContainer}>
           <View style={styles.fullScreenHeader}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.fullScreenTitle}>Nuestro Mapa en Vivo</Text>
               <Text style={styles.fullScreenSub}>
-                Arrastra el mapa o toca cualquier calle para agregar un pin
+                Arrastra el mapa, busca una dirección o toca cualquier calle para pinear
               </Text>
             </View>
             <TouchableOpacity
@@ -1085,9 +1086,54 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
               <Ionicons name="close" size={22} color="#1e293b" />
             </TouchableOpacity>
           </View>
+
+          {/* Buscador dentro del Mapa de Pantalla Completa */}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 8, zIndex: 80 }}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search-outline" size={16} color={primaryColor} />
+              <TextInput
+                value={mapSearchQuery}
+                onChangeText={setMapSearchQuery}
+                placeholder="Buscar restaurante, calle o ciudad..."
+                placeholderTextColor="#94a3b8"
+                style={styles.searchInput}
+              />
+              {isSearchingMap && <ActivityIndicator size="small" color={primaryColor} />}
+              {mapSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setMapSearchQuery('')}>
+                  <Ionicons name="close-circle" size={17} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
+            </View>
+            {mapSearchSuggestions.length > 0 && (
+              <View style={[styles.suggestionsDropdown, { top: 46, left: 16, right: 16 }]}>
+                {mapSearchSuggestions.slice(0, 4).map((sug, i) => (
+                  <TouchableOpacity
+                    key={`fs-${sug.lat}-${sug.lon}-${i}`}
+                    onPress={() => handleSelectSearchSuggestion(sug)}
+                    style={styles.suggestionRow}
+                  >
+                    <Ionicons name="location-outline" size={15} color={primaryColor} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.suggestionTitle} numberOfLines={1}>
+                        {sug.shortName}
+                      </Text>
+                      <Text style={styles.suggestionSub} numberOfLines={1}>
+                        {sug.displayName}
+                      </Text>
+                    </View>
+                    <Text style={[styles.suggestionAction, { color: primaryColor }]}>
+                      Ir y Pinear
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
           {renderRealTileMap(
             SCREEN_WIDTH,
-            SCREEN_HEIGHT - 110,
+            fullScreenMapHeight,
             fullScreenPanResponder.panHandlers
           )}
         </View>
@@ -1292,128 +1338,125 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    flex: 1,
+    justifyContent: 'space-between',
   },
   statsBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    borderColor: COLORS.border,
-    marginBottom: 12,
+    marginBottom: 6,
   },
-  statCol: {
+  statRowLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  statVal: {
-    fontSize: 18,
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  statPillText: {
+    fontSize: 11.5,
     fontWeight: '800',
     fontFamily: FONTS.sans,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    fontFamily: FONTS.sans,
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: '#e2e8f0',
   },
   newPinBannerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 14,
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   newPinBannerBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#ffffff',
     fontFamily: FONTS.sans,
   },
   searchBoxWrapper: {
-    marginBottom: 12,
+    marginBottom: 6,
     zIndex: 50,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    gap: 8,
+    gap: 7,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12.5,
     color: '#1e293b',
     fontFamily: FONTS.sans,
     paddingVertical: 0,
   },
   suggestionsDropdown: {
-    marginTop: 6,
+    position: 'absolute',
+    top: 40,
+    left: 0,
+    right: 0,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.14,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 8,
+    zIndex: 99,
   },
   suggestionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   suggestionTitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#1e293b',
   },
   suggestionSub: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748b',
   },
   suggestionAction: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
   },
   categoriesScroll: {
-    gap: 8,
-    paddingBottom: 12,
+    gap: 6,
+    alignItems: 'center',
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   categoryChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#475569',
     fontFamily: FONTS.sans,
@@ -1421,15 +1464,15 @@ const styles = StyleSheet.create({
   mapFrame: {
     width: '100%',
     height: INLINE_MAP_HEIGHT,
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: '#cbd5e1',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
   realMapViewport: {
     position: 'relative',
@@ -1445,14 +1488,14 @@ const styles = StyleSheet.create({
   draftPinAnchor: {
     position: 'absolute',
     alignItems: 'center',
-    transform: [{ translateX: -55 }, { translateY: -44 }],
+    transform: [{ translateX: -62 }, { translateY: -44 }],
     zIndex: 45,
   },
   draftPinActionBubble: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 14,
     shadowColor: '#000',
@@ -1634,7 +1677,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 50 : 24,
-    paddingBottom: 14,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
@@ -1650,151 +1693,67 @@ const styles = StyleSheet.create({
   },
   selectedPlaceCard: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 14,
-    marginTop: 14,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#f1f5f9',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-    gap: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    gap: 8,
   },
-  selectedPlaceThumb: {
-    width: 78,
-    height: 78,
+  stepPinBtn: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
-  },
-  selectedPlaceIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
+    backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  selectedPlaceInfo: {
+  selectedPlaceMainTouch: {
     flex: 1,
+  },
+  gpsMiniBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   selectedTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   selectedCategoryTag: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     fontFamily: FONTS.sans,
   },
   selectedDateText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#94a3b8',
     fontFamily: FONTS.sans,
   },
   selectedPlaceTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1e293b',
     fontFamily: FONTS.serif,
   },
   selectedPlaceAddress: {
-    fontSize: 12,
-    color: '#64748b',
-    fontFamily: FONTS.sans,
-    marginTop: 1,
-  },
-  selectedPlaceNotes: {
-    fontSize: 12,
-    color: '#475569',
-    fontStyle: 'italic',
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  selectedPlaceActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  gpsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-  },
-  gpsButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: FONTS.sans,
-  },
-  deletePlaceIconBtn: {
-    padding: 4,
-  },
-  placesListHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  placesListTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1e293b',
-    fontFamily: FONTS.sans,
-  },
-  placesListHint: {
-    fontSize: 11,
-    color: '#94a3b8',
-    fontFamily: FONTS.sans,
-  },
-  placesCarousel: {
-    gap: 10,
-    paddingBottom: 6,
-  },
-  carouselCard: {
-    width: 165,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  carouselTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  carouselIndexBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  carouselIndexText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  starsRow: {
-    flexDirection: 'row',
-    gap: 1,
-  },
-  carouselCardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1e293b',
-    fontFamily: FONTS.sans,
-  },
-  carouselCardSub: {
     fontSize: 11,
     color: '#64748b',
-    marginTop: 2,
     fontFamily: FONTS.sans,
   },
   modalOverlay: {

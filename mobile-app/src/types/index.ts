@@ -28,6 +28,22 @@ export interface Interaction {
 
 export type UserProfile = 'Javier' | 'Karla';
 
+export interface PartnerProfileInfo {
+  id: UserProfile;
+  displayName: string;
+  avatarUri?: string | null;
+}
+
+export interface CouplePetState {
+  name: string;
+  happiness: number; // 0..100
+  xp: number; // 0..100
+  level: number;
+  heartsFedTotal: number;
+  lastFedAt: string; // ISO string
+  lastFedBy?: UserProfile;
+}
+
 export type RootTabParamList = {
   Hoy: undefined;
   Cine: undefined;
@@ -117,6 +133,11 @@ export interface HomeState {
   loveReasons: LoveReason[];
   voiceNotes?: VoiceNoteData[];
   timeCapsules?: TimeCapsuleItem[];
+  couplePet?: CouplePetState;
+  partnerProfiles?: {
+    Karla: PartnerProfileInfo;
+    Javier: PartnerProfileInfo;
+  };
 }
 
 export interface MovieItem {

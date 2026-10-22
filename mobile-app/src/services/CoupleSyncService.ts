@@ -123,6 +123,25 @@ export const DEFAULT_HOME_STATE: HomeState = {
       createdAt: new Date().toISOString(),
     },
   ],
+  couplePet: {
+    name: 'Pochito',
+    happiness: 85,
+    xp: 40,
+    level: 1,
+    heartsFedTotal: 2,
+    lastFedAt: new Date().toISOString(),
+    lastFedBy: 'Javier',
+  },
+  partnerProfiles: {
+    Karla: {
+      id: 'Karla',
+      displayName: 'Karlita',
+    },
+    Javier: {
+      id: 'Javier',
+      displayName: 'Javier',
+    },
+  },
 };
 
 export const DEFAULT_MOVIES_STATE: MoviesAndPlansState = {
@@ -213,6 +232,66 @@ export interface ChessPiece {
   color: 'w' | 'b'; // 'w' = Karlita, 'b' = Javier
 }
 
+export interface BattleshipShip {
+  id: string;
+  name: string;
+  size: number;
+  orientation: 'H' | 'V';
+  cells: number[]; // Índices 0..99 en cuadrícula naval oficial 10x10
+}
+
+export const BATTLESHIP_FLEET_TEMPLATE: Array<{ id: string; name: string; size: number }> = [
+  { id: 'carrier', name: 'Portaaviones', size: 5 },
+  { id: 'battleship', name: 'Acorazado', size: 4 },
+  { id: 'cruiser', name: 'Crucero', size: 3 },
+  { id: 'submarine', name: 'Submarino', size: 3 },
+  { id: 'destroyer', name: 'Destructor', size: 2 },
+];
+
+export const createRandomBattleshipFleet = (): BattleshipShip[] => {
+  const occupied = new Set<number>();
+  const fleet: BattleshipShip[] = [];
+
+  for (const spec of BATTLESHIP_FLEET_TEMPLATE) {
+    let placed = false;
+    let attempts = 0;
+    while (!placed && attempts < 300) {
+      attempts++;
+      const horizontal = Math.random() < 0.5;
+      const maxR = horizontal ? 10 : 10 - spec.size + 1;
+      const maxC = horizontal ? 10 - spec.size + 1 : 10;
+      const r = Math.floor(Math.random() * maxR);
+      const c = Math.floor(Math.random() * maxC);
+
+      const candidate: number[] = [];
+      let collision = false;
+      for (let i = 0; i < spec.size; i++) {
+        const nr = horizontal ? r : r + i;
+        const nc = horizontal ? c + i : c;
+        const idx = nr * 10 + nc;
+        if (occupied.has(idx)) {
+          collision = true;
+          break;
+        }
+        candidate.push(idx);
+      }
+
+      if (!collision) {
+        candidate.forEach((idx) => occupied.add(idx));
+        fleet.push({
+          id: spec.id,
+          name: spec.name,
+          size: spec.size,
+          orientation: horizontal ? 'H' : 'V',
+          cells: candidate,
+        });
+        placed = true;
+      }
+    }
+  }
+  return fleet;
+};
+
 export interface GamesState {
   leaderboard: {
     pointsKarla: number;
@@ -253,6 +332,26 @@ export interface GamesState {
     capturedByB: string[];
     lastMove: { from: [number, number]; to: [number, number] } | null;
     winner: 'w' | 'b' | null;
+    winsKarla: number;
+    winsJavier: number;
+  };
+  battleship: {
+    phase: 'idle' | 'invited' | 'setup' | 'battle' | 'finished';
+    invitedBy: UserProfile | null;
+    readyKarla: boolean;
+    readyJavier: boolean;
+    fleetKarla: BattleshipShip[];
+    fleetJavier: BattleshipShip[];
+    shotsByKarla: number[]; // Disparos de Karlita hacia el mar 10x10 de Javier
+    shotsByJavier: number[]; // Disparos de Javier hacia el mar 10x10 de Karlita
+    turn: UserProfile;
+    lastShot: {
+      shooter: UserProfile;
+      cell: number;
+      hit: boolean;
+      sunkShipName?: string;
+    } | null;
+    winner: UserProfile | null;
     winsKarla: number;
     winsJavier: number;
   };
@@ -328,6 +427,21 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     winsKarla: 0,
     winsJavier: 0,
   },
+  battleship: {
+    phase: 'idle',
+    invitedBy: null,
+    readyKarla: false,
+    readyJavier: false,
+    fleetKarla: createRandomBattleshipFleet(),
+    fleetJavier: createRandomBattleshipFleet(),
+    shotsByKarla: [],
+    shotsByJavier: [],
+    turn: 'Karla',
+    lastShot: null,
+    winner: null,
+    winsKarla: 0,
+    winsJavier: 0,
+  },
 };
 
 function normalizeHomeState(state: HomeState): HomeState {
@@ -359,6 +473,25 @@ function normalizeHomeState(state: HomeState): HomeState {
     timeCapsules: Array.isArray(state.timeCapsules)
       ? state.timeCapsules
       : DEFAULT_HOME_STATE.timeCapsules,
+    couplePet: {
+      ...DEFAULT_HOME_STATE.couplePet!,
+      ...(state.couplePet || {}),
+      name: sanitizeInput(state.couplePet?.name || 'Pochito', 24) || 'Pochito',
+    },
+    partnerProfiles: {
+      Karla: {
+        id: 'Karla',
+        displayName:
+          sanitizeInput(state.partnerProfiles?.Karla?.displayName || 'Karlita', 24) || 'Karlita',
+        avatarUri: state.partnerProfiles?.Karla?.avatarUri || null,
+      },
+      Javier: {
+        id: 'Javier',
+        displayName:
+          sanitizeInput(state.partnerProfiles?.Javier?.displayName || 'Javier', 24) || 'Javier',
+        avatarUri: state.partnerProfiles?.Javier?.avatarUri || null,
+      },
+    },
   };
 }
 
@@ -433,6 +566,29 @@ function normalizeGamesState(state: GamesState): GamesState {
     chess: {
       ...DEFAULT_GAMES_STATE.chess,
       ...(state.chess || {}),
+    },
+    battleship: {
+      ...DEFAULT_GAMES_STATE.battleship,
+      ...(state.battleship || {}),
+      phase: state.battleship?.phase || 'idle',
+      fleetKarla:
+        Array.isArray(state.battleship?.fleetKarla) &&
+        state.battleship.fleetKarla.length === 5 &&
+        state.battleship.fleetKarla[0]?.size === 5
+          ? state.battleship.fleetKarla
+          : DEFAULT_GAMES_STATE.battleship.fleetKarla,
+      fleetJavier:
+        Array.isArray(state.battleship?.fleetJavier) &&
+        state.battleship.fleetJavier.length === 5 &&
+        state.battleship.fleetJavier[0]?.size === 5
+          ? state.battleship.fleetJavier
+          : DEFAULT_GAMES_STATE.battleship.fleetJavier,
+      shotsByKarla: Array.isArray(state.battleship?.shotsByKarla)
+        ? state.battleship.shotsByKarla
+        : [],
+      shotsByJavier: Array.isArray(state.battleship?.shotsByJavier)
+        ? state.battleship.shotsByJavier
+        : [],
     },
   };
 }

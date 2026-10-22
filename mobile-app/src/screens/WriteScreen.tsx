@@ -5,7 +5,6 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Platform,
@@ -33,22 +32,24 @@ const SERIF_FONT = Platform.select({
 });
 
 const PRESET_COLORS = [
-  { hex: '#e63946', label: 'Rojo Pasión' },
-  { hex: '#9333ea', label: 'Morado Karlita' },
-  { hex: '#0284c7', label: 'Azul Javier' },
-  { hex: '#2a9d8f', label: 'Verde Esperanza' },
-  { hex: '#f4a261', label: 'Cálido Atardecer' },
+  { hex: '#e63946', label: 'Rojo' },
+  { hex: '#9333ea', label: 'Morado' },
+  { hex: '#0284c7', label: 'Azul' },
+  { hex: '#2a9d8f', label: 'Verde' },
+  { hex: '#f4a261', label: 'Cálido' },
 ];
 
 export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { primaryColor } = useTheme();
   const [profile, setProfile] = useState<UserProfile>('Javier');
+  const [activeTab, setActiveTab] = useState<'write' | 'sent'>('write');
   const [content, setContent] = useState('');
   const [scheduledDate, setScheduledDate] = useState(() => toLocalDateString(new Date()));
   const [themeColor, setThemeColor] = useState(primaryColor);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [sentLetters, setSentLetters] = useState<Message[]>([]);
+  const [sentPage, setSentPage] = useState(0);
 
   useEffect(() => {
     getCurrentProfile().then((p) => {
@@ -60,7 +61,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   }, []);
 
   const recipient: UserProfile = profile === 'Javier' ? 'Karla' : 'Javier';
-  const recipientDisplay = profile === 'Javier' ? 'Karlita (mi amor)' : 'Javier (mi vida)';
+  const recipientDisplay = profile === 'Javier' ? 'Karlita' : 'Javier';
 
   const handleSubmit = async () => {
     if (!content.trim()) {
@@ -80,8 +81,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
       if (result.success) {
         Alert.alert(
-          '💌 Carta Enviada',
-          `Tu carta quedó guardada con candado y se desbloqueará para ${recipientDisplay} el ${scheduledDate}.`,
+          'Carta Programada',
+          `Tu carta quedó guardada con candado y se abrirá para ${recipientDisplay} el ${scheduledDate}.`,
           [
             {
               text: 'Aceptar',
@@ -94,77 +95,131 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           ]
         );
       } else {
-        Alert.alert('Aviso', result.error || 'No se pudo enviar la carta. Revisa tu conexión.');
+        Alert.alert('Aviso', result.error || 'No se pudo enviar la carta.');
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Ocurrió un error inesperado al guardar la carta.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const PAGE_SIZE = 3;
+  const totalPages = Math.max(1, Math.ceil(sentLetters.length / PAGE_SIZE));
+  const visibleSent = sentLetters.slice(sentPage * PAGE_SIZE, (sentPage + 1) * PAGE_SIZE);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-
-      {/* Encabezado Superior con Branding KMRG */}
       <AppHeader />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        style={styles.fixedViewport}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Cabecera */}
-          <View style={styles.header}>
-            <View style={[styles.iconCircle, { backgroundColor: `${primaryColor}18` }]}>
-              <Ionicons name="pencil" size={20} color={primaryColor} />
-            </View>
-            <Text style={styles.title}>Escribir para {recipientDisplay}</Text>
-            <Text style={styles.subtitle}>
-              Sorprende a tu pareja con un mensaje que se abrirá en su fecha especial
-            </Text>
+        {/* Cabecera Compacta + Selector de Vista */}
+        <View style={styles.topRow}>
+          <View>
+            <Text style={styles.title}>Para {recipientDisplay}</Text>
+            <Text style={styles.subtitle}>Cartas sorpresa con fecha de apertura</Text>
           </View>
 
-          {/* Formulario */}
+          <View style={styles.tabSwitch}>
+            <TouchableOpacity
+              onPress={() => setActiveTab('write')}
+              style={[
+                styles.tabBtn,
+                activeTab === 'write' && { backgroundColor: primaryColor },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  activeTab === 'write' && { color: '#ffffff' },
+                ]}
+              >
+                Escribir
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setSentPage(0);
+                setActiveTab('sent');
+              }}
+              style={[
+                styles.tabBtn,
+                activeTab === 'sent' && { backgroundColor: primaryColor },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  activeTab === 'sent' && { color: '#ffffff' },
+                ]}
+              >
+                Enviadas ({sentLetters.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {activeTab === 'write' ? (
           <View style={styles.formCard}>
-            <Text style={styles.inputLabel}>Tu Carta de Amor</Text>
+            <View style={styles.labelRow}>
+              <Text style={styles.inputLabel}>Tu Carta de Amor</Text>
+              <Text style={styles.charCounter}>{content.length} caracteres</Text>
+            </View>
+
             <TextInput
               multiline
-              numberOfLines={6}
               value={content}
               onChangeText={setContent}
-              placeholder={`Escribe aquí lo que sientes por ${recipient === 'Karla' ? 'Karlita' : 'Javier'}...`}
+              placeholder={`Escribe aquí lo que sientes por ${recipientDisplay}...`}
               placeholderTextColor="#adb5bd"
               style={[styles.textArea, { borderColor: `${themeColor}40` }]}
               textAlignVertical="top"
             />
-            <Text style={styles.charCounter}>{content.length} caracteres</Text>
 
-            <Text style={styles.inputLabel}>Fecha de Desbloqueo</Text>
-            <TouchableOpacity
-              onPress={() => setShowDatePicker(true)}
-              style={styles.datePickerInputButton}
-              activeOpacity={0.8}
-            >
-              <View style={styles.datePickerInputLeft}>
-                <View style={[styles.datePickerIconCircle, { backgroundColor: `${primaryColor}18` }]}>
-                  <Ionicons name="calendar" size={18} color={primaryColor} />
-                </View>
-                <View>
-                  <Text style={styles.datePickerSelectedText}>
+            {/* Fila Compacta: Fecha + Color */}
+            <View style={styles.optionsRow}>
+              <TouchableOpacity
+                onPress={() => setShowDatePicker(true)}
+                style={styles.datePickerCompact}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar" size={16} color={primaryColor} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dateLabelMini}>APERTURA</Text>
+                  <Text style={styles.datePickerSelectedText} numberOfLines={1}>
                     {formatDisplayDate(scheduledDate, {
-                      weekday: 'short',
                       day: 'numeric',
-                      month: 'long',
+                      month: 'short',
                       year: 'numeric',
                     })}
                   </Text>
-                  <Text style={styles.datePickerHint}>Toca para elegir fecha en el calendario</Text>
                 </View>
+              </TouchableOpacity>
+
+              <View style={styles.colorRow}>
+                {PRESET_COLORS.map((color) => {
+                  const isSelected = themeColor === color.hex;
+                  return (
+                    <TouchableOpacity
+                      key={color.hex}
+                      onPress={() => setThemeColor(color.hex)}
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: color.hex },
+                        isSelected && styles.colorDotSelected,
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      {isSelected && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#adb5bd" />
-            </TouchableOpacity>
+            </View>
 
             <DatePickerModal
               visible={showDatePicker}
@@ -174,46 +229,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               title="Fecha de Desbloqueo"
             />
 
-            <Text style={styles.inputLabel}>Color Temático</Text>
-            <View style={styles.colorRow}>
-              {PRESET_COLORS.map((color) => {
-                const isSelected = themeColor === color.hex;
-                return (
-                  <TouchableOpacity
-                    key={color.hex}
-                    onPress={() => setThemeColor(color.hex)}
-                    style={[
-                      styles.colorDot,
-                      { backgroundColor: color.hex },
-                      isSelected && styles.colorDotSelected,
-                    ]}
-                    activeOpacity={0.8}
-                  >
-                    {isSelected && <Ionicons name="checkmark" size={16} color="#ffffff" />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {content.trim().length > 0 && (
-              <View
-                style={[
-                  styles.previewBox,
-                  {
-                    backgroundColor: `${themeColor}15`,
-                    borderColor: `${themeColor}35`,
-                  },
-                ]}
-              >
-                <Text style={[styles.previewBadge, { color: themeColor }]}>
-                  ASÍ LO LEERÁ {recipient.toUpperCase()}
-                </Text>
-                <Text style={styles.previewText}>“{content.trim()}”</Text>
-              </View>
-            )}
-
             <TouchableOpacity
-              onPress={handleSubmit}
+              onPress={() => void handleSubmit()}
               disabled={isSubmitting}
               style={[
                 styles.submitButton,
@@ -226,53 +243,92 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <>
-                  <Ionicons name="send" size={16} color="#ffffff" />
-                  <Text style={styles.submitButtonText}>Programar con Candado 🔒</Text>
+                  <Ionicons name="lock-closed" size={16} color="#ffffff" />
+                  <Text style={styles.submitButtonText}>Programar con Candado</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
-
-          {/* Cartas que ya has programado para tu pareja */}
-          {sentLetters.length > 0 && (
-            <View style={styles.sentSection}>
-              <View style={styles.sentHeaderRow}>
-                <Ionicons name="lock-closed-outline" size={16} color="#6c757d" />
-                <Text style={styles.sentTitle}>Cartas que le has preparado</Text>
-              </View>
-              {sentLetters.map((letter) => {
-                const isFuture = toLocalDateString(letter.scheduled_date) > toLocalDateString(new Date());
-                return (
-                  <View key={letter.id} style={styles.sentCard}>
-                    <View style={styles.sentTopRow}>
-                      <View style={styles.badgeWithDot}>
+        ) : (
+          <View style={styles.sentContainer}>
+            <View style={{ flex: 1, justifyContent: 'flex-start', gap: 10 }}>
+              {visibleSent.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="mail-outline" size={38} color={primaryColor} />
+                  <Text style={styles.emptyText}>Aún no has programado cartas.</Text>
+                </View>
+              ) : (
+                visibleSent.map((letter) => {
+                  const isFuture =
+                    toLocalDateString(letter.scheduled_date) > toLocalDateString(new Date());
+                  return (
+                    <View key={letter.id} style={styles.sentCard}>
+                      <View style={styles.sentTopRow}>
+                        <View style={styles.badgeWithDot}>
+                          <View
+                            style={[styles.colorIndicator, { backgroundColor: letter.theme_color }]}
+                          />
+                          <Text style={styles.sentDateText}>
+                            {formatDisplayDate(letter.scheduled_date)}
+                          </Text>
+                        </View>
                         <View
-                          style={[styles.colorIndicator, { backgroundColor: letter.theme_color }]}
-                        />
-                        <Text style={styles.sentDateText}>
-                          {formatDisplayDate(letter.scheduled_date)}
-                        </Text>
+                          style={[
+                            styles.lockStatusBadge,
+                            {
+                              backgroundColor: isFuture ? `${primaryColor}15` : '#e6f4ea',
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={isFuture ? 'lock-closed' : 'checkmark-circle'}
+                            size={12}
+                            color={isFuture ? primaryColor : '#2a9d8f'}
+                          />
+                          <Text
+                            style={[
+                              styles.lockStatusText,
+                              { color: isFuture ? primaryColor : '#2a9d8f' },
+                            ]}
+                          >
+                            {isFuture ? 'Con candado' : 'Abierta'}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={[styles.lockStatusBadge, isFuture ? [styles.lockFuture, { backgroundColor: `${primaryColor}15` }] : styles.lockOpened]}>
-                        <Ionicons
-                          name={isFuture ? 'lock-closed' : 'checkmark-circle'}
-                          size={12}
-                          color={isFuture ? primaryColor : '#2a9d8f'}
-                        />
-                        <Text style={[styles.lockStatusText, { color: isFuture ? primaryColor : '#2a9d8f' }]}>
-                          {isFuture ? 'Con candado' : 'Abierta'}
-                        </Text>
-                      </View>
+                      <Text style={styles.sentSnippet} numberOfLines={2}>
+                        “{letter.content}”
+                      </Text>
                     </View>
-                    <Text style={styles.sentSnippet} numberOfLines={2}>
-                      “{letter.content}”
-                    </Text>
-                  </View>
-                );
-              })}
+                  );
+                })
+              )}
             </View>
-          )}
-        </ScrollView>
+
+            {totalPages > 1 && (
+              <View style={styles.paginationRow}>
+                <TouchableOpacity
+                  disabled={sentPage === 0}
+                  onPress={() => setSentPage((p) => Math.max(0, p - 1))}
+                  style={[styles.pageBtn, sentPage === 0 && { opacity: 0.4 }]}
+                >
+                  <Ionicons name="chevron-back" size={16} color="#1e293b" />
+                  <Text style={styles.pageBtnText}>Anterior</Text>
+                </TouchableOpacity>
+                <Text style={styles.pageIndicator}>
+                  Página {sentPage + 1} de {totalPages}
+                </Text>
+                <TouchableOpacity
+                  disabled={sentPage >= totalPages - 1}
+                  onPress={() => setSentPage((p) => Math.min(totalPages - 1, p + 1))}
+                  style={[styles.pageBtn, sentPage >= totalPages - 1 && { opacity: 0.4 }]}
+                >
+                  <Text style={styles.pageBtnText}>Siguiente</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#1e293b" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -283,199 +339,159 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#faf9f9',
   },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 40,
+  fixedViewport: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    justifyContent: 'space-between',
   },
-  header: {
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff0f3',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 10,
   },
   title: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
     color: '#1e293b',
     fontFamily: SERIF_FONT,
-    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748b',
-    textAlign: 'center',
-    marginTop: 2,
-    maxWidth: 300,
+  },
+  tabSwitch: {
+    flexDirection: 'row',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 3,
+    gap: 4,
+  },
+  tabBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  tabBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
   },
   formCard: {
+    flex: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#f1f3f5',
+    justifyContent: 'space-between',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   inputLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#495057',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  textArea: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 15,
-    color: '#2b2d42',
-    fontFamily: SERIF_FONT,
-    lineHeight: 22,
-    minHeight: 120,
   },
   charCounter: {
     fontSize: 11,
     color: '#adb5bd',
-    textAlign: 'right',
-    marginTop: 4,
   },
-  textInput: {
+  textArea: {
+    flex: 1,
     backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
+    borderRadius: 16,
+    padding: 14,
+    fontSize: 15,
     color: '#2b2d42',
+    fontFamily: SERIF_FONT,
+    lineHeight: 22,
+    marginBottom: 12,
   },
-  datePickerInputButton: {
+  optionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  datePickerCompact: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#f8f9fa',
     borderWidth: 1,
     borderColor: '#e9ecef',
     borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  datePickerInputLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  datePickerIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff0f3',
-    justifyContent: 'center',
-    alignItems: 'center',
+  dateLabelMini: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#94a3b8',
   },
   datePickerSelectedText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#2b2d42',
     textTransform: 'capitalize',
-  },
-  datePickerHint: {
-    fontSize: 11,
-    color: '#adb5bd',
-    marginTop: 2,
   },
   colorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: 6,
   },
   colorDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   colorDotSelected: {
-    transform: [{ scale: 1.15 }],
-    borderWidth: 3,
+    transform: [{ scale: 1.12 }],
+    borderWidth: 2,
     borderColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  previewBox: {
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    marginVertical: 14,
-    alignItems: 'center',
-  },
-  previewBadge: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 6,
-  },
-  previewText: {
-    fontSize: 16,
-    color: '#2b2d42',
-    textAlign: 'center',
-    fontFamily: SERIF_FONT,
-    lineHeight: 24,
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 16,
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
   },
   submitButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: '#ffffff',
   },
-  sentSection: {
-    marginTop: 28,
+  sentContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
-  sentHeaderRow: {
-    flexDirection: 'row',
+  emptyBox: {
+    flex: 1,
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 12,
+    justifyContent: 'center',
+    gap: 8,
   },
-  sentTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#495057',
+  emptyText: {
+    fontSize: 13,
+    color: '#64748b',
   },
   sentCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 14,
-    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#f1f3f5',
   },
@@ -509,12 +525,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 10,
   },
-  lockFuture: {
-    backgroundColor: '#fff0f3',
-  },
-  lockOpened: {
-    backgroundColor: '#e6f4ea',
-  },
   lockStatusText: {
     fontSize: 11,
     fontWeight: '700',
@@ -524,5 +534,32 @@ const styles = StyleSheet.create({
     color: '#495057',
     fontFamily: SERIF_FONT,
     lineHeight: 18,
+  },
+  paginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  pageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  pageBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  pageIndicator: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
   },
 });

@@ -9,7 +9,6 @@ import {
   Modal,
   Alert,
   Platform,
-  RefreshControl,
   KeyboardAvoidingView,
   Image,
   ActivityIndicator,
@@ -46,8 +45,7 @@ const GENRES = [
   'Ciencia Ficción',
 ];
 
-type SubTab = 'movies' | 'bucket' | 'roulette';
-type MovieFilter = 'pending' | 'watched';
+type SubTab = 'pending' | 'watched' | 'bucket' | 'roulette';
 
 export const MoviesScreen: React.FC = () => {
   const { profile } = useProfile();
@@ -55,11 +53,13 @@ export const MoviesScreen: React.FC = () => {
   const currentProfile = profile || 'Karla';
 
   const [state, setState] = useState<MoviesAndPlansState>(DEFAULT_MOVIES_STATE);
-  const [subTab, setSubTab] = useState<SubTab>('movies');
-  const [movieFilter, setMovieFilter] = useState<MovieFilter>('pending');
-  const [refreshing, setRefreshing] = useState(false);
+  const [subTab, setSubTab] = useState<SubTab>('pending');
 
-  // Entrada Rápida de Película en pantalla
+  // Paginación para evitar el scroll vertical
+  const [moviePage, setMoviePage] = useState(0);
+  const [bucketPage, setBucketPage] = useState(0);
+
+  // Entrada Rápida de Película con autocompletado en vivo mientras escribes
   const [quickTitle, setQuickTitle] = useState('');
   const [quickGenre, setQuickGenre] = useState(GENRES[0]);
   const [catalogResults, setCatalogResults] = useState<
@@ -74,19 +74,11 @@ export const MoviesScreen: React.FC = () => {
   >([]);
   const [isSearchingCatalog, setIsSearchingCatalog] = useState(false);
 
-  // Modal agregar película detallado
-  const [isAddMovieOpen, setIsAddMovieOpen] = useState(false);
-  const [newMovieTitle, setNewMovieTitle] = useState('');
-  const [newMovieGenre, setNewMovieGenre] = useState(GENRES[0]);
-
   // Modal calificar / ver detalle de película
   const [selectedMovie, setSelectedMovie] = useState<MovieItem | null>(null);
   const [tempRatingJavier, setTempRatingJavier] = useState<number>(5);
   const [tempRatingKarla, setTempRatingKarla] = useState<number>(5);
   const [tempNotes, setTempNotes] = useState('');
-
-  // Ruleta de película aleatoria
-  const [pickedRandomMovie, setPickedRandomMovie] = useState<MovieItem | null>(null);
 
   // Nuevo sueño en Bucket List
   const [newBucketTitle, setNewBucketTitle] = useState('');
@@ -96,11 +88,9 @@ export const MoviesScreen: React.FC = () => {
   const [selectedFoodResult, setSelectedFoodResult] = useState<string | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
 
-  const loadData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
+  const loadData = useCallback(async () => {
     const loaded = await getMoviesState();
     setState(loaded);
-    if (isRefresh) setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -131,7 +121,7 @@ export const MoviesScreen: React.FC = () => {
 
   // --- Autocompletado en vivo mientras escribes el nombre de la película ---
   useEffect(() => {
-    const q = (isAddMovieOpen ? newMovieTitle : quickTitle).trim();
+    const q = quickTitle.trim();
     if (q.length < 2) {
       setCatalogResults([]);
       setIsSearchingCatalog(false);
@@ -165,13 +155,13 @@ export const MoviesScreen: React.FC = () => {
       } finally {
         if (!cancelled) setIsSearchingCatalog(false);
       }
-    }, 320);
+    }, 300);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [quickTitle, newMovieTitle, isAddMovieOpen, quickGenre]);
+  }, [quickTitle, quickGenre]);
 
   const handleSelectCatalogMovie = async (found: {
     title: string;
@@ -200,16 +190,14 @@ export const MoviesScreen: React.FC = () => {
 
     await updateAndSync(nextState);
     setQuickTitle('');
-    setNewMovieTitle('');
     setCatalogResults([]);
-    setIsAddMovieOpen(false);
-    setMovieFilter('pending');
+    setMoviePage(0);
+    setSubTab('pending');
   };
 
-  // --- Funciones para Agregar Película ---
   const handleQuickAddMovie = async () => {
     if (!quickTitle.trim()) {
-      Alert.alert('Título requerido', 'Por favor escribe el nombre de la película o serie.');
+      Alert.alert('Título requerido', 'Escribe el nombre de la película o serie.');
       return;
     }
 
@@ -228,34 +216,9 @@ export const MoviesScreen: React.FC = () => {
 
     await updateAndSync(nextState);
     setQuickTitle('');
-    setMovieFilter('pending');
-    Alert.alert('Película agregada', `"${item.title}" quedó anotada en su lista por ver.`);
-  };
-
-  const handleModalAddMovie = async () => {
-    if (!newMovieTitle.trim()) {
-      Alert.alert('Título requerido', 'Por favor escribe el nombre de la película o serie.');
-      return;
-    }
-
-    const item: MovieItem = {
-      id: `mov-${Date.now()}`,
-      title: newMovieTitle.trim(),
-      genre: newMovieGenre,
-      addedBy: currentProfile,
-      watched: false,
-    };
-
-    const nextState: MoviesAndPlansState = {
-      ...state,
-      movies: [item, ...state.movies],
-    };
-
-    await updateAndSync(nextState);
-    setNewMovieTitle('');
-    setIsAddMovieOpen(false);
-    setMovieFilter('pending');
-    Alert.alert('Película agregada', `"${item.title}" quedó guardada en su lista por ver.`);
+    setCatalogResults([]);
+    setMoviePage(0);
+    setSubTab('pending');
   };
 
   const openRateModal = (movie: MovieItem) => {
@@ -283,13 +246,14 @@ export const MoviesScreen: React.FC = () => {
 
     await updateAndSync({ ...state, movies: updatedMovies });
     setSelectedMovie(null);
-    setMovieFilter('watched');
+    setMoviePage(0);
+    setSubTab('watched');
   };
 
   const handleRemoveMovieReview = (movie: MovieItem) => {
     Alert.alert(
       '¿Borrar reseña?',
-      `¿Deseas quitar la calificación y notas de "${movie.title}"? La película volverá a su lista de "Por Ver".`,
+      `¿Deseas quitar la calificación y notas de "${movie.title}"? Volverá a "Por Ver".`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -310,8 +274,8 @@ export const MoviesScreen: React.FC = () => {
             );
             await updateAndSync({ ...state, movies: updatedMovies });
             setSelectedMovie(null);
-            setMovieFilter('pending');
-            Alert.alert('Reseña eliminada', `"${movie.title}" volvió a la lista de "Por Ver".`);
+            setMoviePage(0);
+            setSubTab('pending');
           },
         },
       ]
@@ -341,19 +305,26 @@ export const MoviesScreen: React.FC = () => {
     const pending = state.movies.filter((m) => !m.watched);
     if (pending.length === 0) {
       Alert.alert(
-        '¡No hay películas pendientes!',
-        'Agreguen películas a su lista de "Por Ver" para girar la ruleta.'
+        'No hay películas pendientes',
+        'Agreguen películas a su lista de "Por Ver" para elegir una al azar.'
       );
       return;
     }
-    const randomIndex = Math.floor(Math.random() * pending.length);
-    setPickedRandomMovie(pending[randomIndex]);
+    const picked = pending[Math.floor(Math.random() * pending.length)];
+    Alert.alert(
+      'Película Elegida al Azar',
+      `Hoy toca ver: "${picked.title}" (${picked.genre})`,
+      [
+        { text: 'Cerrar', style: 'cancel' },
+        { text: 'Calificar ahora', onPress: () => openRateModal(picked) },
+      ]
+    );
   };
 
-  // --- Funciones de Planes / Bucket List ---
+  // --- Funciones para Bucket List ---
   const handleAddBucketItem = async () => {
     if (!newBucketTitle.trim()) return;
-    const newItem: BucketItem = {
+    const item: BucketItem = {
       id: `b-${Date.now()}`,
       title: newBucketTitle.trim(),
       completed: false,
@@ -361,39 +332,46 @@ export const MoviesScreen: React.FC = () => {
     };
     await updateAndSync({
       ...state,
-      bucketList: [newItem, ...state.bucketList],
+      bucketList: [item, ...state.bucketList],
     });
     setNewBucketTitle('');
+    setBucketPage(0);
   };
 
   const handleToggleBucketItem = async (id: string) => {
-    const updated = state.bucketList.map((item) =>
-      item.id === id
+    const updated = state.bucketList.map((b) =>
+      b.id === id
         ? {
-            ...item,
-            completed: !item.completed,
-            completedDate: !item.completed ? toLocalDateString(new Date()) : undefined,
+            ...b,
+            completed: !b.completed,
+            completedDate: !b.completed ? toLocalDateString(new Date()) : undefined,
           }
-        : item
+        : b
     );
     await updateAndSync({ ...state, bucketList: updated });
   };
 
   const handleDeleteBucketItem = async (id: string) => {
-    const updated = state.bucketList.filter((item) => item.id !== id);
-    await updateAndSync({ ...state, bucketList: updated });
+    await updateAndSync({
+      ...state,
+      bucketList: state.bucketList.filter((b) => b.id !== id),
+    });
   };
 
-  // --- Funciones de Ruleta de Comida / Citas ---
+  // --- Funciones para Ruleta de Comida ---
   const handleSpinFoodWheel = () => {
-    if (state.foodOptions.length === 0) return;
+    if (state.foodOptions.length === 0 || isSpinning) return;
     setIsSpinning(true);
-    setSelectedFoodResult(null);
-    setTimeout(() => {
-      const idx = Math.floor(Math.random() * state.foodOptions.length);
-      setSelectedFoodResult(state.foodOptions[idx]);
-      setIsSpinning(false);
-    }, 600);
+    let count = 0;
+    const interval = setInterval(() => {
+      const rand = state.foodOptions[Math.floor(Math.random() * state.foodOptions.length)];
+      setSelectedFoodResult(rand);
+      count++;
+      if (count >= 12) {
+        clearInterval(interval);
+        setIsSpinning(false);
+      }
+    }, 90);
   };
 
   const handleAddFoodOption = async () => {
@@ -416,135 +394,90 @@ export const MoviesScreen: React.FC = () => {
   const watchedMovies = state.movies.filter((m) => m.watched);
   const completedBucketCount = state.bucketList.filter((b) => b.completed).length;
 
+  const activeMovieList = subTab === 'watched' ? watchedMovies : pendingMovies;
+  const MOVIES_PER_PAGE = 3;
+  const totalMoviePages = Math.max(1, Math.ceil(activeMovieList.length / MOVIES_PER_PAGE));
+  const safeMoviePage = Math.min(moviePage, totalMoviePages - 1);
+  const visibleMovies = activeMovieList.slice(
+    safeMoviePage * MOVIES_PER_PAGE,
+    (safeMoviePage + 1) * MOVIES_PER_PAGE
+  );
+
+  const BUCKET_PER_PAGE = 4;
+  const totalBucketPages = Math.max(1, Math.ceil(state.bucketList.length / BUCKET_PER_PAGE));
+  const safeBucketPage = Math.min(bucketPage, totalBucketPages - 1);
+  const visibleBuckets = state.bucketList.slice(
+    safeBucketPage * BUCKET_PER_PAGE,
+    (safeBucketPage + 1) * BUCKET_PER_PAGE
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-
-      {/* Encabezado Superior con Branding KMRG */}
       <AppHeader />
 
-      {/* Título de la Sección */}
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.screenTitle}>Cine y Planes</Text>
-          <Text style={styles.screenSubtitle}>
-            Películas por ver, ya vistas y planes juntos
-          </Text>
+      {/* Contenedor Fijo SIN Scroll Vertical */}
+      <View style={styles.fixedViewport}>
+        {/* Selector de 4 Sub-Pestañas Compactas */}
+        <View style={styles.tabsContainer}>
+          {[
+            { id: 'pending', label: `Por Ver (${pendingMovies.length})`, icon: 'film-outline' },
+            { id: 'watched', label: `Vistas (${watchedMovies.length})`, icon: 'star-outline' },
+            {
+              id: 'bucket',
+              label: `Sueños (${completedBucketCount}/${state.bucketList.length})`,
+              icon: 'sparkles-outline',
+            },
+            { id: 'roulette', label: 'Comida', icon: 'restaurant-outline' },
+          ].map((t) => {
+            const active = subTab === t.id;
+            return (
+              <TouchableOpacity
+                key={t.id}
+                onPress={() => {
+                  setMoviePage(0);
+                  setBucketPage(0);
+                  setSubTab(t.id as SubTab);
+                }}
+                style={[
+                  styles.tabBtn,
+                  active && { backgroundColor: primaryColor },
+                ]}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={t.icon as any}
+                  size={13}
+                  color={active ? '#ffffff' : '#64748b'}
+                />
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    active && { color: '#ffffff', fontWeight: '800' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-        {subTab === 'movies' && (
-          <TouchableOpacity
-            onPress={() => setIsAddMovieOpen(true)}
-            style={[styles.addMovieHeaderBtn, { backgroundColor: primaryColor }]}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add" size={18} color="#ffffff" />
-            <Text style={styles.addMovieHeaderBtnText}>Agregar</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
-      {/* Selector de Sub-pestañas */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          onPress={() => setSubTab('movies')}
-          style={[
-            styles.tabBtn,
-            subTab === 'movies' && { backgroundColor: `${primaryColor}18` },
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="film"
-            size={16}
-            color={subTab === 'movies' ? primaryColor : '#64748b'}
-          />
-          <Text
-            style={[
-              styles.tabBtnText,
-              subTab === 'movies' && { color: primaryColor, fontWeight: '800' },
-            ]}
-          >
-            Películas ({state.movies.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setSubTab('bucket')}
-          style={[
-            styles.tabBtn,
-            subTab === 'bucket' && { backgroundColor: `${primaryColor}18` },
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="sparkles"
-            size={16}
-            color={subTab === 'bucket' ? primaryColor : '#64748b'}
-          />
-          <Text
-            style={[
-              styles.tabBtnText,
-              subTab === 'bucket' && { color: primaryColor, fontWeight: '800' },
-            ]}
-          >
-            Sueños ({completedBucketCount}/{state.bucketList.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setSubTab('roulette')}
-          style={[
-            styles.tabBtn,
-            subTab === 'roulette' && { backgroundColor: `${primaryColor}18` },
-          ]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="restaurant"
-            size={16}
-            color={subTab === 'roulette' ? primaryColor : '#64748b'}
-          />
-          <Text
-            style={[
-              styles.tabBtnText,
-              subTab === 'roulette' && { color: primaryColor, fontWeight: '800' },
-            ]}
-          >
-            ¿Qué comemos?
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadData(true)}
-            tintColor={primaryColor}
-          />
-        }
-      >
-        {/* ================= VISTA 1: NUESTRO CINE ================= */}
-        {subTab === 'movies' && (
-          <View>
-            {/* TARJETA DIRECTA PARA AGREGAR PELÍCULA POR VER */}
+        {/* ================= VISTAS 1 Y 2: PELÍCULAS POR VER / YA VISTAS ================= */}
+        {(subTab === 'pending' || subTab === 'watched') && (
+          <View style={styles.contentArea}>
+            {/* Barra Superior Rápida con Autocompletado Mientras Escribes */}
             <View style={[styles.quickAddCard, { borderColor: `${primaryColor}30` }]}>
-              <View style={styles.quickAddTitleRow}>
-                <Ionicons name="add-circle" size={18} color={primaryColor} />
-                <Text style={styles.quickAddHeading}>Agregar película o serie por ver</Text>
-              </View>
-
               <View style={styles.quickAddInputRow}>
                 <TextInput
                   value={quickTitle}
                   onChangeText={setQuickTitle}
-                  placeholder="Escribe el nombre de la película..."
+                  placeholder="Escribe una película (resultados en vivo)..."
                   placeholderTextColor="#94a3b8"
                   style={styles.quickAddInput}
                   returnKeyType="done"
-                  onSubmitEditing={handleQuickAddMovie}
+                  onSubmitEditing={() => void handleQuickAddMovie()}
                 />
                 {isSearchingCatalog && (
                   <View style={{ justifyContent: 'center', paddingHorizontal: 4 }}>
@@ -552,68 +485,25 @@ export const MoviesScreen: React.FC = () => {
                   </View>
                 )}
                 <TouchableOpacity
-                  onPress={handleQuickAddMovie}
+                  onPress={handleSpinMovieRoulette}
+                  style={[
+                    styles.quickAddSubmitBtn,
+                    { backgroundColor: `${primaryColor}18` },
+                  ]}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="shuffle" size={18} color={primaryColor} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void handleQuickAddMovie()}
                   style={[styles.quickAddSubmitBtn, { backgroundColor: primaryColor }]}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="checkmark" size={20} color="#ffffff" />
+                  <Ionicons name="add" size={20} color="#ffffff" />
                 </TouchableOpacity>
               </View>
 
-              {/* Sugerencias Automáticas en Vivo Mientras Escribes */}
-              {catalogResults.length > 0 && (
-                <View style={{ marginBottom: 12 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor }}>
-                      Sugerencias en vivo (toca una para agregar con póster):
-                    </Text>
-                    <TouchableOpacity onPress={() => setCatalogResults([])}>
-                      <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>Ocultar</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ gap: 10 }}
-                  >
-                    {catalogResults.map((item, idx) => (
-                      <TouchableOpacity
-                        key={`${item.title}-${idx}`}
-                        onPress={() => void handleSelectCatalogMovie(item)}
-                        style={{
-                          width: 110,
-                          backgroundColor: '#f8fafc',
-                          borderRadius: 12,
-                          padding: 6,
-                          borderWidth: 1,
-                          borderColor: '#e2e8f0',
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        {item.posterUrl ? (
-                          <Image
-                            source={{ uri: item.posterUrl }}
-                            style={{ width: '100%', height: 135, borderRadius: 8, marginBottom: 5 }}
-                            resizeMode="cover"
-                          />
-                        ) : null}
-                        <Text
-                          style={{ fontSize: 11, fontWeight: '700', color: '#1e293b' }}
-                          numberOfLines={1}
-                        >
-                          {item.title}
-                        </Text>
-                        <Text style={{ fontSize: 10, color: '#64748b' }} numberOfLines={1}>
-                          {item.year} • {item.genre}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {/* Selector de Género en Chips */}
+              {/* Chips Horizontales de Género */}
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -632,7 +522,6 @@ export const MoviesScreen: React.FC = () => {
                           borderColor: primaryColor,
                         },
                       ]}
-                      activeOpacity={0.75}
                     >
                       <Text
                         style={[
@@ -646,498 +535,367 @@ export const MoviesScreen: React.FC = () => {
                   );
                 })}
               </ScrollView>
-            </View>
 
-            {/* Ruleta de Películas */}
-            <TouchableOpacity
-              onPress={handleSpinMovieRoulette}
-              style={[styles.rouletteBanner, { backgroundColor: primaryColor }]}
-              activeOpacity={0.88}
-            >
-              <View style={styles.rouletteBannerLeft}>
-                <View style={styles.rouletteIconCircle}>
-                  <Ionicons name="shuffle" size={20} color={primaryColor} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rouletteBannerTitle}>¿No saben qué ver hoy?</Text>
-                  <Text style={styles.rouletteBannerSub}>
-                    Elegir una película al azar de su lista ({pendingMovies.length} pendientes)
-                  </Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#ffffff" />
-            </TouchableOpacity>
-
-            {/* Resultado de la ruleta de películas */}
-            {pickedRandomMovie && (
-              <View style={[styles.randomPickCard, { borderColor: primaryColor }]}>
-                <View style={styles.randomPickHeader}>
-                  <Text style={[styles.randomPickBadge, { color: primaryColor }]}>
-                    PELÍCULA SELECCIONADA
-                  </Text>
-                  <TouchableOpacity onPress={() => setPickedRandomMovie(null)}>
-                    <Ionicons name="close-circle" size={20} color="#94a3b8" />
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.randomPickTitle}>{pickedRandomMovie.title}</Text>
-                <Text style={styles.randomPickMeta}>
-                  {pickedRandomMovie.genre} • Agregada por{' '}
-                  {pickedRandomMovie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    const m = pickedRandomMovie;
-                    setPickedRandomMovie(null);
-                    openRateModal(m);
-                  }}
-                  style={[styles.randomPickBtn, { backgroundColor: `${primaryColor}18` }]}
-                >
-                  <Text style={[styles.randomPickBtnText, { color: primaryColor }]}>
-                    Calificar película
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Filtros: Por Ver vs Ya Vistas */}
-            <View style={styles.filterRow}>
-              <TouchableOpacity
-                onPress={() => setMovieFilter('pending')}
-                style={[
-                  styles.filterPill,
-                  movieFilter === 'pending' && {
-                    backgroundColor: primaryColor,
-                    borderColor: primaryColor,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    movieFilter === 'pending' && { color: '#ffffff' },
-                  ]}
-                >
-                  Por Ver ({pendingMovies.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setMovieFilter('watched')}
-                style={[
-                  styles.filterPill,
-                  movieFilter === 'watched' && {
-                    backgroundColor: primaryColor,
-                    borderColor: primaryColor,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    movieFilter === 'watched' && { color: '#ffffff' },
-                  ]}
-                >
-                  Ya Vistas ({watchedMovies.length})
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Lista de Películas */}
-            {(movieFilter === 'pending' ? pendingMovies : watchedMovies).length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons name="film-outline" size={44} color={primaryColor} />
-                <Text style={styles.emptyTitle}>
-                  {movieFilter === 'pending'
-                    ? 'No hay películas en espera'
-                    : 'Aún no han calificado películas'}
-                </Text>
-                <Text style={styles.emptySub}>
-                  {movieFilter === 'pending'
-                    ? 'Usa el cuadro de arriba para anotar su próxima película o serie juntos.'
-                    : 'Cuando vean una película de la lista, márquenla con sus estrellitas.'}
-                </Text>
-                {movieFilter === 'pending' && (
-                  <TouchableOpacity
-                    onPress={() => setIsAddMovieOpen(true)}
-                    style={[styles.emptyActionBtn, { backgroundColor: primaryColor }]}
-                    activeOpacity={0.85}
+              {/* Tira Flotante de Resultados en Vivo Mientras Escribes */}
+              {catalogResults.length > 0 && (
+                <View style={styles.liveCatalogOverlay}>
+                  <View style={styles.liveCatalogHeader}>
+                    <Text style={[styles.liveCatalogTitle, { color: primaryColor }]}>
+                      Resultados en vivo (toca uno para agregar):
+                    </Text>
+                    <TouchableOpacity onPress={() => setCatalogResults([])}>
+                      <Text style={styles.liveCatalogClose}>Cerrar</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ gap: 10 }}
                   >
-                    <Ionicons name="add" size={18} color="#ffffff" />
-                    <Text style={styles.emptyActionBtnText}>Agregar Película</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              (movieFilter === 'pending' ? pendingMovies : watchedMovies).map((movie) => {
-                const avg =
-                  movie.ratingJavier && movie.ratingKarla
-                    ? ((movie.ratingJavier + movie.ratingKarla) / 2).toFixed(1)
-                    : null;
-
-                return (
-                  <TouchableOpacity
-                    key={movie.id}
-                    onPress={() => openRateModal(movie)}
-                    style={styles.movieCard}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.movieCardTop}>
-                      {movie.posterUrl ? (
-                        <Image
-                          source={{ uri: movie.posterUrl }}
-                          style={{
-                            width: 54,
-                            height: 78,
-                            borderRadius: 10,
-                            marginRight: 12,
-                            backgroundColor: '#f1f5f9',
-                          }}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.genreRow}>
-                          <Text
-                            style={[
-                              styles.genreBadge,
-                              { backgroundColor: `${primaryColor}14`, color: primaryColor },
-                            ]}
-                          >
-                            {movie.genre}
-                          </Text>
-                          <Text style={styles.addedByText}>
-                            {movie.year ? `${movie.year} • ` : ''}Por{' '}
-                            {movie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
-                          </Text>
-                        </View>
-                        <Text style={styles.movieTitle}>{movie.title}</Text>
-                        {movie.director ? (
-                          <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                            Dir. {movie.director}
-                          </Text>
+                    {catalogResults.map((item, idx) => (
+                      <TouchableOpacity
+                        key={`${item.title}-${idx}`}
+                        onPress={() => void handleSelectCatalogMovie(item)}
+                        style={styles.posterResultCard}
+                        activeOpacity={0.85}
+                      >
+                        {item.posterUrl ? (
+                          <Image
+                            source={{ uri: item.posterUrl }}
+                            style={styles.posterResultImg}
+                            resizeMode="cover"
+                          />
                         ) : null}
-                      </View>
+                        <Text style={styles.posterResultName} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.posterResultMeta} numberOfLines={1}>
+                          {item.year} • {item.genre}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
 
-                      <View style={styles.cardRightActions}>
-                        {movie.watched && avg ? (
-                          <View style={[styles.avgBadge, { backgroundColor: primaryColor }]}>
-                            <Ionicons name="star" size={13} color="#ffffff" />
-                            <Text style={styles.avgBadgeText}>{avg}</Text>
-                          </View>
+            {/* Tarjetas de Películas Paginadas (Cero Scroll) */}
+            <View style={styles.cardsDeck}>
+              {visibleMovies.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="film-outline" size={38} color={primaryColor} />
+                  <Text style={styles.emptyTitle}>
+                    {subTab === 'pending'
+                      ? 'No hay películas en espera'
+                      : 'Aún no han calificado películas'}
+                  </Text>
+                  <Text style={styles.emptySub}>
+                    Escribe arriba el nombre de cualquier película y agrégala con su póster oficial.
+                  </Text>
+                </View>
+              ) : (
+                visibleMovies.map((movie) => {
+                  const avg =
+                    movie.ratingJavier && movie.ratingKarla
+                      ? ((movie.ratingJavier + movie.ratingKarla) / 2).toFixed(1)
+                      : null;
+
+                  return (
+                    <TouchableOpacity
+                      key={movie.id}
+                      onPress={() => openRateModal(movie)}
+                      style={styles.movieCard}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.movieCardTop}>
+                        {movie.posterUrl ? (
+                          <Image
+                            source={{ uri: movie.posterUrl }}
+                            style={styles.movieCardPoster}
+                            resizeMode="cover"
+                          />
                         ) : (
                           <View
                             style={[
-                              styles.markWatchedBtn,
-                              { borderColor: primaryColor, backgroundColor: `${primaryColor}10` },
+                              styles.moviePosterPlaceholder,
+                              { backgroundColor: `${primaryColor}14` },
                             ]}
                           >
-                            <Ionicons name="star-outline" size={13} color={primaryColor} />
-                            <Text style={[styles.markWatchedText, { color: primaryColor }]}>
-                              Calificar
-                            </Text>
+                            <Ionicons name="film" size={20} color={primaryColor} />
                           </View>
                         )}
-                        <TouchableOpacity
-                          onPress={() => handleDeleteMovie(movie)}
-                          style={styles.cardTrashBtn}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Eliminar película"
-                        >
-                          <Ionicons name="trash-outline" size={16} color="#94a3b8" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
 
-                    {movie.watched && (
-                      <View style={styles.ratingsFooter}>
-                        <View style={styles.dualRatingRow}>
-                          <Text style={styles.personRating}>
-                            Karlita: {movie.ratingKarla ? `${movie.ratingKarla} ★` : '—'}
-                          </Text>
-                          <Text style={styles.personRating}>
-                            Javier: {movie.ratingJavier ? `${movie.ratingJavier} ★` : '—'}
-                          </Text>
-                        </View>
-                        {movie.notes ? (
-                          <Text style={styles.movieNotes}>"{movie.notes}"</Text>
-                        ) : null}
-                        <View style={styles.watchedCardMetaRow}>
-                          {movie.watchedDate ? (
-                            <Text style={styles.watchedDateText}>
-                              Vista el {formatDisplayDate(movie.watchedDate)}
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.genreRow}>
+                            <Text
+                              style={[
+                                styles.genreBadge,
+                                { backgroundColor: `${primaryColor}14`, color: primaryColor },
+                              ]}
+                            >
+                              {movie.genre}
                             </Text>
-                          ) : <View />}
-                          <TouchableOpacity
-                            onPress={() => handleRemoveMovieReview(movie)}
-                            style={styles.removeReviewPill}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                          >
-                            <Ionicons name="arrow-undo-outline" size={12} color="#e11d48" />
-                            <Text style={styles.removeReviewPillText}>Borrar reseña</Text>
-                          </TouchableOpacity>
+                            <Text style={styles.addedByText}>
+                              {movie.year ? `${movie.year} • ` : ''}Por{' '}
+                              {movie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
+                            </Text>
+                          </View>
+                          <Text style={styles.movieTitle} numberOfLines={1}>
+                            {movie.title}
+                          </Text>
+                          {movie.notes ? (
+                            <Text style={styles.movieNotesInline} numberOfLines={1}>
+                              “{movie.notes}”
+                            </Text>
+                          ) : movie.director ? (
+                            <Text style={styles.movieDirectorText} numberOfLines={1}>
+                              Dir. {movie.director}
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        <View style={styles.cardRightActions}>
+                          {movie.watched && avg ? (
+                            <View style={[styles.avgBadge, { backgroundColor: primaryColor }]}>
+                              <Ionicons name="star" size={12} color="#ffffff" />
+                              <Text style={styles.avgBadgeText}>{avg}</Text>
+                            </View>
+                          ) : (
+                            <View
+                              style={[
+                                styles.markWatchedBtn,
+                                { borderColor: primaryColor, backgroundColor: `${primaryColor}10` },
+                              ]}
+                            >
+                              <Ionicons name="star-outline" size={12} color={primaryColor} />
+                              <Text style={[styles.markWatchedText, { color: primaryColor }]}>
+                                Calificar
+                              </Text>
+                            </View>
+                          )}
+
+                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                            {movie.watched && (
+                              <TouchableOpacity
+                                onPress={() => handleRemoveMovieReview(movie)}
+                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              >
+                                <Ionicons name="arrow-undo-outline" size={15} color="#e11d48" />
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                              onPress={() => handleDeleteMovie(movie)}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Ionicons name="trash-outline" size={15} color="#94a3b8" />
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+
+            {/* Controles de Página para Cero Scroll */}
+            {totalMoviePages > 1 && (
+              <View style={styles.paginationBar}>
+                <TouchableOpacity
+                  disabled={safeMoviePage === 0}
+                  onPress={() => setMoviePage((p) => Math.max(0, p - 1))}
+                  style={[styles.pageBtn, safeMoviePage === 0 && { opacity: 0.4 }]}
+                >
+                  <Ionicons name="chevron-back" size={15} color="#1e293b" />
+                  <Text style={styles.pageBtnText}>Anterior</Text>
+                </TouchableOpacity>
+                <Text style={styles.pageIndicator}>
+                  Página {safeMoviePage + 1} de {totalMoviePages}
+                </Text>
+                <TouchableOpacity
+                  disabled={safeMoviePage >= totalMoviePages - 1}
+                  onPress={() => setMoviePage((p) => Math.min(totalMoviePages - 1, p + 1))}
+                  style={[
+                    styles.pageBtn,
+                    safeMoviePage >= totalMoviePages - 1 && { opacity: 0.4 },
+                  ]}
+                >
+                  <Text style={styles.pageBtnText}>Siguiente</Text>
+                  <Ionicons name="chevron-forward" size={15} color="#1e293b" />
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         )}
 
-        {/* ================= VISTA 2: LISTA DE SUEÑOS ================= */}
+        {/* ================= VISTA 3: LISTA DE SUEÑOS SIN SCROLL ================= */}
         {subTab === 'bucket' && (
-          <View>
-            <View style={styles.bucketInputCard}>
-              <Text style={styles.sectionHeading}>Agregar nuevo plan o sueño</Text>
-              <View style={styles.inlineInputRow}>
+          <View style={styles.contentArea}>
+            <View style={styles.quickAddCard}>
+              <View style={styles.quickAddInputRow}>
                 <TextInput
                   value={newBucketTitle}
                   onChangeText={setNewBucketTitle}
-                  placeholder="Ej. Viajar juntos a la playa, Ir a un concierto..."
+                  placeholder="Agregar nuevo plan o sueño juntos..."
                   placeholderTextColor="#94a3b8"
-                  style={styles.inlineInput}
+                  style={styles.quickAddInput}
                   returnKeyType="done"
-                  onSubmitEditing={handleAddBucketItem}
+                  onSubmitEditing={() => void handleAddBucketItem()}
                 />
                 <TouchableOpacity
-                  onPress={handleAddBucketItem}
-                  style={[styles.inlineAddBtn, { backgroundColor: primaryColor }]}
-                  activeOpacity={0.85}
+                  onPress={() => void handleAddBucketItem()}
+                  style={[styles.quickAddSubmitBtn, { backgroundColor: primaryColor }]}
                 >
-                  <Ionicons name="add" size={22} color="#ffffff" />
+                  <Ionicons name="add" size={20} color="#ffffff" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {state.bucketList.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                onPress={() => handleToggleBucketItem(item.id)}
-                style={[styles.bucketItem, item.completed && styles.bucketItemCompleted]}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    styles.checkboxCircle,
-                    item.completed && {
-                      backgroundColor: primaryColor,
-                      borderColor: primaryColor,
-                    },
-                  ]}
+            <View style={styles.cardsDeck}>
+              {visibleBuckets.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => void handleToggleBucketItem(item.id)}
+                  style={[styles.bucketItem, item.completed && styles.bucketItemCompleted]}
+                  activeOpacity={0.8}
                 >
-                  {item.completed && <Ionicons name="checkmark" size={14} color="#ffffff" />}
-                </View>
-                <View style={{ flex: 1, marginHorizontal: 12 }}>
-                  <Text
+                  <View
                     style={[
-                      styles.bucketTitle,
-                      item.completed && styles.bucketTitleCompleted,
+                      styles.checkboxCircle,
+                      item.completed && {
+                        backgroundColor: primaryColor,
+                        borderColor: primaryColor,
+                      },
                     ]}
                   >
-                    {item.title}
-                  </Text>
-                  <Text style={styles.bucketMeta}>
-                    Propuesto por {item.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
-                    {item.completedDate ? ' • Cumplido' : ''}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => handleDeleteBucketItem(item.id)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Ionicons name="trash-outline" size={17} color="#cbd5e1" />
+                    {item.completed && <Ionicons name="checkmark" size={14} color="#ffffff" />}
+                  </View>
+                  <View style={{ flex: 1, marginHorizontal: 10 }}>
+                    <Text
+                      style={[
+                        styles.bucketTitle,
+                        item.completed && styles.bucketTitleCompleted,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text style={styles.bucketMeta}>
+                      Por {item.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
+                      {item.completedDate ? ' • Cumplido' : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => void handleDeleteBucketItem(item.id)}>
+                    <Ionicons name="trash-outline" size={16} color="#cbd5e1" />
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+              ))}
+            </View>
 
-        {/* ================= VISTA 3: RULETA ¿QUÉ COMEMOS HOY? ================= */}
-        {subTab === 'roulette' && (
-          <View>
-            <View style={styles.foodWheelCard}>
-              <Ionicons name="restaurant" size={38} color={primaryColor} />
-              <Text style={styles.foodWheelTitle}>Opciones para Comer o Cenar</Text>
-              <Text style={styles.foodWheelSub}>
-                Cuando no sepan qué elegir para comer hoy:
-              </Text>
-
-              {selectedFoodResult && (
-                <View
+            {totalBucketPages > 1 && (
+              <View style={styles.paginationBar}>
+                <TouchableOpacity
+                  disabled={safeBucketPage === 0}
+                  onPress={() => setBucketPage((p) => Math.max(0, p - 1))}
+                  style={[styles.pageBtn, safeBucketPage === 0 && { opacity: 0.4 }]}
+                >
+                  <Ionicons name="chevron-back" size={15} color="#1e293b" />
+                  <Text style={styles.pageBtnText}>Anterior</Text>
+                </TouchableOpacity>
+                <Text style={styles.pageIndicator}>
+                  Página {safeBucketPage + 1} de {totalBucketPages}
+                </Text>
+                <TouchableOpacity
+                  disabled={safeBucketPage >= totalBucketPages - 1}
+                  onPress={() => setBucketPage((p) => Math.min(totalBucketPages - 1, p + 1))}
                   style={[
-                    styles.foodWinnerBox,
-                    { backgroundColor: `${primaryColor}15`, borderColor: primaryColor },
+                    styles.pageBtn,
+                    safeBucketPage >= totalBucketPages - 1 && { opacity: 0.4 },
                   ]}
                 >
-                  <Text style={[styles.foodWinnerLabel, { color: primaryColor }]}>
-                    OPCIÓN SELECCIONADA
-                  </Text>
-                  <Text style={styles.foodWinnerText}>{selectedFoodResult}</Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={handleSpinFoodWheel}
-                style={[styles.spinBtn, { backgroundColor: primaryColor }]}
-                disabled={isSpinning}
-                activeOpacity={0.88}
-              >
-                <Ionicons name="shuffle" size={18} color="#ffffff" />
-                <Text style={styles.spinBtnText}>
-                  {isSpinning ? 'Eligiendo opción...' : 'Elegir opción al azar'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.bucketInputCard}>
-              <Text style={styles.sectionHeading}>Agregar comida o lugar favorito</Text>
-              <View style={styles.inlineInputRow}>
-                <TextInput
-                  value={newFoodOption}
-                  onChangeText={setNewFoodOption}
-                  placeholder="Ej. Crepas, Tacos, Ramen, Hamburguesas..."
-                  placeholderTextColor="#94a3b8"
-                  style={styles.inlineInput}
-                  returnKeyType="done"
-                  onSubmitEditing={handleAddFoodOption}
-                />
-                <TouchableOpacity
-                  onPress={handleAddFoodOption}
-                  style={[styles.inlineAddBtn, { backgroundColor: primaryColor }]}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="add" size={22} color="#ffffff" />
+                  <Text style={styles.pageBtnText}>Siguiente</Text>
+                  <Ionicons name="chevron-forward" size={15} color="#1e293b" />
                 </TouchableOpacity>
-              </View>
-
-              <View style={styles.foodChipsWrap}>
-                {state.foodOptions.map((opt) => (
-                  <View key={opt} style={styles.foodChip}>
-                    <Text style={styles.foodChipText}>{opt}</Text>
-                    <TouchableOpacity onPress={() => handleRemoveFoodOption(opt)}>
-                      <Ionicons name="close-circle" size={16} color="#94a3b8" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* ================= MODAL: AGREGAR PELÍCULA ================= */}
-      <Modal
-        visible={isAddMovieOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsAddMovieOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nueva Película o Serie</Text>
-              <TouchableOpacity onPress={() => setIsAddMovieOpen(false)}>
-                <Ionicons name="close" size={22} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.inputLabel}>Título</Text>
-            <TextInput
-              value={newMovieTitle}
-              onChangeText={setNewMovieTitle}
-              placeholder="Ej. Cuestión de Tiempo, Shrek 2..."
-              placeholderTextColor="#94a3b8"
-              style={styles.modalInput}
-              returnKeyType="done"
-              onSubmitEditing={handleModalAddMovie}
-              autoFocus
-            />
-
-            {catalogResults.length > 0 && (
-              <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor, marginBottom: 6 }}>
-                  Resultados en vivo (toca uno para elegir):
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={{ gap: 10 }}
-                >
-                  {catalogResults.map((item, idx) => (
-                    <TouchableOpacity
-                      key={`modal-${item.title}-${idx}`}
-                      onPress={() => void handleSelectCatalogMovie(item)}
-                      style={{
-                        width: 104,
-                        backgroundColor: '#f8fafc',
-                        borderRadius: 12,
-                        padding: 6,
-                        borderWidth: 1,
-                        borderColor: '#e2e8f0',
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      {item.posterUrl ? (
-                        <Image
-                          source={{ uri: item.posterUrl }}
-                          style={{ width: '100%', height: 125, borderRadius: 8, marginBottom: 4 }}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-                      <Text
-                        style={{ fontSize: 11, fontWeight: '700', color: '#1e293b' }}
-                        numberOfLines={1}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text style={{ fontSize: 10, color: '#64748b' }} numberOfLines={1}>
-                        {item.year} • {item.genre}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
               </View>
             )}
+          </View>
+        )}
 
-            <Text style={styles.inputLabel}>Categoría / Género</Text>
-            <View style={styles.genresWrap}>
-              {GENRES.map((g) => {
-                const active = newMovieGenre === g;
-                return (
-                  <TouchableOpacity
-                    key={g}
-                    onPress={() => setNewMovieGenre(g)}
-                    style={[
-                      styles.genreOption,
-                      active && { backgroundColor: primaryColor, borderColor: primaryColor },
-                    ]}
-                  >
-                    <Text style={[styles.genreOptionText, active && { color: '#ffffff' }]}>
-                      {g}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+        {/* ================= VISTA 4: RULETA DE COMIDA SIN SCROLL ================= */}
+        {subTab === 'roulette' && (
+          <View style={styles.foodWheelCard}>
+            <View style={{ alignItems: 'center' }}>
+              <Ionicons name="restaurant" size={32} color={primaryColor} />
+              <Text style={styles.foodWheelTitle}>¿Qué Comemos o Cenamos Hoy?</Text>
+              <Text style={styles.foodWheelSub}>
+                Gira la ruleta para decidir sin discutir
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.foodResultBox,
+                { borderColor: primaryColor, backgroundColor: `${primaryColor}10` },
+              ]}
+            >
+              <Text style={styles.foodResultLabel}>
+                {selectedFoodResult ? 'HOY TOCA DISFRUTAR:' : 'LISTO PARA GIRAR'}
+              </Text>
+              <Text style={[styles.foodResultValue, { color: primaryColor }]}>
+                {selectedFoodResult || 'Toca el botón de abajo'}
+              </Text>
             </View>
 
             <TouchableOpacity
-              onPress={handleModalAddMovie}
-              style={[styles.modalPrimaryBtn, { backgroundColor: primaryColor }]}
-              activeOpacity={0.88}
+              onPress={handleSpinFoodWheel}
+              disabled={isSpinning}
+              style={[styles.spinWheelBtn, { backgroundColor: primaryColor }]}
+              activeOpacity={0.85}
             >
-              <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
-              <Text style={styles.modalPrimaryBtnText}>Agregar a Nuestra Lista</Text>
+              <Ionicons name="sync" size={18} color="#ffffff" />
+              <Text style={styles.spinWheelBtnText}>
+                {isSpinning ? 'Eligiendo...' : 'Girar Ruleta de Comida'}
+              </Text>
             </TouchableOpacity>
+
+            <View style={{ width: '100%' }}>
+              <View style={styles.quickAddInputRow}>
+                <TextInput
+                  value={newFoodOption}
+                  onChangeText={setNewFoodOption}
+                  placeholder="Agregar antojo (ej. Ramen, Crepas...)"
+                  placeholderTextColor="#94a3b8"
+                  style={styles.quickAddInput}
+                  returnKeyType="done"
+                  onSubmitEditing={() => void handleAddFoodOption()}
+                />
+                <TouchableOpacity
+                  onPress={() => void handleAddFoodOption()}
+                  style={[styles.quickAddSubmitBtn, { backgroundColor: primaryColor }]}
+                >
+                  <Ionicons name="add" size={20} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, paddingTop: 6 }}
+              >
+                {state.foodOptions.map((opt) => (
+                  <View key={opt} style={styles.foodChip}>
+                    <Text style={styles.foodChipText}>{opt}</Text>
+                    <TouchableOpacity onPress={() => void handleRemoveFoodOption(opt)}>
+                      <Ionicons name="close-circle" size={15} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        )}
+      </View>
 
       {/* ================= MODAL: CALIFICAR PELÍCULA ================= */}
       <Modal
@@ -1168,94 +926,48 @@ export const MoviesScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
 
-                {/* Calificación de Karlita */}
                 <Text style={styles.inputLabel}>Calificación de Karlita</Text>
-                <View style={styles.starsRow}>
+                <View style={styles.starsPickerRow}>
                   {[1, 2, 3, 4, 5].map((star) => (
-                    <TouchableOpacity
-                      key={star}
-                      onPress={() => setTempRatingKarla(star)}
-                      activeOpacity={0.7}
-                    >
+                    <TouchableOpacity key={star} onPress={() => setTempRatingKarla(star)}>
                       <Ionicons
                         name={star <= tempRatingKarla ? 'star' : 'star-outline'}
                         size={28}
-                        color={star <= tempRatingKarla ? '#f59e0b' : '#cbd5e1'}
+                        color="#9333ea"
                       />
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                {/* Calificación de Javier */}
                 <Text style={styles.inputLabel}>Calificación de Javier</Text>
-                <View style={styles.starsRow}>
+                <View style={styles.starsPickerRow}>
                   {[1, 2, 3, 4, 5].map((star) => (
-                    <TouchableOpacity
-                      key={star}
-                      onPress={() => setTempRatingJavier(star)}
-                      activeOpacity={0.7}
-                    >
+                    <TouchableOpacity key={star} onPress={() => setTempRatingJavier(star)}>
                       <Ionicons
                         name={star <= tempRatingJavier ? 'star' : 'star-outline'}
                         size={28}
-                        color={star <= tempRatingJavier ? '#f59e0b' : '#cbd5e1'}
+                        color="#0284c7"
                       />
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                <View style={styles.notesLabelRow}>
-                  <Text style={styles.inputLabel}>Nota o recuerdo de la película</Text>
-                  {tempNotes.trim().length > 0 && (
-                    <TouchableOpacity
-                      onPress={() => setTempNotes('')}
-                      style={styles.clearNotesBtn}
-                    >
-                      <Ionicons name="close-circle" size={13} color="#e11d48" />
-                      <Text style={styles.clearNotesText}>Borrar nota</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <Text style={styles.inputLabel}>Nuestra reseña o comentario</Text>
                 <TextInput
                   value={tempNotes}
                   onChangeText={setTempNotes}
-                  placeholder="Ej. Comimos palomitas y nos encantó el final..."
+                  placeholder="¿Qué nos pareció la película?"
                   placeholderTextColor="#94a3b8"
                   style={styles.modalInput}
                 />
 
-                {selectedMovie.watched && (
-                  <TouchableOpacity
-                    onPress={() => handleRemoveMovieReview(selectedMovie)}
-                    style={styles.revertReviewBtn}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="arrow-undo-outline" size={16} color="#e11d48" />
-                    <Text style={styles.revertReviewText}>
-                      Borrar reseña y volver a lista 'Por Ver'
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                <View style={styles.modalFooterBtns}>
-                  <TouchableOpacity
-                    onPress={() => handleDeleteMovie(selectedMovie)}
-                    style={styles.deleteBtn}
-                  >
-                    <Ionicons name="trash-outline" size={18} color="#e11d48" />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={handleSaveMovieRating}
-                    style={[
-                      styles.modalPrimaryBtn,
-                      { flex: 1, marginTop: 0, backgroundColor: primaryColor },
-                    ]}
-                  >
-                    <Ionicons name="heart" size={18} color="#ffffff" />
-                    <Text style={styles.modalPrimaryBtnText}>Guardar Calificación</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  onPress={() => void handleSaveMovieRating()}
+                  style={[styles.modalPrimaryBtn, { backgroundColor: primaryColor }]}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
+                  <Text style={styles.modalPrimaryBtnText}>Guardar Calificación</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -1268,93 +980,55 @@ export const MoviesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#faf9f9',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  fixedViewport: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  screenTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1e293b',
-    fontFamily: SERIF_FONT,
-  },
-  screenSubtitle: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  addMovieHeaderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-  },
-  addMovieHeaderBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#ffffff',
   },
   tabsContainer: {
     flexDirection: 'row',
-    marginHorizontal: 18,
-    marginVertical: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
     borderRadius: 14,
-    padding: 3,
+    padding: 4,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 8,
   },
   tabBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 4,
     paddingVertical: 8,
-    borderRadius: 11,
+    borderRadius: 10,
   },
   tabBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#64748b',
   },
-  scrollContent: {
-    padding: 18,
-    paddingBottom: 36,
+  contentArea: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
   quickAddCard: {
     backgroundColor: '#ffffff',
     borderRadius: 18,
-    padding: 14,
-    borderWidth: 1.5,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  quickAddTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     marginBottom: 8,
-  },
-  quickAddHeading: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1e293b',
+    zIndex: 30,
   },
   quickAddInputRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
+    alignItems: 'center',
+    gap: 6,
   },
   quickAddInput: {
     flex: 1,
@@ -1365,17 +1039,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 13,
-    color: '#1e293b',
+    color: '#0f172a',
   },
   quickAddSubmitBtn: {
-    width: 42,
-    height: 42,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   genresScroll: {
     gap: 6,
+    paddingTop: 8,
   },
   quickGenreChip: {
     paddingHorizontal: 10,
@@ -1387,110 +1062,72 @@ const styles = StyleSheet.create({
   },
   quickGenreText: {
     fontSize: 11,
-    color: '#64748b',
     fontWeight: '600',
+    color: '#64748b',
   },
-  rouletteBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 18,
-    marginBottom: 14,
+  liveCatalogOverlay: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
   },
-  rouletteBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  rouletteIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rouletteBannerTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  rouletteBannerSub: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.92)',
-    marginTop: 2,
-  },
-  randomPickCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 2,
-    marginBottom: 14,
-  },
-  randomPickHeader: {
+  liveCatalogHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 6,
   },
-  randomPickBadge: {
+  liveCatalogTitle: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
   },
-  randomPickTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    fontFamily: SERIF_FONT,
-    color: '#1e293b',
-  },
-  randomPickMeta: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  randomPickBtn: {
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  randomPickBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  filterPill: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-  },
-  filterPillText: {
-    fontSize: 12,
+  liveCatalogClose: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#64748b',
   },
+  posterResultCard: {
+    width: 96,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  posterResultImg: {
+    width: '100%',
+    height: 110,
+    borderRadius: 7,
+    marginBottom: 4,
+  },
+  posterResultName: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  posterResultMeta: {
+    fontSize: 9.5,
+    color: '#64748b',
+  },
+  cardsDeck: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
   emptyBox: {
+    flex: 1,
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
-    marginVertical: 10,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: '#1e293b',
+    fontFamily: SERIF_FONT,
     marginTop: 8,
   },
   emptySub: {
@@ -1498,226 +1135,139 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'center',
     marginTop: 4,
-    lineHeight: 18,
-  },
-  emptyActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 14,
-  },
-  emptyActionBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  cardRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cardTrashBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#f8fafc',
-  },
-  watchedCardMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-    paddingTop: 4,
-  },
-  removeReviewPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: '#fff1f2',
-  },
-  removeReviewPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#e11d48',
-  },
-  notesLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 6,
-  },
-  clearNotesBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  clearNotesText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#e11d48',
-  },
-  revertReviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#fff1f2',
-    borderWidth: 1,
-    borderColor: '#fecdd3',
-    marginTop: 12,
-  },
-  revertReviewText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#e11d48',
   },
   movieCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    borderRadius: 16,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   movieCardTop: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
+    alignItems: 'center',
+  },
+  movieCardPoster: {
+    width: 44,
+    height: 62,
+    borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: '#f1f5f9',
+  },
+  moviePosterPlaceholder: {
+    width: 44,
+    height: 62,
+    borderRadius: 8,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   genreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    marginBottom: 2,
   },
   genreBadge: {
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 8,
+    fontSize: 9.5,
+    fontWeight: '800',
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   addedByText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#94a3b8',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   movieTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#1e293b',
+    color: '#0f172a',
+    fontFamily: SERIF_FONT,
+  },
+  movieDirectorText: {
+    fontSize: 10.5,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  movieNotesInline: {
+    fontSize: 10.5,
+    color: '#475569',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  cardRightActions: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginLeft: 8,
   },
   avgBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 10,
   },
   avgBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '900',
     color: '#ffffff',
   },
   markWatchedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
   },
   markWatchedText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '800',
   },
-  ratingsFooter: {
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  dualRatingRow: {
+  paginationBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    alignItems: 'center',
+    paddingTop: 6,
   },
-  personRating: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  movieNotes: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#64748b',
-    marginTop: 2,
-  },
-  watchedDateText: {
-    fontSize: 10,
-    color: '#94a3b8',
-    marginTop: 3,
-  },
-  bucketInputCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
-  },
-  sectionHeading: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  inlineInputRow: {
+  pageBtn: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  inlineInput: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 13,
+  },
+  pageBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#1e293b',
   },
-  inlineAddBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  pageIndicator: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
   },
   bucketItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 12,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   bucketItemCompleted: {
+    opacity: 0.75,
     backgroundColor: '#f8fafc',
-    opacity: 0.8,
   },
   checkboxCircle: {
     width: 22,
@@ -1738,103 +1288,95 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   bucketMeta: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#94a3b8',
     marginTop: 2,
   },
   foodWheelCard: {
+    flex: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 22,
+    padding: 18,
     alignItems: 'center',
-    marginBottom: 14,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   foodWheelTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
+    color: '#0f172a',
     fontFamily: SERIF_FONT,
-    color: '#1e293b',
-    marginTop: 8,
+    marginTop: 6,
   },
   foodWheelSub: {
     fontSize: 12,
     color: '#64748b',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 14,
+    marginTop: 2,
   },
-  foodWinnerBox: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+  foodResultBox: {
+    width: '100%',
+    padding: 16,
     borderRadius: 16,
     borderWidth: 1.5,
     alignItems: 'center',
-    marginBottom: 14,
   },
-  foodWinnerLabel: {
-    fontSize: 11,
+  foodResultLabel: {
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    color: '#64748b',
+    letterSpacing: 1,
   },
-  foodWinnerText: {
-    fontSize: 18,
+  foodResultValue: {
+    fontSize: 20,
     fontWeight: '900',
-    color: '#1e293b',
-    marginTop: 2,
+    fontFamily: SERIF_FONT,
+    marginTop: 4,
+    textAlign: 'center',
   },
-  spinBtn: {
+  spinWheelBtn: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 14,
   },
-  spinBtnText: {
+  spinWheelBtnText: {
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
   },
-  foodChipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
-  },
   foodChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#f8fafc',
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingVertical: 6,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   foodChipText: {
-    fontSize: 12,
-    color: '#334155',
+    fontSize: 11.5,
     fontWeight: '600',
+    color: '#334155',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 18,
+    padding: 20,
   },
   modalCard: {
     width: '100%',
     maxWidth: 380,
     backgroundColor: '#ffffff',
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 6,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1843,83 +1385,49 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
+    color: '#0f172a',
     fontFamily: SERIF_FONT,
-    color: '#1e293b',
   },
   modalSubtitle: {
     fontSize: 11,
     color: '#64748b',
-    marginTop: 2,
   },
   inputLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#334155',
-    marginTop: 10,
+    color: '#475569',
     marginBottom: 6,
+    marginTop: 8,
   },
   modalInput: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 13,
-    color: '#1e293b',
+    fontSize: 14,
+    color: '#0f172a',
   },
-  genresWrap: {
+  starsPickerRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 10,
-  },
-  genreOption: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  genreOptionText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
+    gap: 10,
+    marginBottom: 6,
   },
   modalPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 14,
     marginTop: 14,
   },
   modalPrimaryBtnText: {
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
-  },
-  starsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginVertical: 4,
-  },
-  modalFooterBtns: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 14,
-  },
-  deleteBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#fff1f2',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

@@ -48,7 +48,7 @@ const SERIF_FONT = Platform.select({
 });
 
 const { width } = Dimensions.get('window');
-const GRID_IMAGE_SIZE = (width - 48 - 12) / 3; // 3 columnas para estilo Google Fotos
+const GRID_IMAGE_SIZE = (width - 36 - 16) / 3; // 3 columnas para estilo Google Fotos
 
 type ViewMode = 'timeline' | 'album' | 'calendar' | 'map';
 
@@ -79,6 +79,10 @@ export const MemoriesScreen: React.FC = () => {
 
   // Fecha seleccionada en el calendario
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalDateString(new Date()));
+
+  // Paginación para cero scroll
+  const [albumPage, setAlbumPage] = useState(0);
+  const [timelinePage, setTimelinePage] = useState(0);
 
   const loadMemories = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -248,15 +252,17 @@ export const MemoriesScreen: React.FC = () => {
     return milestonesByDate.get(selectedCalendarDate) || [];
   }, [milestonesByDate, selectedCalendarDate]);
 
-  // Renderizador de la Vista Álbum (estilo Google Fotos ordenado por fechas)
+  // Renderizador de la Vista Álbum (Cero Scroll con Cuadrícula Paginada 6 fotos por página)
   const renderAlbumView = () => {
-    const dates = Array.from(milestonesByDate.keys()).sort().reverse();
+    const sortedMilestones = [...milestones].sort((a, b) =>
+      toLocalDateString(b.date).localeCompare(toLocalDateString(a.date))
+    );
 
-    if (dates.length === 0) {
+    if (sortedMilestones.length === 0) {
       return (
         <View style={styles.emptyAlbumBox}>
           <View style={[styles.emptyIconCircle, { backgroundColor: `${primaryColor}18` }]}>
-            <Ionicons name="images-outline" size={44} color={primaryColor} />
+            <Ionicons name="images-outline" size={40} color={primaryColor} />
           </View>
           <Text style={styles.emptyTitle}>Tu Álbum de Recuerdos</Text>
           <Text style={styles.emptySubtitle}>
@@ -266,59 +272,81 @@ export const MemoriesScreen: React.FC = () => {
       );
     }
 
+    const pageSize = 6;
+    const totalPages = Math.max(1, Math.ceil(sortedMilestones.length / pageSize));
+    const safePage = Math.min(albumPage, totalPages - 1);
+    const visibleMilestones = sortedMilestones.slice(
+      safePage * pageSize,
+      safePage * pageSize + pageSize
+    );
+
     return (
       <View style={styles.albumContainer}>
-        {dates.map((dateStr) => {
-          const items = milestonesByDate.get(dateStr) || [];
-          return (
-            <View key={dateStr} style={styles.albumDateGroup}>
-              {/* Encabezado de Fecha tipo Google Fotos */}
-              <View style={styles.albumDateHeader}>
-                <Ionicons name="calendar-outline" size={15} color={primaryColor} />
-                <Text style={styles.albumDateText}>
-                  {formatDisplayDate(dateStr, {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </Text>
-                <Text style={styles.albumCountText}>
-                  ({items.length} {items.length === 1 ? 'foto' : 'fotos'})
-                </Text>
-              </View>
+        <View style={styles.albumDateHeader}>
+          <Ionicons name="images-outline" size={15} color={primaryColor} />
+          <Text style={styles.albumDateText}>
+            Fotografías Guardadas ({sortedMilestones.length})
+          </Text>
+        </View>
 
-              {/* Cuadrícula de fotos */}
-              <View style={styles.albumGrid}>
-                {items.map((m) => (
-                  <TouchableOpacity
-                    key={m.id}
-                    onPress={() => setSelectedMilestone(m)}
-                    style={styles.albumGridItem}
-                    activeOpacity={0.88}
-                  >
-                    <Image
-                      source={{ uri: m.image_url }}
-                      style={styles.albumGridImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.albumItemOverlay}>
-                      <Text style={styles.albumItemTitle} numberOfLines={1}>
-                        {m.title}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+        <View style={styles.albumGrid}>
+          {visibleMilestones.map((m) => (
+            <TouchableOpacity
+              key={m.id}
+              onPress={() => setSelectedMilestone(m)}
+              style={styles.albumGridItem}
+              activeOpacity={0.88}
+            >
+              <Image
+                source={{ uri: m.image_url }}
+                style={styles.albumGridImage}
+                resizeMode="cover"
+              />
+              <View style={styles.albumItemOverlay}>
+                <Text style={styles.albumItemTitle} numberOfLines={1}>
+                  {m.title}
+                </Text>
+                <Text style={styles.albumItemDateText} numberOfLines={1}>
+                  {formatDisplayDate(m.date, { day: 'numeric', month: 'short' })}
+                </Text>
               </View>
-            </View>
-          );
-        })}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {totalPages > 1 && (
+          <View style={styles.pagerRow}>
+            <TouchableOpacity
+              disabled={safePage === 0}
+              onPress={() => setAlbumPage((p) => Math.max(0, p - 1))}
+              style={[styles.pagerBtn, safePage === 0 && { opacity: 0.35 }]}
+            >
+              <Ionicons name="chevron-back" size={15} color="#334155" />
+              <Text style={styles.pagerBtnText}>Anterior</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.pagerIndicator}>
+              Página {safePage + 1} de {totalPages}
+            </Text>
+
+            <TouchableOpacity
+              disabled={safePage >= totalPages - 1}
+              onPress={() => setAlbumPage((p) => Math.min(totalPages - 1, p + 1))}
+              style={[styles.pagerBtn, safePage >= totalPages - 1 && { opacity: 0.35 }]}
+            >
+              <Text style={styles.pagerBtnText}>Siguiente</Text>
+              <Ionicons name="chevron-forward" size={15} color="#334155" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
 
-  // Renderizador del Calendario Gráfico Mensual (como Google Fotos / Google Calendar)
+  // Renderizador del Calendario Gráfico Mensual (Cero Scroll)
   const renderCalendarView = () => {
+    const firstPhoto = currentCalendarMilestones[0] || null;
+
     return (
       <View style={styles.calendarWrapper}>
         <View style={styles.calendarCard}>
@@ -329,87 +357,149 @@ export const MemoriesScreen: React.FC = () => {
           />
         </View>
 
-        {/* Sección de fotos del día seleccionado */}
+        {/* Tarjeta compacta del día seleccionado */}
         <View style={styles.calendarDaySection}>
-          <View style={styles.calendarDayHeader}>
-            <Text style={styles.calendarDayHeaderText}>
-              {formatDisplayDate(selectedCalendarDate, {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
-            </Text>
-          </View>
-
-          {currentCalendarMilestones.length === 0 ? (
+          {!firstPhoto ? (
             <View style={styles.emptyDayBox}>
-              <Ionicons name="sparkles-outline" size={24} color="#adb5bd" />
-              <Text style={styles.emptyDayText}>No hay fotos registradas este día.</Text>
+              <Ionicons name="sparkles-outline" size={18} color="#adb5bd" />
+              <Text style={styles.emptyDayText}>
+                {formatDisplayDate(selectedCalendarDate, {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+                : Sin foto registrada este día
+              </Text>
             </View>
           ) : (
-            <View style={styles.dayPhotosRow}>
-              {currentCalendarMilestones.map((m) => (
-                <TouchableOpacity
-                  key={m.id}
-                  onPress={() => setSelectedMilestone(m)}
-                  style={styles.dayPhotoCard}
-                  activeOpacity={0.88}
-                >
-                  <Image source={{ uri: m.image_url }} style={styles.dayPhotoImage} />
-                  <View style={styles.dayPhotoMeta}>
-                    <Text style={styles.dayPhotoTitle} numberOfLines={2}>
-                      {m.title}
-                    </Text>
-                    <Text style={styles.dayPhotoSub}>Toca para ver en grande</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity
+              onPress={() => setSelectedMilestone(firstPhoto)}
+              style={styles.dayPhotoCard}
+              activeOpacity={0.88}
+            >
+              <Image source={{ uri: firstPhoto.image_url }} style={styles.dayPhotoImage} />
+              <View style={styles.dayPhotoMeta}>
+                <Text style={styles.dayPhotoTitle} numberOfLines={1}>
+                  {firstPhoto.title}
+                </Text>
+                <Text style={styles.dayPhotoSub}>
+                  {formatDisplayDate(selectedCalendarDate, {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}{' '}
+                  · Toca para ampliar
+                </Text>
+              </View>
+              <Ionicons name="expand-outline" size={16} color={primaryColor} />
+            </TouchableOpacity>
           )}
         </View>
       </View>
     );
   };
 
-  const renderTimelineItem = ({ item, index }: { item: Message; index: number }) => {
-    if (viewMode !== 'timeline') return null;
+  // Renderizador de Cartas Paginadas (Cero Scroll)
+  const renderTimelinePaginatedView = () => {
+    if (memories.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={[styles.emptyIconCircle, { backgroundColor: `${primaryColor}18` }]}>
+            <Ionicons name="book-outline" size={40} color={primaryColor} />
+          </View>
+          <Text style={styles.emptyTitle}>Nuestra historia apenas comienza</Text>
+          <Text style={styles.emptySubtitle}>
+            Los mensajes que se vayan leyendo día tras día se guardarán aquí en su cápsula del tiempo.
+          </Text>
+        </View>
+      );
+    }
 
-    const isLast = index === memories.length - 1;
-    const formattedDate = formatDisplayDate(item.scheduled_date, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-
-    const themeColor = primaryColor;
+    const pageSize = 3;
+    const totalPages = Math.max(1, Math.ceil(memories.length / pageSize));
+    const safePage = Math.min(timelinePage, totalPages - 1);
+    const visibleMemories = memories.slice(
+      safePage * pageSize,
+      safePage * pageSize + pageSize
+    );
 
     return (
-      <View style={styles.timelineRow}>
-        <View style={styles.timelineTrack}>
-          <View style={[styles.timelineNode, { borderColor: themeColor }]}>
-            <View style={[styles.timelineNodeInner, { backgroundColor: themeColor }]} />
-          </View>
-          {!isLast && <View style={styles.timelineLine} />}
+      <View style={styles.timelineFixedContainer}>
+        <View style={styles.sectionTitleRow}>
+          <Ionicons name="time-outline" size={16} color={primaryColor} />
+          <Text style={styles.sectionTitle}>Cartas Guardadas ({memories.length})</Text>
         </View>
 
-        <View style={styles.memoryCardWrapper}>
-          <View style={styles.memoryHeader}>
-            <Text style={[styles.dateBadge, { color: themeColor, backgroundColor: `${themeColor}15` }]}>
-              {formattedDate}
-            </Text>
-            {item.is_read && (
-              <View style={styles.readBadge}>
-                <Ionicons name="checkmark-done" size={14} color="#adb5bd" />
-                <Text style={styles.readCheck}>Leído</Text>
+        <View style={{ flex: 1, justifyContent: 'flex-start', gap: 8, marginTop: 6 }}>
+          {visibleMemories.map((item, idx) => {
+            const isLast = idx === visibleMemories.length - 1;
+            const formattedDate = formatDisplayDate(item.scheduled_date, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            });
+            return (
+              <View key={item.id} style={styles.timelineRow}>
+                <View style={styles.timelineTrack}>
+                  <View style={[styles.timelineNode, { borderColor: primaryColor }]}>
+                    <View style={[styles.timelineNodeInner, { backgroundColor: primaryColor }]} />
+                  </View>
+                  {!isLast && <View style={styles.timelineLine} />}
+                </View>
+
+                <View style={styles.memoryCardWrapper}>
+                  <View style={styles.memoryHeader}>
+                    <Text
+                      style={[
+                        styles.dateBadge,
+                        { color: primaryColor, backgroundColor: `${primaryColor}15` },
+                      ]}
+                    >
+                      {formattedDate}
+                    </Text>
+                    {item.is_read && (
+                      <View style={styles.readBadge}>
+                        <Ionicons name="checkmark-done" size={13} color="#adb5bd" />
+                        <Text style={styles.readCheck}>Leído</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={[styles.memoryCard, { borderLeftColor: primaryColor }]}>
+                    <Text style={styles.memoryContent} numberOfLines={3}>
+                      {item.content}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            )}
-          </View>
-
-          <View style={[styles.memoryCard, { borderLeftColor: themeColor }]}>
-            <Text style={styles.memoryContent}>{item.content}</Text>
-          </View>
+            );
+          })}
         </View>
+
+        {totalPages > 1 && (
+          <View style={styles.pagerRow}>
+            <TouchableOpacity
+              disabled={safePage === 0}
+              onPress={() => setTimelinePage((p) => Math.max(0, p - 1))}
+              style={[styles.pagerBtn, safePage === 0 && { opacity: 0.35 }]}
+            >
+              <Ionicons name="chevron-back" size={15} color="#334155" />
+              <Text style={styles.pagerBtnText}>Anterior</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.pagerIndicator}>
+              Página {safePage + 1} de {totalPages}
+            </Text>
+
+            <TouchableOpacity
+              disabled={safePage >= totalPages - 1}
+              onPress={() => setTimelinePage((p) => Math.min(totalPages - 1, p + 1))}
+              style={[styles.pagerBtn, safePage >= totalPages - 1 && { opacity: 0.35 }]}
+            >
+              <Text style={styles.pagerBtnText}>Siguiente</Text>
+              <Ionicons name="chevron-forward" size={15} color="#334155" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
@@ -425,7 +515,7 @@ export const MemoriesScreen: React.FC = () => {
         <View style={styles.headerRow}>
           <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.screenTitle}>Nuestra Historia</Text>
-            <Text style={styles.screenSubtitle}>Cada recuerdo, cada fotografía guardada para siempre</Text>
+            <Text style={styles.screenSubtitle}>Cada recuerdo, cada lugar y cada fotografía</Text>
           </View>
           <View style={styles.headerButtonsRow}>
             <TouchableOpacity
@@ -434,7 +524,7 @@ export const MemoriesScreen: React.FC = () => {
               activeOpacity={0.8}
               accessibilityLabel="Agregar recuerdo"
             >
-              <Ionicons name="add" size={22} color="#ffffff" />
+              <Ionicons name="add" size={20} color="#ffffff" />
             </TouchableOpacity>
           </View>
         </View>
@@ -452,7 +542,7 @@ export const MemoriesScreen: React.FC = () => {
         >
           <Ionicons
             name="images"
-            size={15}
+            size={14}
             color={viewMode === 'album' ? primaryColor : '#6c757d'}
           />
           <Text
@@ -475,7 +565,7 @@ export const MemoriesScreen: React.FC = () => {
         >
           <Ionicons
             name="map"
-            size={15}
+            size={14}
             color={viewMode === 'map' ? primaryColor : '#6c757d'}
           />
           <Text
@@ -498,7 +588,7 @@ export const MemoriesScreen: React.FC = () => {
         >
           <Ionicons
             name="calendar"
-            size={15}
+            size={14}
             color={viewMode === 'calendar' ? primaryColor : '#6c757d'}
           />
           <Text
@@ -521,7 +611,7 @@ export const MemoriesScreen: React.FC = () => {
         >
           <Ionicons
             name="mail-open-outline"
-            size={15}
+            size={14}
             color={viewMode === 'timeline' ? primaryColor : '#6c757d'}
           />
           <Text
@@ -541,49 +631,14 @@ export const MemoriesScreen: React.FC = () => {
           <Text style={styles.loadingText}>Cargando recuerdos...</Text>
         </View>
       ) : (
-        <FlatList
-          data={viewMode === 'timeline' ? memories : []}
-          keyExtractor={(item) => item.id}
-          renderItem={renderTimelineItem}
-          ListHeaderComponent={
-            viewMode === 'album' ? (
-              renderAlbumView()
-            ) : viewMode === 'map' ? (
-              <SpecialPlacesMap currentProfile={currentProfile} primaryColor={primaryColor} />
-            ) : viewMode === 'calendar' ? (
-              renderCalendarView()
-            ) : (
-              <View style={{ marginBottom: 12 }}>
-                <View style={styles.sectionTitleRow}>
-                  <Ionicons name="time-outline" size={18} color={primaryColor} />
-                  <Text style={styles.sectionTitle}>Cápsula del Tiempo</Text>
-                </View>
-              </View>
-            )
-          }
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadMemories(true)}
-              tintColor={primaryColor}
-            />
-          }
-          ListEmptyComponent={
-            viewMode === 'timeline' ? (
-              <View style={styles.emptyContainer}>
-                <View style={[styles.emptyIconCircle, { backgroundColor: `${primaryColor}18` }]}>
-                  <Ionicons name="book-outline" size={44} color={primaryColor} />
-                </View>
-                <Text style={styles.emptyTitle}>Nuestra historia apenas comienza</Text>
-                <Text style={styles.emptySubtitle}>
-                  Los mensajes que se vayan leyendo día tras día se guardarán aquí para construir nuestra
-                  cápsula del tiempo.
-                </Text>
-              </View>
-            ) : null
-          }
-        />
+        <View style={styles.fixedViewport}>
+          {viewMode === 'album' && renderAlbumView()}
+          {viewMode === 'map' && (
+            <SpecialPlacesMap currentProfile={currentProfile} primaryColor={primaryColor} />
+          )}
+          {viewMode === 'calendar' && renderCalendarView()}
+          {viewMode === 'timeline' && renderTimelinePaginatedView()}
+        </View>
       )}
 
       {/* Modal DETALLE DE LA TARJETA (Al darle click a un recuerdo) */}
@@ -790,9 +845,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#faf9f9',
   },
   header: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -805,65 +860,65 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerThemeBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerAddBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: '#e63946',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#e63946',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   screenTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: '#1e293b',
     fontFamily: SERIF_FONT,
   },
   screenSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748b',
-    marginTop: 2,
+    marginTop: 1,
   },
   viewToggleContainer: {
     flexDirection: 'row',
     backgroundColor: '#f1f3f5',
-    borderRadius: 16,
-    padding: 4,
-    marginHorizontal: 24,
-    marginVertical: 12,
-    gap: 4,
+    borderRadius: 14,
+    padding: 3,
+    marginHorizontal: 18,
+    marginVertical: 6,
+    gap: 3,
   },
   viewToggleBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 12,
+    gap: 5,
+    paddingVertical: 7,
+    borderRadius: 11,
   },
   viewToggleBtnActive: {
     backgroundColor: '#ffffff',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 2,
   },
   viewToggleText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: '#6c757d',
   },
@@ -871,54 +926,63 @@ const styles = StyleSheet.create({
     color: '#e63946',
     fontWeight: '700',
   },
+  fixedViewport: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+  },
   listContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
     flexGrow: 1,
   },
   centerContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    padding: 24,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
+    marginTop: 10,
+    fontSize: 13,
     color: '#8d99ae',
     fontStyle: 'italic',
   },
-  // Estilo Álbum Google Fotos
+  // Estilo Álbum Cero Scroll
   albumContainer: {
-    gap: 20,
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingVertical: 4,
   },
   albumDateGroup: {
-    gap: 8,
+    gap: 6,
   },
   albumDateHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 6,
   },
   albumDateText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#2b2d42',
-    textTransform: 'capitalize',
   },
   albumCountText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#adb5bd',
   },
   albumGrid: {
+    flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
+    alignContent: 'flex-start',
   },
   albumGridItem: {
     width: GRID_IMAGE_SIZE,
-    height: GRID_IMAGE_SIZE,
-    borderRadius: 12,
+    height: GRID_IMAGE_SIZE * 1.15,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#f1f3f5',
     position: 'relative',
@@ -932,51 +996,84 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 4,
   },
   albumItemTitle: {
     fontSize: 10,
     color: '#ffffff',
+    fontWeight: '700',
+  },
+  albumItemDateText: {
+    fontSize: 8.5,
+    color: 'rgba(255,255,255,0.85)',
     fontWeight: '600',
   },
+  pagerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 6,
+  },
+  pagerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  pagerBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  pagerIndicator: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+  },
   emptyAlbumBox: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
     paddingHorizontal: 20,
   },
-  // Estilo Calendario
+  // Estilo Calendario Cero Scroll
   calendarWrapper: {
-    gap: 16,
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 8,
   },
   calendarCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#f1f3f5',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 2,
   },
   calendarDaySection: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 16,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#f1f3f5',
-    gap: 12,
   },
   calendarDayHeader: {
-    paddingBottom: 8,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f3f5',
   },
   calendarDayHeaderText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#2b2d42',
     textTransform: 'capitalize',
@@ -985,67 +1082,70 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 6,
     justifyContent: 'center',
   },
   emptyDayText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#adb5bd',
+    fontWeight: '600',
   },
   dayPhotosRow: {
-    gap: 10,
+    gap: 8,
   },
   dayPhotoCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 8,
-    borderRadius: 14,
+    gap: 10,
+    padding: 6,
+    borderRadius: 12,
     backgroundColor: '#faf9f9',
-    borderWidth: 1,
-    borderColor: '#f1f3f5',
   },
   dayPhotoImage: {
-    width: 60,
-    height: 60,
+    width: 46,
+    height: 46,
     borderRadius: 10,
   },
   dayPhotoMeta: {
     flex: 1,
   },
   dayPhotoTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#2b2d42',
   },
   dayPhotoSub: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#8d99ae',
-    marginTop: 2,
+    marginTop: 1,
   },
-  // Línea de tiempo
+  // Línea de tiempo Cero Scroll
+  timelineFixedContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '700',
     color: '#2b2d42',
   },
   timelineRow: {
     flexDirection: 'row',
-    marginBottom: 8,
   },
   timelineTrack: {
-    width: 28,
+    width: 22,
     alignItems: 'center',
   },
   timelineNode: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1053,34 +1153,34 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   timelineNodeInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   timelineLine: {
     width: 2,
     flex: 1,
     backgroundColor: '#e9ecef',
-    marginTop: 4,
-    marginBottom: -4,
+    marginTop: 2,
+    marginBottom: -2,
   },
   memoryCardWrapper: {
     flex: 1,
-    marginLeft: 12,
-    marginBottom: 20,
+    marginLeft: 8,
+    marginBottom: 4,
   },
   memoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   dateBadge: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: '700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
     textTransform: 'capitalize',
   },
   readBadge: {
@@ -1089,30 +1189,30 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   readCheck: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#adb5bd',
   },
   memoryCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 14,
+    padding: 11,
     borderLeftWidth: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   memoryContent: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 13,
+    lineHeight: 19,
     color: '#343a40',
     fontFamily: SERIF_FONT,
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 60,
     paddingHorizontal: 32,
   },
   emptyIconCircle: {

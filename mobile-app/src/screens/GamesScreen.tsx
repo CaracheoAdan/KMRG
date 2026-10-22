@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
   View,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Modal,
   Alert,
   Platform,
   Dimensions,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppHeader } from '../components/AppHeader';
+import { MoodMascot } from '../components/MoodMascot';
 import {
   getGamesState,
   saveGamesState,
@@ -25,6 +26,8 @@ import {
   GamesState,
   ChessPiece,
   createInitialChessBoard,
+  createRandomBattleshipFleet,
+  BattleshipShip,
 } from '../services/CoupleSyncService';
 import { supabase } from '../config/supabase';
 
@@ -34,99 +37,71 @@ const SERIF_FONT = Platform.select({
   default: 'Georgia, serif',
 });
 
-const { width } = Dimensions.get('window');
-const BOARD_SIZE = Math.min(width - 36, 360);
-const CHESS_CELL = Math.floor((BOARD_SIZE - 22) / 8);
-const SUDOKU_CELL = Math.floor((BOARD_SIZE - 8) / 9);
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-type GameTab = 'tictactoe' | 'sudoku' | 'chess' | 'hangman';
+// Tamaños calibrados para que TODO quepa en una sola pantalla SIN scroll
+const COMPACT_BOARD_SIZE = Math.min(SCREEN_W - 56, Math.floor(SCREEN_H * 0.31), 252);
+const FULL_BOARD_SIZE = Math.min(SCREEN_W - 32, Math.floor(SCREEN_H * 0.42), 336);
+
+type GameTab = 'tictactoe' | 'sudoku' | 'chess' | 'hangman' | 'battleship';
+
+interface VictoryCelebration {
+  winnerName: string;
+  gameTitle: string;
+  pointsEarned: number;
+  subtitle: string;
+  color: string;
+  onPlayAgain: () => void;
+}
 
 const HANGMAN_DICTIONARY: Array<{ word: string; hint: string; category: string }> = [
-  // Cine y Series
-  { word: 'MATRIX', hint: 'Ciencia ficción con Neo y las pastillas roja y azul 🕶️', category: 'Cine' },
-  { word: 'TITANIC', hint: 'Famoso barco transatlántico y un iceberg 🚢', category: 'Cine' },
-  { word: 'AVATAR', hint: 'Seres de piel azul en el planeta Pandora 🌿', category: 'Cine' },
-  { word: 'BATMAN', hint: 'El caballero de la noche protegiendo Gotham 🦇', category: 'Cine' },
-  { word: 'SHREK', hint: 'Ogro verde carismático que vive en un pantano 🧅', category: 'Cine' },
-  { word: 'INCEPTION', hint: 'Ladrones que se infiltran dentro de los sueños 🌀', category: 'Cine' },
-  { word: 'SPIDERMAN', hint: 'Héroe con traje arácnido que trepa paredes 🕷️', category: 'Cine' },
-  { word: 'GLADIADOR', hint: 'Guerrero romano en busca de honor y venganza ⚔️', category: 'Cine' },
-  { word: 'JOKER', hint: 'El villano payaso más famoso de los cómics 🃏', category: 'Cine' },
-  { word: 'STARWARS', hint: 'Guerra galáctica con sables de luz y caballeros Jedi 🌌', category: 'Cine' },
-  { word: 'COCO', hint: 'Película animada sobre el Día de Muertos 🎸', category: 'Cine' },
-  { word: 'JURASSIC', hint: 'Parque con dinosaurios clonados que se escapan 🦖', category: 'Cine' },
-
-  // Animales
-  { word: 'ELEFANTE', hint: 'Mamífero terrestre gigante con colmillos y trompa 🐘', category: 'Animales' },
-  { word: 'JIRAFA', hint: 'El animal más alto del mundo con cuello largo 🦒', category: 'Animales' },
-  { word: 'DELFIN', hint: 'Mamífero marino muy sociable e inteligente 🐬', category: 'Animales' },
-  { word: 'CANGURO', hint: 'Salta velozmente y lleva a su cría en una bolsa 🦘', category: 'Animales' },
-  { word: 'PINGUINO', hint: 'Ave que no vuela pero nada en aguas congeladas 🐧', category: 'Animales' },
-  { word: 'COCODRILO', hint: 'Gran reptil con piel dura y mandíbula poderosa 🐊', category: 'Animales' },
-  { word: 'LEOPARDO', hint: 'Felino salvaje muy veloz con manchas oscuras 🐆', category: 'Animales' },
-  { word: 'TIBURON', hint: 'Depredador de los mares con aleta dorsal 🦈', category: 'Animales' },
-  { word: 'MARIPOSA', hint: 'Insecto con alas coloridas tras salir del capullo 🦋', category: 'Animales' },
-  { word: 'KOALA', hint: 'Come hojas de eucalipto y duerme en los árboles 🐨', category: 'Animales' },
-  { word: 'CAMELLO', hint: 'Animal del desierto con jorobas que resiste el calor 🐪', category: 'Animales' },
-  { word: 'FLAMENCO', hint: 'Ave de plumas rosas que se posa en una sola pata 🦩', category: 'Animales' },
-
-  // Geografía y Países
-  { word: 'JAPON', hint: 'País del sol naciente, sushi y templos ⛩️', category: 'Geografía' },
-  { word: 'ITALIA', hint: 'País con forma de bota, cuna de la pizza y el Coliseo 🍕', category: 'Geografía' },
-  { word: 'FRANCIA', hint: 'País de la Torre Eiffel y los croissants 🥐', category: 'Geografía' },
-  { word: 'CANADA', hint: 'País norteño con hoja de arce en su bandera 🍁', category: 'Geografía' },
-  { word: 'AUSTRALIA', hint: 'Continente e isla hogar de koalas y desiertos 🦘', category: 'Geografía' },
-  { word: 'BRASIL', hint: 'País más grande de Sudamérica famoso por su carnaval 🇧🇷', category: 'Geografía' },
-  { word: 'ALEMANIA', hint: 'País europeo famoso por sus castillos e ingeniería 🏰', category: 'Geografía' },
-  { word: 'EGIPTO', hint: 'Tierra de pirámides milenarias y el río Nilo 🐫', category: 'Geografía' },
-  { word: 'MADRID', hint: 'Capital de España con la Puerta del Sol 🇪🇸', category: 'Geografía' },
-  { word: 'LONDRES', hint: 'Ciudad del Big Ben y las cabinas telefónicas rojas 🇬🇧', category: 'Geografía' },
-  { word: 'TOKIO', hint: 'La metrópolis más poblada del mundo 🗼', category: 'Geografía' },
-
-  // Comida y Bebida
-  { word: 'PIZZA', hint: 'Masa horneada con salsa de tomate y queso derretido 🍕', category: 'Comida' },
-  { word: 'HAMBURGUESA', hint: 'Carne en pan con queso, lechuga y papas fritas 🍔', category: 'Comida' },
-  { word: 'CHOCOLATE', hint: 'Dulce delicioso elaborado a partir del cacao 🍫', category: 'Comida' },
-  { word: 'ESPAGUETI', hint: 'Pasta larga italiana con salsa boloñesa 🍝', category: 'Comida' },
-  { word: 'SUSHI', hint: 'Rollo japonés de arroz con pescado fresco o aguacate 🍣', category: 'Comida' },
-  { word: 'HELADO', hint: 'Postre cremoso servido muy frío en cono o copa 🍦', category: 'Comida' },
-  { word: 'TACOS', hint: 'Tortilla doblada con carne asada, cilantro y cebolla 🌮', category: 'Comida' },
-  { word: 'HOTDOG', hint: 'Salchicha caliente en pan alargado con mostaza 🌭', category: 'Comida' },
-  { word: 'PALOMITAS', hint: 'Maíz inflado infaltable en el cine 🍿', category: 'Comida' },
-  { word: 'LASAGNA', hint: 'Capas de pasta rellenas de carne, salsa y queso horneado 🥘', category: 'Comida' },
-
-  // Objetos y Tecnología
-  { word: 'GUITARRA', hint: 'Instrumento musical de seis cuerdas y caja sonora 🎸', category: 'Objetos' },
-  { word: 'TELESCOPIO', hint: 'Instrumento óptico para ver planetas y estrellas 🔭', category: 'Tecnología' },
-  { word: 'COMPUTADORA', hint: 'Máquina electrónica para procesar datos y navegar 💻', category: 'Tecnología' },
-  { word: 'AUDIFONOS', hint: 'Dispositivo para escuchar música en privado 🎧', category: 'Objetos' },
-  { word: 'BICICLETA', hint: 'Vehículo de dos ruedas impulsado por pedales 🚲', category: 'Objetos' },
-  { word: 'BRUJULA', hint: 'Herramienta de navegación con aguja magnética hacia el norte 🧭', category: 'Objetos' },
-  { word: 'MICROFONO', hint: 'Aparato que amplifica o graba la voz 🎙️', category: 'Tecnología' },
-  { word: 'COHETE', hint: 'Vehículo que viaja a gran velocidad al espacio exterior 🚀', category: 'Tecnología' },
-  { word: 'CAMARA', hint: 'Dispositivo para capturar fotos y recuerdos 📷', category: 'Tecnología' },
-  { word: 'RELOJ', hint: 'Instrumento que marca las horas y segundos ⏰', category: 'Objetos' },
-
-  // Naturaleza y Ciencia
-  { word: 'VOLCAN', hint: 'Montaña con cráter que expulsa lava y humo 🌋', category: 'Naturaleza' },
-  { word: 'ARCOIRIS', hint: 'Banda de colores que surge cuando llueve con sol 🌈', category: 'Naturaleza' },
-  { word: 'ASTRONAUTA', hint: 'Persona entrenada para viajar al espacio exterior 🧑‍🚀', category: 'Ciencia' },
-  { word: 'GALAXIA', hint: 'Enorme sistema de miles de millones de estrellas 🌌', category: 'Espacio' },
-  { word: 'DINOSAURIO', hint: 'Reptiles colosales que dominaron la Tierra 🦕', category: 'Historia' },
-  { word: 'RELAMPAGO', hint: 'Destello luminoso potente en el cielo durante tormentas ⚡', category: 'Naturaleza' },
-  { word: 'SUBMARINO', hint: 'Nave capaz de sumergirse a grandes profundidades ⚓', category: 'Ciencia' },
-
-  // Videojuegos y Pasatiempos
-  { word: 'POKEMON', hint: 'Monstruos de bolsillo con entrenadores y batallas ⚡', category: 'Videojuegos' },
-  { word: 'MINECRAFT', hint: 'Juego de construcción y supervivencia con cubos ⛏️', category: 'Videojuegos' },
-  { word: 'TETRIS', hint: 'Clásico juego de acomodar piezas geométricas que caen 🧱', category: 'Videojuegos' },
-  { word: 'MARIO', hint: 'Fontanero con bigote que recolecta monedas y hongos 🍄', category: 'Videojuegos' },
-  { word: 'AJEDREZ', hint: 'Juego de estrategia con tablero de 64 casillas ♟️', category: 'Juegos' },
-  { word: 'DOMINO', hint: 'Juego de fichas rectangulares con puntos divididos 🎲', category: 'Juegos' },
-  { word: 'LABERINTO', hint: 'Espacio lleno de caminos engañosos para hallar la salida 🧩', category: 'Juegos' },
+  { word: 'MATRIX', hint: 'Ciencia ficción con Neo y las pastillas roja y azul', category: 'Cine' },
+  { word: 'TITANIC', hint: 'Famoso barco transatlántico y un iceberg', category: 'Cine' },
+  { word: 'AVATAR', hint: 'Seres de piel azul en el planeta Pandora', category: 'Cine' },
+  { word: 'BATMAN', hint: 'El caballero de la noche protegiendo Gotham', category: 'Cine' },
+  { word: 'SHREK', hint: 'Ogro verde carismático que vive en un pantano', category: 'Cine' },
+  { word: 'INCEPTION', hint: 'Ladrones que se infiltran dentro de los sueños', category: 'Cine' },
+  { word: 'SPIDERMAN', hint: 'Héroe con traje arácnido que trepa paredes', category: 'Cine' },
+  { word: 'GLADIADOR', hint: 'Guerrero romano en busca de honor y venganza', category: 'Cine' },
+  { word: 'STARWARS', hint: 'Guerra galáctica con sables de luz y caballeros Jedi', category: 'Cine' },
+  { word: 'JURASSIC', hint: 'Parque con dinosaurios clonados que se escapan', category: 'Cine' },
+  { word: 'ELEFANTE', hint: 'Mamífero terrestre gigante con colmillos y trompa', category: 'Animales' },
+  { word: 'JIRAFA', hint: 'El animal más alto del mundo con cuello largo', category: 'Animales' },
+  { word: 'DELFIN', hint: 'Mamífero marino muy sociable e inteligente', category: 'Animales' },
+  { word: 'CANGURO', hint: 'Salta velozmente y lleva a su cría en una bolsa', category: 'Animales' },
+  { word: 'PINGUINO', hint: 'Ave que no vuela pero nada en aguas congeladas', category: 'Animales' },
+  { word: 'LEOPARDO', hint: 'Felino salvaje muy veloz con manchas oscuras', category: 'Animales' },
+  { word: 'MARIPOSA', hint: 'Insecto con alas coloridas tras salir del capullo', category: 'Animales' },
+  { word: 'JAPON', hint: 'País del sol naciente, sushi y templos', category: 'Geografía' },
+  { word: 'ITALIA', hint: 'País con forma de bota, cuna de la pizza y el Coliseo', category: 'Geografía' },
+  { word: 'FRANCIA', hint: 'País de la Torre Eiffel y los croissants', category: 'Geografía' },
+  { word: 'CANADA', hint: 'País norteño con hoja de arce en su bandera', category: 'Geografía' },
+  { word: 'BRASIL', hint: 'País más grande de Sudamérica famoso por su carnaval', category: 'Geografía' },
+  { word: 'EGIPTO', hint: 'Tierra de pirámides milenarias y el río Nilo', category: 'Geografía' },
+  { word: 'PIZZA', hint: 'Masa horneada con salsa de tomate y queso derretido', category: 'Comida' },
+  { word: 'HAMBURGUESA', hint: 'Carne en pan con queso, lechuga y papas fritas', category: 'Comida' },
+  { word: 'CHOCOLATE', hint: 'Dulce delicioso elaborado a partir del cacao', category: 'Comida' },
+  { word: 'ESPAGUETI', hint: 'Pasta larga italiana con salsa boloñesa', category: 'Comida' },
+  { word: 'SUSHI', hint: 'Rollo japonés de arroz con pescado fresco o aguacate', category: 'Comida' },
+  { word: 'HELADO', hint: 'Postre cremoso servido muy frío en cono o copa', category: 'Comida' },
+  { word: 'TACOS', hint: 'Tortilla con carne asada, cilantro y cebolla', category: 'Comida' },
+  { word: 'GUITARRA', hint: 'Instrumento musical de seis cuerdas y caja sonora', category: 'Objetos' },
+  { word: 'TELESCOPIO', hint: 'Instrumento óptico para ver planetas y estrellas', category: 'Tecnología' },
+  { word: 'COMPUTADORA', hint: 'Máquina electrónica para procesar datos y navegar', category: 'Tecnología' },
+  { word: 'AUDIFONOS', hint: 'Dispositivo para escuchar música en privado', category: 'Objetos' },
+  { word: 'BICICLETA', hint: 'Vehículo de dos ruedas impulsado por pedales', category: 'Objetos' },
+  { word: 'COHETE', hint: 'Vehículo que viaja a gran velocidad al espacio exterior', category: 'Tecnología' },
+  { word: 'VOLCAN', hint: 'Montaña con cráter que expulsa lava y humo', category: 'Naturaleza' },
+  { word: 'ARCOIRIS', hint: 'Banda de colores que surge cuando llueve con sol', category: 'Naturaleza' },
+  { word: 'ASTRONAUTA', hint: 'Persona entrenada para viajar al espacio exterior', category: 'Ciencia' },
+  { word: 'GALAXIA', hint: 'Enorme sistema de miles de millones de estrellas', category: 'Espacio' },
+  { word: 'DINOSAURIO', hint: 'Reptiles colosales que dominaron la Tierra', category: 'Historia' },
+  { word: 'POKEMON', hint: 'Criaturas de bolsillo con entrenadores y batallas', category: 'Videojuegos' },
+  { word: 'MINECRAFT', hint: 'Juego de construcción y supervivencia con cubos', category: 'Videojuegos' },
+  { word: 'TETRIS', hint: 'Clásico juego de acomodar piezas geométricas que caen', category: 'Videojuegos' },
+  { word: 'AJEDREZ', hint: 'Juego de estrategia con tablero de 64 casillas', category: 'Juegos' },
 ];
 
-// --- Base y Generador de Sudoku ---
 const BASE_SUDOKU = [
   [5, 3, 4, 6, 7, 8, 9, 1, 2],
   [6, 7, 2, 1, 9, 5, 3, 4, 8],
@@ -191,7 +166,6 @@ function createSudokuSession(difficulty: 'easy' | 'medium' | 'hard'): SavedSudok
   };
 }
 
-// --- Símbolos y Valores de Ajedrez ---
 const CHESS_SYMBOLS: Record<string, string> = {
   'w-k': '♔',
   'w-q': '♕',
@@ -217,17 +191,24 @@ const PIECE_VALUES: Record<string, number> = {
 };
 
 export const GamesScreen: React.FC = () => {
-  const { profile } = useProfile();
-  const { primaryColor, openThemeModal } = useTheme();
+  const { profile, getDisplayName } = useProfile();
+  const { primaryColor } = useTheme();
   const currentProfile = profile || 'Karla';
 
   const [activeGame, setActiveGame] = useState<GameTab>('tictactoe');
   const [gamesState, setGamesState] = useState<GamesState>(DEFAULT_GAMES_STATE);
+  const [isFullScreenGame, setIsFullScreenGame] = useState<boolean>(false);
 
-  // --- Estado de Sudoku ---
+  // Estado de Celebración Grande y Alegre al Ganar
+  const [victoryCelebration, setVictoryCelebration] = useState<VictoryCelebration | null>(null);
+  const victoryScale = useRef(new Animated.Value(0.5)).current;
+
+  // --- Estado de Sudoku (3 Vidas + Teclado Numérico Nativo) ---
+  const MAX_SUDOKU_MISTAKES = 3;
   const [sudoku, setSudoku] = useState<SavedSudokuSession>(() => createSudokuSession('easy'));
   const [selectedSudokuCell, setSelectedSudokuCell] = useState<[number, number] | null>(null);
   const [isNoteMode, setIsNoteMode] = useState(false);
+  const sudokuInputRef = useRef<TextInput>(null);
 
   // --- Estado de Ajedrez ---
   const [selectedChessPos, setSelectedChessPos] = useState<[number, number] | null>(null);
@@ -237,7 +218,62 @@ export const GamesScreen: React.FC = () => {
   const [isCustomWordModalOpen, setIsCustomWordModalOpen] = useState(false);
   const [customWordInput, setCustomWordInput] = useState('');
   const [customHintInput, setCustomHintInput] = useState('');
-  const [customCatInput, setCustomCatInput] = useState('Secreto de Pareja 💌');
+  const [customCatInput, setCustomCatInput] = useState('Reto Especial');
+
+  // --- Estado de Battleship 10x10 (Drag & Rotate Fluido + Lanzamiento de Bala) ---
+  const [battleshipRadarMode, setBattleshipRadarMode] = useState<'attack' | 'fleet'>('attack');
+  const [selectedSetupShipId, setSelectedSetupShipId] = useState<string>('carrier');
+  const [setupOrientation, setSetupOrientation] = useState<'H' | 'V'>('H');
+  const [localSetupFleet, setLocalSetupFleet] = useState<BattleshipShip[] | null>(null);
+  const dragSessionRef = useRef<{
+    shipId: string;
+    startCell: number;
+    lastCell: number;
+    didDragMove: boolean;
+    startedOnSelectedShip: boolean;
+  } | null>(null);
+
+  const [firingBullet, setFiringBullet] = useState<{
+    cellIdx: number;
+    isHit: boolean;
+  } | null>(null);
+  const bulletProgress = useRef(new Animated.Value(0)).current;
+  const explosionScale = useRef(new Animated.Value(0)).current;
+  const radarPulseAnim = useRef(new Animated.Value(0)).current;
+  const hitBannerScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(radarPulseAnim, {
+          toValue: 1,
+          duration: 1400,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(radarPulseAnim, {
+          toValue: 0,
+          duration: 1400,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [radarPulseAnim]);
+
+  const triggerVictoryCelebration = useCallback(
+    (data: VictoryCelebration) => {
+      setVictoryCelebration(data);
+      victoryScale.setValue(0.4);
+      Animated.spring(victoryScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 95,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    },
+    [victoryScale]
+  );
 
   const loadAll = useCallback(async () => {
     const loaded = await getGamesState();
@@ -249,6 +285,7 @@ export const GamesScreen: React.FC = () => {
       sudoku: { ...DEFAULT_GAMES_STATE.sudoku, ...(loaded.sudoku || {}) },
       hangman: { ...DEFAULT_GAMES_STATE.hangman, ...(loaded.hangman || {}) },
       chess: { ...DEFAULT_GAMES_STATE.chess, ...(loaded.chess || {}) },
+      battleship: { ...DEFAULT_GAMES_STATE.battleship, ...(loaded.battleship || {}) },
     });
 
     try {
@@ -315,8 +352,23 @@ export const GamesScreen: React.FC = () => {
   };
 
   // =========================================================================
-  // 1. TRES EN RAYA PRO
+  // 1. TRES EN RAYA
   // =========================================================================
+  const handleNewTicTacToeRound = async () => {
+    const ttt = gamesState.ticTacToe;
+    await updateAndSyncGames({
+      ...gamesState,
+      ticTacToe: {
+        ...ttt,
+        board: Array(9).fill(null),
+        winningLine: null,
+        winner: null,
+        turn: ttt.round % 2 === 0 ? 'Karla' : 'Javier',
+        round: (ttt.round || 1) + 1,
+      },
+    });
+  };
+
   const handleTicTacToePress = async (index: number) => {
     const ttt = gamesState.ticTacToe;
     if (ttt.board[index] || ttt.winner) return;
@@ -379,25 +431,21 @@ export const GamesScreen: React.FC = () => {
         scoreJavier: nextScoreJavier,
       },
     });
-  };
 
-  const handleNewTicTacToeRound = async () => {
-    const ttt = gamesState.ticTacToe;
-    await updateAndSyncGames({
-      ...gamesState,
-      ticTacToe: {
-        ...ttt,
-        board: Array(9).fill(null),
-        winningLine: null,
-        winner: null,
-        turn: ttt.round % 2 === 0 ? 'Karla' : 'Javier',
-        round: (ttt.round || 1) + 1,
-      },
-    });
+    if (winner === 'Karla' || winner === 'Javier') {
+      triggerVictoryCelebration({
+        winnerName: winner === 'Karla' ? 'Karlita' : 'Javier',
+        gameTitle: 'Tres en Raya',
+        pointsEarned: 150,
+        subtitle: 'Tres en línea impecables. ¡Qué gran jugada!',
+        color: winner === 'Karla' ? '#9333ea' : '#0284c7',
+        onPlayAgain: () => void handleNewTicTacToeRound(),
+      });
+    }
   };
 
   // =========================================================================
-  // 2. SUDOKU MASTER
+  // 2. SUDOKU
   // =========================================================================
   const handleNewSudokuGame = async (diff: 'easy' | 'medium' | 'hard') => {
     const fresh = createSudokuSession(diff);
@@ -405,14 +453,24 @@ export const GamesScreen: React.FC = () => {
     await persistSudoku(fresh);
   };
 
+  const isSudokuGameOver = sudoku.mistakes >= MAX_SUDOKU_MISTAKES && !sudoku.completed;
+
+  const handleSelectSudokuCell = (r: number, c: number) => {
+    setSelectedSudokuCell([r, c]);
+    if (!sudoku.fixed[r][c] && !sudoku.completed && sudoku.mistakes < MAX_SUDOKU_MISTAKES) {
+      setTimeout(() => {
+        sudokuInputRef.current?.focus();
+      }, 20);
+    }
+  };
+
   const handleSudokuNumberPress = async (num: number) => {
-    if (!selectedSudokuCell || sudoku.completed) return;
+    if (!selectedSudokuCell || sudoku.completed || sudoku.mistakes >= MAX_SUDOKU_MISTAKES) return;
     const [r, c] = selectedSudokuCell;
     if (sudoku.fixed[r][c]) return;
 
     const cellKey = `${r}-${c}`;
 
-    // Borrar
     if (num === 0) {
       const nextBoard = sudoku.board.map((row) => [...row]);
       nextBoard[r][c] = 0;
@@ -422,7 +480,6 @@ export const GamesScreen: React.FC = () => {
       return;
     }
 
-    // Modo Notas (Lápiz)
     if (isNoteMode && sudoku.board[r][c] === 0) {
       const currentNotes = sudoku.notes[cellKey] || [];
       const nextCellNotes = currentNotes.includes(num)
@@ -442,7 +499,6 @@ export const GamesScreen: React.FC = () => {
 
     let nextScore = sudoku.score;
     let nextMistakes = sudoku.mistakes;
-
     const mult = sudoku.difficulty === 'easy' ? 1 : sudoku.difficulty === 'medium' ? 1.5 : 2;
 
     if (num === correctVal && !wasAlreadyCorrect) {
@@ -450,6 +506,9 @@ export const GamesScreen: React.FC = () => {
     } else if (num !== correctVal) {
       nextMistakes += 1;
       nextScore = Math.max(0, nextScore - 20);
+      if (nextMistakes >= MAX_SUDOKU_MISTAKES) {
+        sudokuInputRef.current?.blur();
+      }
     }
 
     const isComplete = nextBoard.every((row, ri) =>
@@ -457,6 +516,7 @@ export const GamesScreen: React.FC = () => {
     );
 
     if (isComplete) {
+      sudokuInputRef.current?.blur();
       const bonus = Math.round(500 * mult);
       const finalScore = nextScore + bonus;
       await persistSudoku({
@@ -488,10 +548,14 @@ export const GamesScreen: React.FC = () => {
         },
       });
 
-      Alert.alert(
-        '🏆 ¡Sudoku Completado!',
-        `¡Increíble! Ganaste +${finalScore} puntos y 1 Trofeo para tu marcador.`
-      );
+      triggerVictoryCelebration({
+        winnerName: getDisplayName(currentProfile),
+        gameTitle: 'Sudoku Completado',
+        pointsEarned: finalScore,
+        subtitle: 'Resolviste el tablero completo con maestría absoluta.',
+        color: primaryColor,
+        onPlayAgain: () => void handleNewSudokuGame(sudoku.difficulty),
+      });
       return;
     }
 
@@ -520,7 +584,6 @@ export const GamesScreen: React.FC = () => {
     });
   };
 
-  // Contador de cuántos números faltan de cada dígito 1-9
   const remainingDigitsCount = useMemo(() => {
     const counts: Record<number, number> = { 1: 9, 2: 9, 3: 9, 4: 9, 5: 9, 6: 9, 7: 9, 8: 9, 9: 9 };
     for (let r = 0; r < 9; r++) {
@@ -535,7 +598,7 @@ export const GamesScreen: React.FC = () => {
   }, [sudoku.board, sudoku.solution]);
 
   // =========================================================================
-  // 3. AJEDREZ REAL PRO
+  // 3. AJEDREZ
   // =========================================================================
   const getValidChessMoves = useCallback(
     (board: Array<Array<ChessPiece | null>>, r: number, c: number): Array<[number, number]> => {
@@ -612,7 +675,6 @@ export const GamesScreen: React.FC = () => {
     []
   );
 
-  // Detectar si un Rey está en Jaque
   const isKingInCheck = useMemo(() => {
     const board = gamesState.chess.board;
     const currentTurn = gamesState.chess.turn;
@@ -644,7 +706,6 @@ export const GamesScreen: React.FC = () => {
     return false;
   }, [gamesState.chess.board, gamesState.chess.turn, getValidChessMoves]);
 
-  // Calcular ventaja de material
   const materialAdvantage = useMemo(() => {
     let scoreW = 0;
     let scoreB = 0;
@@ -663,6 +724,23 @@ export const GamesScreen: React.FC = () => {
     return getValidChessMoves(gamesState.chess.board, selectedChessPos[0], selectedChessPos[1]);
   }, [selectedChessPos, gamesState.chess.board, getValidChessMoves]);
 
+  const handleResetChess = async () => {
+    setSelectedChessPos(null);
+    setChessHistory([]);
+    await updateAndSyncGames({
+      ...gamesState,
+      chess: {
+        ...gamesState.chess,
+        board: createInitialChessBoard(),
+        turn: 'w',
+        capturedByW: [],
+        capturedByB: [],
+        lastMove: null,
+        winner: null,
+      },
+    });
+  };
+
   const handleChessCellPress = async (r: number, c: number) => {
     const chess = gamesState.chess;
     if (chess.winner) return;
@@ -676,13 +754,11 @@ export const GamesScreen: React.FC = () => {
         const movingPiece = chess.board[sr][sc];
         if (!movingPiece) return;
 
-        // Guardar historial para poder deshacer
         setChessHistory((prev) => [...prev.slice(-10), chess]);
 
         const nextBoard = chess.board.map((row) => [...row]);
         const targetPiece = nextBoard[r][c];
 
-        // Coronación automática a Reina
         const promotedPiece: ChessPiece =
           movingPiece.type === 'p' && (r === 0 || r === 7)
             ? { type: 'q', color: movingPiece.color }
@@ -730,6 +806,17 @@ export const GamesScreen: React.FC = () => {
             winsJavier: nextWinsJavier,
           },
         });
+
+        if (nextWinner === 'w' || nextWinner === 'b') {
+          triggerVictoryCelebration({
+            winnerName: nextWinner === 'w' ? 'Karlita' : 'Javier',
+            gameTitle: '¡Jaque Mate en Ajedrez!',
+            pointsEarned: 600,
+            subtitle: 'Victoria magistral en el tablero real.',
+            color: nextWinner === 'w' ? '#9333ea' : '#0284c7',
+            onPlayAgain: () => void handleResetChess(),
+          });
+        }
         return;
       }
     }
@@ -752,29 +839,30 @@ export const GamesScreen: React.FC = () => {
     });
   };
 
-  const handleResetChess = async () => {
-    setSelectedChessPos(null);
-    setChessHistory([]);
-    await updateAndSyncGames({
-      ...gamesState,
-      chess: {
-        ...gamesState.chess,
-        board: createInitialChessBoard(),
-        turn: 'w',
-        capturedByW: [],
-        capturedByB: [],
-        lastMove: null,
-        winner: null,
-      },
-    });
-  };
-
   // =========================================================================
-  // 4. EL AHORCADO VISUAL
+  // 4. EL AHORCADO
   // =========================================================================
   const hangman = gamesState.hangman;
   const wrongGuessesCount = hangman.guessed.filter((l) => !hangman.word.includes(l)).length;
   const maxWrong = 6;
+
+  const handleRandomHangmanWord = async () => {
+    const available = HANGMAN_DICTIONARY.filter((d) => d.word !== hangman.word);
+    const pick = available[Math.floor(Math.random() * available.length)] || HANGMAN_DICTIONARY[0];
+    await updateAndSyncGames({
+      ...gamesState,
+      hangman: {
+        ...hangman,
+        word: pick.word.toUpperCase(),
+        hint: pick.hint,
+        category: pick.category,
+        author: 'Diccionario',
+        isPartnerChallenge: false,
+        guessed: [],
+        status: 'playing',
+      },
+    });
+  };
 
   const handleGuessLetter = async (letter: string) => {
     if (hangman.status !== 'playing' || hangman.guessed.includes(letter)) return;
@@ -797,10 +885,11 @@ export const GamesScreen: React.FC = () => {
       nextLb = addLeaderboardReward(gamesState, currentProfile, 30, 0);
     }
 
+    const winBonus = hangman.isPartnerChallenge ? 400 : 250;
+
     if (allRevealed) {
       nextStatus = 'won';
       nextStreak += 1;
-      const winBonus = hangman.isPartnerChallenge ? 400 : 250;
       if (currentProfile === 'Karla') nextScoreKarla += 1;
       else nextScoreJavier += 1;
       nextLb = addLeaderboardReward(
@@ -826,24 +915,17 @@ export const GamesScreen: React.FC = () => {
         streak: nextStreak,
       },
     });
-  };
 
-  const handleRandomHangmanWord = async () => {
-    const available = HANGMAN_DICTIONARY.filter((d) => d.word !== hangman.word);
-    const pick = available[Math.floor(Math.random() * available.length)] || HANGMAN_DICTIONARY[0];
-    await updateAndSyncGames({
-      ...gamesState,
-      hangman: {
-        ...hangman,
-        word: pick.word.toUpperCase(),
-        hint: pick.hint,
-        category: pick.category,
-        author: 'Diccionario ✨',
-        isPartnerChallenge: false,
-        guessed: [],
-        status: 'playing',
-      },
-    });
+    if (nextStatus === 'won') {
+      triggerVictoryCelebration({
+        winnerName: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
+        gameTitle: '¡Palabra Descifrada!',
+        pointsEarned: winBonus,
+        subtitle: `Adivinaste "${hangman.word}" y sumaste racha de ${nextStreak}.`,
+        color: primaryColor,
+        onPlayAgain: () => void handleRandomHangmanWord(),
+      });
+    }
   };
 
   const handleSaveCustomHangman = async () => {
@@ -864,9 +946,9 @@ export const GamesScreen: React.FC = () => {
       hangman: {
         ...hangman,
         word: cleaned,
-        hint: customHintInput.trim() || 'Reto especial de tu pareja 💌',
+        hint: customHintInput.trim() || 'Reto especial de tu pareja',
         category: customCatInput.trim() || 'Reto de Pareja',
-        author: currentProfile === 'Karla' ? 'Karlita 💜' : 'Javier 💙',
+        author: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
         isPartnerChallenge: true,
         guessed: [],
         status: 'playing',
@@ -878,155 +960,527 @@ export const GamesScreen: React.FC = () => {
     setIsCustomWordModalOpen(false);
   };
 
+  // =========================================================================
+  // 5. BATTLESHIP PRO 10x10 (BATALLA NAVAL DE MESA CON INVITACIÓN Y DESPLIEGUE)
+  // =========================================================================
+  const bs = gamesState.battleship || DEFAULT_GAMES_STATE.battleship;
+  const ROW_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+  const COL_NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+
+  const isShipSunk = (ship: BattleshipShip, shots: number[]): boolean =>
+    ship.cells.every((c) => shots.includes(c));
+
+  const remainingShipsKarla = useMemo(
+    () => bs.fleetKarla.filter((s) => !isShipSunk(s, bs.shotsByJavier)).length,
+    [bs.fleetKarla, bs.shotsByJavier]
+  );
+
+  const remainingShipsJavier = useMemo(
+    () => bs.fleetJavier.filter((s) => !isShipSunk(s, bs.shotsByKarla)).length,
+    [bs.fleetJavier, bs.shotsByKarla]
+  );
+
+  const syncedMyFleet = currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier;
+  const myFleet = bs.phase === 'setup' && localSetupFleet ? localSetupFleet : syncedMyFleet;
+  const enemyFleet = currentProfile === 'Karla' ? bs.fleetJavier : bs.fleetKarla;
+  const myShots = currentProfile === 'Karla' ? bs.shotsByKarla : bs.shotsByJavier;
+  const enemyShotsAtMe = currentProfile === 'Karla' ? bs.shotsByJavier : bs.shotsByKarla;
+  const amIReady = currentProfile === 'Karla' ? bs.readyKarla : bs.readyJavier;
+  const isPartnerReady = currentProfile === 'Karla' ? bs.readyJavier : bs.readyKarla;
+
+  useEffect(() => {
+    if (bs.phase === 'setup') {
+      setLocalSetupFleet(currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier);
+    } else {
+      setLocalSetupFleet(null);
+    }
+  }, [bs.phase, currentProfile, bs.fleetKarla, bs.fleetJavier]);
+
+  // Helper inteligente sin colisiones ni errores: busca la casilla libre más cercana en el tablero 10x10
+  const findNearestValidCellsForShip = (
+    fleet: BattleshipShip[],
+    shipId: string,
+    size: number,
+    targetRow: number,
+    targetCol: number,
+    orientation: 'H' | 'V'
+  ): number[] | null => {
+    const occupied = new Set<number>();
+    fleet.forEach((s) => {
+      if (s.id !== shipId) {
+        s.cells.forEach((c) => occupied.add(c));
+      }
+    });
+
+    const maxR = orientation === 'V' ? 10 - size : 9;
+    const maxC = orientation === 'H' ? 10 - size : 9;
+    const clampedR = Math.max(0, Math.min(maxR, targetRow));
+    const clampedC = Math.max(0, Math.min(maxC, targetCol));
+
+    const candidates: Array<{ r: number; c: number; dist: number }> = [];
+    for (let r = 0; r <= maxR; r++) {
+      for (let c = 0; c <= maxC; c++) {
+        const dist = Math.abs(r - clampedR) + Math.abs(c - clampedC);
+        candidates.push({ r, c, dist });
+      }
+    }
+    candidates.sort((a, b) => a.dist - b.dist);
+
+    for (const cand of candidates) {
+      const cells: number[] = [];
+      let valid = true;
+      for (let i = 0; i < size; i++) {
+        const rr = orientation === 'H' ? cand.r : cand.r + i;
+        const cc = orientation === 'H' ? cand.c + i : cand.c;
+        const idx = rr * 10 + cc;
+        if (occupied.has(idx)) {
+          valid = false;
+          break;
+        }
+        cells.push(idx);
+      }
+      if (valid) return cells;
+    }
+    return null;
+  };
+
+  // Mover o rotar un barco instantáneamente en memoria local (60fps, CERO alertas de error)
+  const moveOrRotateShipLocally = (
+    shipId: string,
+    anchorCellIdx: number,
+    newOrientation?: 'H' | 'V'
+  ) => {
+    if (amIReady) return;
+    const baseFleet = localSetupFleet || syncedMyFleet;
+    const targetShip = baseFleet.find((s) => s.id === shipId);
+    if (!targetShip) return;
+
+    const orient: 'H' | 'V' = newOrientation || targetShip.orientation || setupOrientation || 'H';
+    const row = Math.floor(anchorCellIdx / 10);
+    const col = anchorCellIdx % 10;
+
+    const validCells = findNearestValidCellsForShip(
+      baseFleet,
+      shipId,
+      targetShip.size,
+      row,
+      col,
+      orient
+    );
+    if (!validCells) return;
+
+    setSelectedSetupShipId(shipId);
+    setSetupOrientation(orient);
+    setLocalSetupFleet(
+      baseFleet.map((s) =>
+        s.id === shipId ? { ...s, orientation: orient, cells: validCells } : s
+      )
+    );
+  };
+
+  // Rotar el barco actualmente seleccionado ahí mismo donde está
+  const handleRotateSelectedShipInPlace = (explicitShipId?: string) => {
+    if (amIReady) return;
+    const baseFleet = localSetupFleet || syncedMyFleet;
+    const idToRotate = explicitShipId || selectedSetupShipId;
+    const ship = baseFleet.find((s) => s.id === idToRotate) || baseFleet[0];
+    if (!ship) return;
+
+    const currentOrient =
+      ship.orientation ||
+      (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V');
+    const nextOrient: 'H' | 'V' = currentOrient === 'H' ? 'V' : 'H';
+    const anchorCell = ship.cells[0] ?? 0;
+    moveOrRotateShipLocally(ship.id, anchorCell, nextOrient);
+  };
+
+  // 1) Enviar invitación de partida en vivo
+  const handleSendBattleshipInvite = async () => {
+    setBattleshipRadarMode('fleet');
+    const freshK = createRandomBattleshipFleet();
+    const freshJ = createRandomBattleshipFleet();
+    setLocalSetupFleet(currentProfile === 'Karla' ? freshK : freshJ);
+    await updateAndSyncGames({
+      ...gamesState,
+      battleship: {
+        ...bs,
+        phase: 'invited',
+        invitedBy: currentProfile,
+        readyKarla: false,
+        readyJavier: false,
+        fleetKarla: freshK,
+        fleetJavier: freshJ,
+        shotsByKarla: [],
+        shotsByJavier: [],
+        turn: currentProfile,
+        lastShot: null,
+        winner: null,
+      },
+    });
+  };
+
+  // 2) Aceptar la invitación e ir a la fase de acomodar barcos en 10x10
+  const handleAcceptBattleshipInvite = async () => {
+    setBattleshipRadarMode('fleet');
+    setLocalSetupFleet(currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier);
+    await updateAndSyncGames({
+      ...gamesState,
+      battleship: {
+        ...bs,
+        phase: 'setup',
+        readyKarla: false,
+        readyJavier: false,
+        shotsByKarla: [],
+        shotsByJavier: [],
+        lastShot: null,
+        winner: null,
+      },
+    });
+  };
+
+  // 4) Reacomodar mi flota al azar durante el despliegue
+  const handleShuffleMyFleet = () => {
+    if (amIReady) return;
+    const randomFleet = createRandomBattleshipFleet();
+    setLocalSetupFleet(randomFleet);
+  };
+
+  // 5) Confirmar "¡Flota Lista!" (sincronizando la posición arrastrada) y pasar a batalla
+  const handleConfirmFleetReady = async (forceStartBoth = false) => {
+    const isK = currentProfile === 'Karla';
+    const nextReadyK = forceStartBoth ? true : isK ? !bs.readyKarla : bs.readyKarla;
+    const nextReadyJ = forceStartBoth ? true : !isK ? !bs.readyJavier : bs.readyJavier;
+    const bothReady = nextReadyK && nextReadyJ;
+    const finalMyFleet = localSetupFleet || syncedMyFleet;
+
+    if (bothReady) {
+      setBattleshipRadarMode('attack');
+    }
+
+    await updateAndSyncGames({
+      ...gamesState,
+      battleship: {
+        ...bs,
+        phase: bothReady ? 'battle' : 'setup',
+        readyKarla: nextReadyK,
+        readyJavier: nextReadyJ,
+        fleetKarla: isK ? finalMyFleet : bs.fleetKarla,
+        fleetJavier: !isK ? finalMyFleet : bs.fleetJavier,
+      },
+    });
+  };
+
+  // 6) Reiniciar a nueva sala de preparación 10x10
+  const handleResetBattleship = async () => {
+    setBattleshipRadarMode('fleet');
+    const freshK = createRandomBattleshipFleet();
+    const freshJ = createRandomBattleshipFleet();
+    setLocalSetupFleet(currentProfile === 'Karla' ? freshK : freshJ);
+    await updateAndSyncGames({
+      ...gamesState,
+      battleship: {
+        ...bs,
+        phase: 'setup',
+        invitedBy: currentProfile,
+        readyKarla: false,
+        readyJavier: false,
+        fleetKarla: freshK,
+        fleetJavier: freshJ,
+        shotsByKarla: [],
+        shotsByJavier: [],
+        turn: bs.turn === 'Karla' ? 'Javier' : 'Karla',
+        lastShot: null,
+        winner: null,
+      },
+    });
+  };
+
+  // 7) Disparar proyectil animado (bala/torpedo) en cuadrícula 10x10
+  const handleBattleshipFire = async (cellIdx: number) => {
+    if (bs.winner || bs.phase !== 'battle' || firingBullet) return;
+
+    if (bs.turn !== currentProfile) {
+      Alert.alert(
+        `Turno de ${getDisplayName(bs.turn)}`,
+        `Espera a que ${getDisplayName(bs.turn)} realice su disparo naval.`
+      );
+      return;
+    }
+
+    const shooter = currentProfile;
+    const isShooterKarla = shooter === 'Karla';
+    const currentShots = isShooterKarla ? bs.shotsByKarla : bs.shotsByJavier;
+    const targetFleet = isShooterKarla ? bs.fleetJavier : bs.fleetKarla;
+
+    if (currentShots.includes(cellIdx)) return;
+
+    const hitShip = targetFleet.find((s) => s.cells.includes(cellIdx));
+    const isHit = Boolean(hitShip);
+
+    // Lanzar animación visual del proyectil / bala volando hacia la casilla objetivo
+    setFiringBullet({ cellIdx, isHit });
+    bulletProgress.setValue(0);
+    explosionScale.setValue(0);
+
+    await new Promise<void>((resolve) => {
+      Animated.sequence([
+        Animated.timing(bulletProgress, {
+          toValue: 1,
+          duration: 340,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(explosionScale, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]).start(() => resolve());
+    });
+
+    setFiringBullet(null);
+
+    const nextShots = [...currentShots, cellIdx];
+    const justSunk = hitShip ? hitShip.cells.every((c) => nextShots.includes(c)) : false;
+
+    if (isHit) {
+      hitBannerScale.setValue(1.22);
+      Animated.spring(hitBannerScale, {
+        toValue: 1,
+        friction: 4,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    }
+
+    const allEnemySunk = targetFleet.every((s) => s.cells.every((c) => nextShots.includes(c)));
+    const nextWinner: 'Karla' | 'Javier' | null = allEnemySunk ? shooter : null;
+
+    const nextTurn: 'Karla' | 'Javier' = isHit
+      ? shooter
+      : shooter === 'Karla'
+      ? 'Javier'
+      : 'Karla';
+
+    let nextLb = gamesState.leaderboard;
+    if (isHit) {
+      nextLb = addLeaderboardReward(gamesState, shooter, justSunk ? 100 : 35, 0);
+    }
+    if (nextWinner) {
+      nextLb = addLeaderboardReward(
+        { ...gamesState, leaderboard: nextLb },
+        nextWinner,
+        650,
+        1
+      );
+    }
+
+    await updateAndSyncGames({
+      ...gamesState,
+      leaderboard: nextLb,
+      battleship: {
+        ...bs,
+        phase: nextWinner ? 'finished' : 'battle',
+        shotsByKarla: isShooterKarla ? nextShots : bs.shotsByKarla,
+        shotsByJavier: !isShooterKarla ? nextShots : bs.shotsByJavier,
+        turn: nextTurn,
+        lastShot: {
+          shooter,
+          cell: cellIdx,
+          hit: isHit,
+          sunkShipName: justSunk && hitShip ? hitShip.name : undefined,
+        },
+        winner: nextWinner,
+        winsKarla: nextWinner === 'Karla' ? (bs.winsKarla || 0) + 1 : bs.winsKarla || 0,
+        winsJavier: nextWinner === 'Javier' ? (bs.winsJavier || 0) + 1 : bs.winsJavier || 0,
+      },
+    });
+
+    if (nextWinner) {
+      triggerVictoryCelebration({
+        winnerName: getDisplayName(nextWinner),
+        gameTitle: '¡Flota Enemiga Hundida!',
+        pointsEarned: 650,
+        subtitle: 'Destruiste los 5 buques de guerra en el radar 10x10.',
+        color: nextWinner === 'Karla' ? '#9333ea' : '#0284c7',
+        onPlayAgain: () => void handleResetBattleship(),
+      });
+    }
+  };
+
+  // Renderizador de un segmento conectado de barco (Proa, Cubierta con Torreta, Popa)
+  const renderConnectedShipSegment = (
+    ship: BattleshipShip,
+    cellIdx: number,
+    cellPx: number,
+    isHit: boolean,
+    isSunk: boolean,
+    isSelectedForSetup: boolean
+  ) => {
+    const segIdx = ship.cells.indexOf(cellIdx);
+    const isBow = segIdx === 0;
+    const isStern = segIdx === ship.cells.length - 1;
+    const isHoriz =
+      (ship.orientation ||
+        (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V')) === 'H';
+
+    const radius = Math.max(8, Math.floor(cellPx * 0.45));
+    const hullBg = isSunk
+      ? '#7f1d1d'
+      : isSelectedForSetup
+      ? '#0ea5e9'
+      : '#334155';
+    const hullBorder = isSunk
+      ? '#ef4444'
+      : isSelectedForSetup
+      ? '#38bdf8'
+      : '#94a3b8';
+
+    return (
+      <View
+        pointerEvents="none"
+        style={[
+          styles.shipHullSegment,
+          {
+            backgroundColor: hullBg,
+            borderColor: hullBorder,
+            width: isHoriz ? '100%' : '82%',
+            height: isHoriz ? '82%' : '100%',
+            borderTopLeftRadius: isBow ? radius : 0,
+            borderBottomLeftRadius: isHoriz ? (isBow ? radius : 0) : isStern ? radius : 0,
+            borderTopRightRadius: isHoriz ? (isStern ? radius : 0) : isBow ? radius : 0,
+            borderBottomRightRadius: isStern ? radius : 0,
+            borderLeftWidth: isHoriz ? (isBow ? 1.5 : 0) : 1.5,
+            borderRightWidth: isHoriz ? (isStern ? 1.5 : 0) : 1.5,
+            borderTopWidth: isHoriz ? 1.5 : isBow ? 1.5 : 0,
+            borderBottomWidth: isHoriz ? 1.5 : isStern ? 1.5 : 0,
+          },
+        ]}
+      >
+        {/* Detalle interno de cubierta naval (Torreta / Radar / Fuego si fue impactado) */}
+        {isSunk ? (
+          <Ionicons name="skull" size={Math.max(10, cellPx * 0.5)} color="#fca5a5" />
+        ) : isHit ? (
+          <Ionicons name="flame" size={Math.max(11, cellPx * 0.54)} color="#fde047" />
+        ) : isBow || isStern ? (
+          <View style={styles.shipTurretCircle} />
+        ) : (
+          <View style={styles.shipBridgeDeck} />
+        )}
+      </View>
+    );
+  };
+
   const ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
   const lb = gamesState.leaderboard || DEFAULT_GAMES_STATE.leaderboard;
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+  // Renderizador adaptable del juego activo (En Pantalla Completa se transforma en Consola Pro Independiente)
+  const renderActiveGameArena = (isFull: boolean) => {
+    const proMaxBoard = Math.min(SCREEN_W - 36, Math.floor(SCREEN_H * 0.45), 344);
+    const boardPx = isFull ? proMaxBoard : COMPACT_BOARD_SIZE;
+    const chessCellPx = Math.floor((boardPx - 18) / 8);
+    const sudokuCellPx = Math.floor((boardPx - 6) / 9);
+    const bsCoordHeaderPx = isFull ? 16 : 12;
+    const battleshipCellPx = Math.floor((boardPx - bsCoordHeaderPx - 4) / 10);
 
-      {/* Encabezado Superior con Branding KMRG */}
-      <AppHeader />
-
-      {/* Encabezado del Arcade */}
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.screenTitle}>Juegos en Pareja</Text>
-            <Text style={styles.screenSubtitle}>
-              Compitan, ganen puntos y superen sus récords
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+    return (
+      <View
+        style={[
+          styles.arenaCard,
+          isFull && styles.arenaCardProDark,
+        ]}
       >
-        {/* ================= MARCADOR GLOBAL DE PUNTOS Y TROFEOS ================= */}
-        <View style={[styles.globalScoreCard, { borderColor: `${primaryColor}30` }]}>
-          <View style={styles.playerScoreBox}>
-            <View style={styles.playerAvatarRow}>
-              <View style={[styles.playerBadgeCircle, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]}>
-                <Text style={[styles.playerBadgeLetter, { color: '#9333ea' }]}>K</Text>
-              </View>
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={styles.playerName}>Karlita</Text>
-                  {lb.pointsKarla >= lb.pointsJavier && lb.pointsKarla > 0 && (
-                    <Ionicons name="trophy" size={13} color="#f59e0b" />
-                  )}
+        {/* Cabecera del Juego (O Barra de Consola Pro en Modo Zoom) */}
+        <View style={styles.arenaHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {isFull && (
+                <View style={[styles.proLiveBadge, { backgroundColor: primaryColor }]}>
+                  <Text style={styles.proLiveBadgeText}>PRO ARENA</Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="trophy-outline" size={11} color="#d97706" />
-                  <Text style={styles.trophyCount}>{lb.trophiesKarla} trofeos</Text>
-                </View>
-              </View>
-            </View>
-            <Text style={[styles.pointsValue, { color: '#9333ea' }]}>
-              {lb.pointsKarla} <Text style={styles.ptsUnit}>pts</Text>
-            </Text>
-          </View>
-
-          <View style={styles.vsBadge}>
-            <Text style={styles.vsBadgeText}>VS</Text>
-          </View>
-
-          <View style={[styles.playerScoreBox, { alignItems: 'flex-end' }]}>
-            <View style={styles.playerAvatarRow}>
-              <View style={{ alignItems: 'flex-end' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  {lb.pointsJavier > lb.pointsKarla && (
-                    <Ionicons name="trophy" size={13} color="#f59e0b" />
-                  )}
-                  <Text style={styles.playerName}>Javier</Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="trophy-outline" size={11} color="#d97706" />
-                  <Text style={styles.trophyCount}>{lb.trophiesJavier} trofeos</Text>
-                </View>
-              </View>
-              <View style={[styles.playerBadgeCircle, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
-                <Text style={[styles.playerBadgeLetter, { color: '#0284c7' }]}>J</Text>
-              </View>
-            </View>
-            <Text style={[styles.pointsValue, { color: '#0284c7' }]}>
-              {lb.pointsJavier} <Text style={styles.ptsUnit}>pts</Text>
-            </Text>
-          </View>
-        </View>
-
-        {/* ================= SELECTOR DE LOS 4 JUEGOS ================= */}
-        <View style={styles.gamesSelectorGrid}>
-          {[
-            { id: 'tictactoe', label: 'Tres en Raya', icon: 'grid', reward: '+150 pts' },
-            { id: 'sudoku', label: 'Sudoku', icon: 'apps', reward: '+500 pts' },
-            { id: 'chess', label: 'Ajedrez', icon: 'trophy', reward: '+600 pts' },
-            { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle', reward: '+400 pts' },
-          ].map((g) => {
-            const active = activeGame === g.id;
-            return (
-              <TouchableOpacity
-                key={g.id}
-                onPress={() => setActiveGame(g.id as GameTab)}
+              )}
+              <Text
                 style={[
-                  styles.gameTabCard,
-                  active && {
-                    backgroundColor: primaryColor,
-                    borderColor: primaryColor,
-                  },
+                  styles.arenaTitle,
+                  isFull && { fontSize: 20, color: '#f8fafc', letterSpacing: 0.5 },
                 ]}
-                activeOpacity={0.85}
               >
-                <Ionicons
-                  name={g.icon as any}
-                  size={18}
-                  color={active ? '#ffffff' : primaryColor}
-                />
-                <Text style={[styles.gameTabTitle, active && { color: '#ffffff' }]}>
-                  {g.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.gameTabReward,
-                    active ? { color: 'rgba(255,255,255,0.85)' } : { color: '#8d99ae' },
-                  ]}
-                >
-                  {g.reward}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+                {activeGame === 'tictactoe'
+                  ? isFull
+                    ? 'CYBER TIC-TAC-TOE'
+                    : 'Tres en Raya'
+                  : activeGame === 'sudoku'
+                  ? isFull
+                    ? 'SUDOKU MASTER STUDIO'
+                    : 'Sudoku'
+                  : activeGame === 'chess'
+                  ? isFull
+                    ? 'GRANDMASTER CHESS'
+                    : 'Ajedrez'
+                  : activeGame === 'battleship'
+                  ? isFull
+                    ? 'BATTLESHIP COMMAND 10x10'
+                    : 'Battleship 10x10'
+                  : isFull
+                  ? 'HANGMAN ARCADE'
+                  : 'El Ahorcado'}
+              </Text>
+            </View>
+            <Text style={[styles.arenaSubtitle, isFull && { color: '#94a3b8' }]}>
+              {activeGame === 'tictactoe'
+                ? `Ronda #${gamesState.ticTacToe.round || 1} • Karlita ${gamesState.ticTacToe.scoreKarla} - ${gamesState.ticTacToe.scoreJavier} Javier`
+                : activeGame === 'sudoku'
+                ? `Récord K: ${gamesState.sudoku.bestScoreKarla} | J: ${gamesState.sudoku.bestScoreJavier} • ${sudoku.score} pts`
+                : activeGame === 'chess'
+                ? `Karlita ${gamesState.chess.winsKarla || 0} - ${gamesState.chess.winsJavier || 0} Javier`
+                : activeGame === 'battleship'
+                ? `Flotas 10x10 • Karlita ${remainingShipsKarla}/5 buques vs ${remainingShipsJavier}/5 Javier`
+                : `Racha: ${hangman.streak || 0} • ${hangman.category || 'General'}`}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => setIsFullScreenGame(!isFull)}
+            style={[
+              styles.fullScreenToggleBtn,
+              {
+                backgroundColor: isFull ? '#1e293b' : `${primaryColor}15`,
+                borderWidth: isFull ? 1 : 0,
+                borderColor: '#334155',
+              },
+            ]}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={isFull ? 'contract-outline' : 'game-controller'}
+              size={15}
+              color={isFull ? '#38bdf8' : primaryColor}
+            />
+            <Text
+              style={[
+                styles.fullScreenToggleText,
+                { color: isFull ? '#f8fafc' : primaryColor },
+              ]}
+            >
+              {isFull ? 'Salir Modo Pro' : 'Modo Juego Pro'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* ===================================================================== */}
-        {/* 1. TRES EN RAYA PRO                                                   */}
-        {/* ===================================================================== */}
+        {/* ================= 1. TRES EN RAYA ================= */}
         {activeGame === 'tictactoe' && (
-          <View style={styles.arenaCard}>
-            <View style={styles.arenaHeader}>
-              <View>
-                <Text style={styles.arenaTitle}>Tres en Raya</Text>
-                <Text style={styles.arenaSubtitle}>
-                  Ronda #{gamesState.ticTacToe.round || 1} • Victoria: +150 pts
-                </Text>
-              </View>
-              <View style={[styles.miniScorePill, { backgroundColor: `${primaryColor}15` }]}>
-                <Text style={[styles.miniScoreText, { color: primaryColor }]}>
-                  Karlita: {gamesState.ticTacToe.scoreKarla} | Javier: {gamesState.ticTacToe.scoreJavier}
-                </Text>
-              </View>
-            </View>
-
-            {/* Banner de Turno o Victoria */}
+          <View style={styles.gameBodyCentered}>
             <View
               style={[
                 styles.statusBanner,
                 {
                   backgroundColor: gamesState.ticTacToe.winner
-                    ? '#d1fae5'
-                    : `${primaryColor}15`,
+                    ? isFull
+                      ? '#064e3b'
+                      : '#d1fae5'
+                    : isFull
+                    ? '#0f172a'
+                    : `${primaryColor}14`,
+                  borderWidth: isFull ? 1 : 0,
+                  borderColor: isFull ? '#1e293b' : 'transparent',
                 },
               ]}
             >
@@ -1034,34 +1488,53 @@ export const GamesScreen: React.FC = () => {
                 style={[
                   styles.statusBannerText,
                   {
-                    color: gamesState.ticTacToe.winner ? '#059669' : primaryColor,
+                    color: gamesState.ticTacToe.winner
+                      ? '#10b981'
+                      : isFull
+                      ? '#38bdf8'
+                      : primaryColor,
                   },
                 ]}
               >
                 {gamesState.ticTacToe.winner
                   ? gamesState.ticTacToe.winner === 'Empate'
-                    ? '¡Empate! (+40 pts para ambos)'
-                    : `¡Ganó ${
-                        gamesState.ticTacToe.winner === 'Karla' ? 'Karlita' : 'Javier'
-                      }! (+150 pts)`
-                  : `Turno actual: ${
-                      gamesState.ticTacToe.turn === 'Karla' ? 'Karlita (✕)' : 'Javier (○)'
+                    ? '¡EMPATE TÉCNICO! (+40 PTS)'
+                    : `¡VICTORIA DE ${
+                        gamesState.ticTacToe.winner === 'Karla' ? 'KARLITA' : 'JAVIER'
+                      }! (+150 PTS)`
+                  : `TURNO ACTIVO: ${
+                      gamesState.ticTacToe.turn === 'Karla' ? 'KARLITA (✕)' : 'JAVIER (○)'
                     }`}
               </Text>
             </View>
 
-            {/* Tablero 3x3 con línea ganadora iluminada */}
-            <View style={[styles.tttBoard, { backgroundColor: `${primaryColor}18` }]}>
+            <View
+              style={[
+                styles.tttBoard,
+                {
+                  width: boardPx,
+                  height: boardPx,
+                  backgroundColor: isFull ? '#090d16' : `${primaryColor}15`,
+                  borderWidth: isFull ? 2 : 0,
+                  borderColor: isFull ? '#1e293b' : 'transparent',
+                },
+              ]}
+            >
               {gamesState.ticTacToe.board.map((cell, idx) => {
                 const isWinningCell = gamesState.ticTacToe.winningLine?.includes(idx);
                 return (
                   <TouchableOpacity
                     key={idx}
-                    onPress={() => handleTicTacToePress(idx)}
+                    onPress={() => void handleTicTacToePress(idx)}
                     style={[
                       styles.tttCell,
+                      isFull && {
+                        backgroundColor: '#111827',
+                        borderWidth: 1,
+                        borderColor: '#1e293b',
+                      },
                       isWinningCell && {
-                        backgroundColor: '#fef08a',
+                        backgroundColor: isFull ? '#422006' : '#fef08a',
                         borderColor: '#eab308',
                         borderWidth: 2.5,
                       },
@@ -1069,10 +1542,30 @@ export const GamesScreen: React.FC = () => {
                     activeOpacity={0.8}
                   >
                     {cell === 'Karla' && (
-                      <Text style={[styles.tttPiece, { color: '#9333ea', fontWeight: '900' }]}>✕</Text>
+                      <Text
+                        style={[
+                          styles.tttPiece,
+                          {
+                            fontSize: isFull ? 50 : 34,
+                            color: isFull ? '#e879f9' : '#9333ea',
+                          },
+                        ]}
+                      >
+                        ✕
+                      </Text>
                     )}
                     {cell === 'Javier' && (
-                      <Text style={[styles.tttPiece, { color: '#0284c7', fontWeight: '900' }]}>○</Text>
+                      <Text
+                        style={[
+                          styles.tttPiece,
+                          {
+                            fontSize: isFull ? 50 : 34,
+                            color: isFull ? '#38bdf8' : '#0284c7',
+                          },
+                        ]}
+                      >
+                        ○
+                      </Text>
                     )}
                   </TouchableOpacity>
                 );
@@ -1080,38 +1573,52 @@ export const GamesScreen: React.FC = () => {
             </View>
 
             <TouchableOpacity
-              onPress={handleNewTicTacToeRound}
-              style={[styles.primaryGameBtn, { backgroundColor: primaryColor }]}
+              onPress={() => void handleNewTicTacToeRound()}
+              style={[
+                styles.primaryGameBtn,
+                {
+                  backgroundColor: isFull ? '#0284c7' : primaryColor,
+                  width: '100%',
+                },
+              ]}
             >
-              <Ionicons name="play-forward" size={18} color="#ffffff" />
+              <Ionicons name="play-forward" size={16} color="#ffffff" />
               <Text style={styles.primaryGameBtnText}>
-                {gamesState.ticTacToe.winner ? 'Siguiente Ronda' : 'Reiniciar Ronda'}
+                {gamesState.ticTacToe.winner ? 'Jugar Siguiente Ronda' : 'Reiniciar Ronda'}
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ===================================================================== */}
-        {/* 2. SUDOKU                                                             */}
-        {/* ===================================================================== */}
+        {/* ================= 2. SUDOKU (3 VIDAS + TECLADO NUMÉRICO NATIVO) ================= */}
         {activeGame === 'sudoku' && (
-          <View style={styles.arenaCard}>
-            <View style={styles.arenaHeader}>
-              <View>
-                <Text style={styles.arenaTitle}>Sudoku</Text>
-                <Text style={styles.arenaSubtitle}>
-                  Récord Karlita: {gamesState.sudoku.bestScoreKarla} | Javier:{' '}
-                  {gamesState.sudoku.bestScoreJavier}
-                </Text>
-              </View>
-              <View style={[styles.miniScorePill, { backgroundColor: `${primaryColor}18` }]}>
-                <Text style={[styles.miniScoreText, { color: primaryColor }]}>
-                  {sudoku.score} pts
-                </Text>
-              </View>
-            </View>
+          <View style={styles.gameBodyCentered}>
+            {/* Input oculto conectado al Teclado Numérico Nativo del Teléfono */}
+            <TextInput
+              ref={sudokuInputRef}
+              value=""
+              keyboardType="number-pad"
+              caretHidden
+              maxLength={1}
+              onChangeText={(txt) => {
+                const digit = parseInt(txt.slice(-1), 10);
+                if (digit >= 1 && digit <= 9) {
+                  void handleSudokuNumberPress(digit);
+                }
+              }}
+              onKeyPress={({ nativeEvent }) => {
+                if (nativeEvent.key === 'Backspace') {
+                  void handleSudokuNumberPress(0);
+                }
+              }}
+              style={{
+                position: 'absolute',
+                width: 1,
+                height: 1,
+                opacity: 0,
+              }}
+            />
 
-            {/* Selector de Nivel y Errores */}
             <View style={styles.sudokuTopControls}>
               <View style={styles.diffPillsRow}>
                 {[
@@ -1123,13 +1630,23 @@ export const GamesScreen: React.FC = () => {
                   return (
                     <TouchableOpacity
                       key={d.key}
-                      onPress={() => handleNewSudokuGame(d.key as any)}
+                      onPress={() => void handleNewSudokuGame(d.key as any)}
                       style={[
                         styles.diffChip,
-                        active && { backgroundColor: primaryColor, borderColor: primaryColor },
+                        isFull && { backgroundColor: '#1e293b', borderColor: '#334155' },
+                        active && {
+                          backgroundColor: isFull ? '#0284c7' : primaryColor,
+                          borderColor: isFull ? '#38bdf8' : primaryColor,
+                        },
                       ]}
                     >
-                      <Text style={[styles.diffChipText, active && { color: '#ffffff' }]}>
+                      <Text
+                        style={[
+                          styles.diffChipText,
+                          isFull && { color: '#cbd5e1' },
+                          active && { color: '#ffffff' },
+                        ]}
+                      >
                         {d.label}
                       </Text>
                     </TouchableOpacity>
@@ -1137,13 +1654,65 @@ export const GamesScreen: React.FC = () => {
                 })}
               </View>
 
-              <View style={styles.mistakesPill}>
-                <Text style={styles.mistakesPillText}>❌ {sudoku.mistakes}</Text>
+              {/* Indicador de 3 Vidas de Sudoku */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                {[0, 1, 2].map((lifeIdx) => {
+                  const alive = lifeIdx < MAX_SUDOKU_MISTAKES - sudoku.mistakes;
+                  return (
+                    <Ionicons
+                      key={lifeIdx}
+                      name={alive ? 'heart' : 'heart-dislike-outline'}
+                      size={15}
+                      color={alive ? '#e11d48' : '#94a3b8'}
+                    />
+                  );
+                })}
+              </View>
+
+              <View style={styles.sudokuToolsMiniRow}>
+                <TouchableOpacity
+                  onPress={() => setIsNoteMode((n) => !n)}
+                  style={[
+                    styles.miniToolBtn,
+                    isFull && { backgroundColor: '#1e293b' },
+                    isNoteMode && { backgroundColor: isFull ? '#0284c7' : primaryColor },
+                  ]}
+                >
+                  <Ionicons
+                    name="pencil"
+                    size={13}
+                    color={isNoteMode ? '#ffffff' : isFull ? '#cbd5e1' : '#475569'}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void handleSudokuNumberPress(0)}
+                  style={[styles.miniToolBtn, isFull && { backgroundColor: '#1e293b' }]}
+                >
+                  <Ionicons
+                    name="backspace-outline"
+                    size={14}
+                    color={isFull ? '#cbd5e1' : '#475569'}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void handleSudokuHint()}
+                  style={[
+                    styles.miniToolBtn,
+                    { backgroundColor: isFull ? '#1e293b' : `${primaryColor}18` },
+                  ]}
+                >
+                  <Ionicons name="bulb" size={14} color={isFull ? '#fde047' : primaryColor} />
+                </TouchableOpacity>
               </View>
             </View>
 
-            {/* Tablero 9x9 con resaltado inteligente */}
-            <View style={styles.sudokuGridContainer}>
+            <View
+              style={[
+                styles.sudokuGridContainer,
+                isFull && { borderColor: '#38bdf8', backgroundColor: '#0f172a' },
+                isSudokuGameOver && { opacity: 0.45 },
+              ]}
+            >
               {sudoku.board.map((row, r) => (
                 <View key={r} style={styles.sudokuRow}>
                   {row.map((val, c) => {
@@ -1172,20 +1741,40 @@ export const GamesScreen: React.FC = () => {
                     return (
                       <TouchableOpacity
                         key={`${r}-${c}`}
-                        onPress={() => setSelectedSudokuCell([r, c])}
+                        onPress={() => handleSelectSudokuCell(r, c)}
                         style={[
                           styles.sudokuCell,
                           {
-                            width: SUDOKU_CELL,
-                            height: SUDOKU_CELL,
+                            width: sudokuCellPx,
+                            height: sudokuCellPx,
                             borderRightWidth: rightBorder,
                             borderBottomWidth: bottomBorder,
-                            borderRightColor: rightBorder === 2 ? '#1e293b' : '#cbd5e1',
-                            borderBottomColor: bottomBorder === 2 ? '#1e293b' : '#cbd5e1',
+                            borderRightColor:
+                              rightBorder === 2
+                                ? isFull
+                                  ? '#38bdf8'
+                                  : '#1e293b'
+                                : isFull
+                                ? '#1e293b'
+                                : '#cbd5e1',
+                            borderBottomColor:
+                              bottomBorder === 2
+                                ? isFull
+                                  ? '#38bdf8'
+                                  : '#1e293b'
+                                : isFull
+                                ? '#1e293b'
+                                : '#cbd5e1',
                           },
-                          isSameCross && { backgroundColor: `${primaryColor}10` },
-                          isSameNumber && { backgroundColor: `${primaryColor}28` },
-                          isSelected && { backgroundColor: `${primaryColor}45` },
+                          isSameCross && {
+                            backgroundColor: isFull ? '#1e293b' : `${primaryColor}10`,
+                          },
+                          isSameNumber && {
+                            backgroundColor: isFull ? '#0369a1' : `${primaryColor}28`,
+                          },
+                          isSelected && {
+                            backgroundColor: isFull ? '#0284c7' : `${primaryColor}45`,
+                          },
                         ]}
                         activeOpacity={0.75}
                       >
@@ -1193,16 +1782,30 @@ export const GamesScreen: React.FC = () => {
                           <Text
                             style={[
                               styles.sudokuValText,
+                              { fontSize: isFull ? 18 : 14 },
                               isFixed
-                                ? { color: '#0f172a', fontWeight: '800' }
-                                : { color: primaryColor, fontWeight: '700' },
-                              isWrong && { color: '#e11d48' },
+                                ? {
+                                    color: isFull ? '#f8fafc' : '#0f172a',
+                                    fontWeight: '800',
+                                  }
+                                : {
+                                    color: isFull ? '#38bdf8' : primaryColor,
+                                    fontWeight: '700',
+                                  },
+                              isWrong && { color: '#ef4444' },
                             ]}
                           >
                             {val}
                           </Text>
                         ) : cellNotes.length > 0 ? (
-                          <Text style={styles.sudokuNotesText}>{cellNotes.join('')}</Text>
+                          <Text
+                            style={[
+                              styles.sudokuNotesText,
+                              isFull && { color: '#94a3b8' },
+                            ]}
+                          >
+                            {cellNotes.join('')}
+                          </Text>
                         ) : null}
                       </TouchableOpacity>
                     );
@@ -1211,150 +1814,106 @@ export const GamesScreen: React.FC = () => {
               ))}
             </View>
 
-            {/* Herramientas de Sudoku */}
-            <View style={styles.sudokuToolsBar}>
+            {/* Barra Inferior de Teclado Numérico o Game Over si perdió las 3 vidas */}
+            {isSudokuGameOver ? (
               <TouchableOpacity
-                onPress={() => setIsNoteMode((n) => !n)}
+                onPress={() => void handleNewSudokuGame(sudoku.difficulty)}
                 style={[
-                  styles.sudokuToolBtn,
-                  isNoteMode && { backgroundColor: primaryColor },
+                  styles.primaryGameBtn,
+                  { backgroundColor: '#e11d48', width: '100%' },
+                ]}
+              >
+                <Ionicons name="refresh-circle" size={18} color="#ffffff" />
+                <Text style={styles.primaryGameBtnText}>
+                  ¡Perdiste tus 3 vidas! Jugar Nuevo Sudoku
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => {
+                  if (!selectedSudokuCell) {
+                    for (let rr = 0; rr < 9; rr++) {
+                      const cc = sudoku.board[rr].findIndex((v, i) => !sudoku.fixed[rr][i] && v === 0);
+                      if (cc !== -1) {
+                        handleSelectSudokuCell(rr, cc);
+                        return;
+                      }
+                    }
+                  } else {
+                    sudokuInputRef.current?.focus();
+                  }
+                }}
+                activeOpacity={0.85}
+                style={[
+                  styles.primaryGameBtn,
+                  {
+                    backgroundColor: isFull ? '#1e293b' : `${primaryColor}16`,
+                    borderWidth: 1,
+                    borderColor: isFull ? '#38bdf8' : `${primaryColor}45`,
+                    width: '100%',
+                  },
                 ]}
               >
                 <Ionicons
-                  name="pencil"
+                  name="keypad-outline"
                   size={16}
-                  color={isNoteMode ? '#ffffff' : '#495057'}
+                  color={isFull ? '#38bdf8' : primaryColor}
                 />
                 <Text
                   style={[
-                    styles.sudokuToolText,
-                    isNoteMode && { color: '#ffffff' },
+                    styles.primaryGameBtnText,
+                    { color: isFull ? '#f8fafc' : primaryColor, fontSize: 12 },
                   ]}
                 >
-                  Notas {isNoteMode ? 'ON' : 'OFF'}
+                  {selectedSudokuCell
+                    ? `Casilla F${selectedSudokuCell[0] + 1}C${
+                        selectedSudokuCell[1] + 1
+                      } • Toca para abrir Teclado Numérico (1-9)`
+                    : 'Toca cualquier casilla vacía para usar tu Teclado Numérico'}
                 </Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleSudokuNumberPress(0)}
-                style={styles.sudokuToolBtn}
-              >
-                <Ionicons name="backspace-outline" size={16} color="#495057" />
-                <Text style={styles.sudokuToolText}>Borrar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleSudokuHint}
-                style={[styles.sudokuToolBtn, { backgroundColor: `${primaryColor}18` }]}
-              >
-                <Ionicons name="bulb" size={16} color={primaryColor} />
-                <Text style={[styles.sudokuToolText, { color: primaryColor }]}>Pista</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleNewSudokuGame(sudoku.difficulty)}
-                style={styles.sudokuToolBtn}
-              >
-                <Ionicons name="refresh" size={16} color="#495057" />
-                <Text style={styles.sudokuToolText}>Nuevo</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Teclado 1-9 con contador de restantes */}
-            <View style={styles.sudokuKeypadRow}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
-                const left = remainingDigitsCount[n];
-                const done = left === 0;
-                return (
-                  <TouchableOpacity
-                    key={n}
-                    disabled={done}
-                    onPress={() => handleSudokuNumberPress(n)}
-                    style={[
-                      styles.sudokuKeyBtn,
-                      { borderColor: `${primaryColor}45` },
-                      done && { opacity: 0.35, backgroundColor: '#e9ecef' },
-                    ]}
-                  >
-                    <Text style={[styles.sudokuKeyDigit, { color: primaryColor }]}>{n}</Text>
-                    <Text style={styles.sudokuKeyLeft}>{left}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            )}
           </View>
         )}
 
-        {/* ===================================================================== */}
-        {/* 3. AJEDREZ                                                            */}
-        {/* ===================================================================== */}
+        {/* ================= 3. AJEDREZ ================= */}
         {activeGame === 'chess' && (
-          <View style={styles.arenaCard}>
-            <View style={styles.arenaHeader}>
-              <View>
-                <Text style={styles.arenaTitle}>Ajedrez</Text>
-                <Text style={styles.arenaSubtitle}>
-                  Victoria: +600 pts • Karlita {gamesState.chess.winsKarla || 0} -{' '}
-                  {gamesState.chess.winsJavier || 0} Javier
-                </Text>
-              </View>
-              {isKingInCheck && !gamesState.chess.winner && (
-                <View style={styles.checkWarningBadge}>
-                  <Text style={styles.checkWarningText}>¡JAQUE!</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Estado de Turno */}
-            <View
-              style={[
-                styles.statusBanner,
-                {
-                  backgroundColor: gamesState.chess.winner
-                    ? '#d1fae5'
-                    : `${primaryColor}15`,
-                },
-              ]}
-            >
+          <View style={styles.gameBodyCentered}>
+            <View style={styles.chessTopStatusRow}>
               <Text
                 style={[
-                  styles.statusBannerText,
-                  { color: gamesState.chess.winner ? '#059669' : primaryColor },
+                  styles.chessTurnLabel,
+                  { color: isFull ? '#38bdf8' : primaryColor },
                 ]}
               >
                 {gamesState.chess.winner
-                  ? `¡Jaque Mate! Ganó ${
-                      gamesState.chess.winner === 'w' ? 'Karlita' : 'Javier'
-                    } (+600 pts)`
-                  : `Juegan: ${
+                  ? `¡Ganó ${gamesState.chess.winner === 'w' ? 'Karlita' : 'Javier'}!`
+                  : `Turno: ${
                       gamesState.chess.turn === 'w'
-                        ? 'Blancas (Karlita)'
-                        : 'Negras (Javier)'
+                        ? 'Karlita (Blancas)'
+                        : 'Javier (Negras)'
                     }`}
               </Text>
+              {isKingInCheck && !gamesState.chess.winner && (
+                <View style={styles.checkWarningBadge}>
+                  <Text style={styles.checkWarningText}>¡JAQUE AL REY!</Text>
+                </View>
+              )}
+              {materialAdvantage !== 0 && (
+                <Text style={styles.advantageTag}>
+                  Ventaja {materialAdvantage > 0 ? `K +${materialAdvantage}` : `J +${Math.abs(materialAdvantage)}`}
+                </Text>
+              )}
             </View>
 
-            {/* Bandeja Superior: Javier (Negras) */}
-            <View style={styles.chessPlayerBar}>
-              <View style={styles.chessPlayerLeft}>
-                <View style={[styles.colorDot, { backgroundColor: '#0284c7' }]} />
-                <Text style={styles.chessPlayerLabel}>Javier 💙 (Negras)</Text>
-                {materialAdvantage < 0 && (
-                  <Text style={styles.advantageTag}>+{Math.abs(materialAdvantage)}</Text>
-                )}
-              </View>
-              <Text style={styles.capturedRowText} numberOfLines={1}>
-                {gamesState.chess.capturedByB.join('')}
-              </Text>
-            </View>
-
-            {/* Tablero 8x8 con coordenadas */}
-            <View style={styles.chessBoardOuter}>
+            <View
+              style={[
+                styles.chessBoardOuter,
+                isFull && { borderColor: '#f59e0b', borderWidth: 2.5 },
+              ]}
+            >
               {gamesState.chess.board.map((row, r) => (
                 <View key={r} style={styles.chessRow}>
-                  <View style={styles.rankCoordBox}>
-                    <Text style={styles.coordLabel}>{8 - r}</Text>
-                  </View>
                   {row.map((piece, c) => {
                     const isDark = (r + c) % 2 === 1;
                     const isSelected =
@@ -1371,18 +1930,22 @@ export const GamesScreen: React.FC = () => {
                     return (
                       <TouchableOpacity
                         key={`${r}-${c}`}
-                        onPress={() => handleChessCellPress(r, c)}
+                        onPress={() => void handleChessCellPress(r, c)}
                         style={[
                           styles.chessSquare,
                           {
-                            width: CHESS_CELL,
-                            height: CHESS_CELL,
+                            width: chessCellPx,
+                            height: chessCellPx,
                             backgroundColor: isSelected
                               ? '#fde047'
                               : isLastMove
                               ? '#fef08a'
                               : isDark
-                              ? `${primaryColor}42`
+                              ? isFull
+                                ? '#334155'
+                                : `${primaryColor}42`
+                              : isFull
+                              ? '#cbd5e1'
                               : '#ffffff',
                           },
                         ]}
@@ -1393,6 +1956,7 @@ export const GamesScreen: React.FC = () => {
                             style={[
                               styles.chessGlyph,
                               {
+                                fontSize: isFull ? 29 : 22,
                                 color: piece.color === 'w' ? '#6b21a8' : '#0f172a',
                               },
                             ]}
@@ -1413,127 +1977,136 @@ export const GamesScreen: React.FC = () => {
                   })}
                 </View>
               ))}
-              <View style={styles.fileCoordsRow}>
-                <View style={{ width: 16 }} />
-                {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((f) => (
-                  <Text
-                    key={f}
-                    style={[styles.coordLabel, { width: CHESS_CELL, textAlign: 'center' }]}
-                  >
-                    {f}
-                  </Text>
-                ))}
-              </View>
             </View>
 
-            {/* Bandeja Inferior: Karlita (Blancas) */}
-            <View style={styles.chessPlayerBar}>
-              <View style={styles.chessPlayerLeft}>
-                <View style={[styles.colorDot, { backgroundColor: '#9333ea' }]} />
-                <Text style={styles.chessPlayerLabel}>Karlita 💜 (Blancas)</Text>
-                {materialAdvantage > 0 && (
-                  <Text style={styles.advantageTag}>+{materialAdvantage}</Text>
-                )}
-              </View>
-              <Text style={styles.capturedRowText} numberOfLines={1}>
-                {gamesState.chess.capturedByW.join('')}
-              </Text>
-            </View>
-
-            {/* Controles de Ajedrez */}
             <View style={styles.chessControlsRow}>
               <TouchableOpacity
-                onPress={handleUndoChessMove}
+                onPress={() => void handleUndoChessMove()}
                 disabled={chessHistory.length === 0}
                 style={[
                   styles.secondaryGameBtn,
-                  { borderColor: primaryColor },
+                  isFull
+                    ? { backgroundColor: '#1e293b', borderColor: '#38bdf8' }
+                    : { borderColor: primaryColor },
                   chessHistory.length === 0 && { opacity: 0.4 },
                 ]}
               >
-                <Ionicons name="arrow-undo" size={16} color={primaryColor} />
-                <Text style={[styles.secondaryGameBtnText, { color: primaryColor }]}>
+                <Ionicons
+                  name="arrow-undo"
+                  size={14}
+                  color={isFull ? '#38bdf8' : primaryColor}
+                />
+                <Text
+                  style={[
+                    styles.secondaryGameBtnText,
+                    { color: isFull ? '#38bdf8' : primaryColor },
+                  ]}
+                >
                   Deshacer
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={handleResetChess}
-                style={[styles.primaryGameBtn, { flex: 1, marginTop: 0, backgroundColor: primaryColor }]}
+                onPress={() => void handleResetChess()}
+                style={[
+                  styles.primaryGameBtn,
+                  {
+                    flex: 1,
+                    marginTop: 0,
+                    backgroundColor: isFull ? '#0284c7' : primaryColor,
+                  },
+                ]}
               >
-                <Ionicons name="refresh" size={16} color="#ffffff" />
+                <Ionicons name="refresh" size={15} color="#ffffff" />
                 <Text style={styles.primaryGameBtnText}>Nueva Partida</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* ===================================================================== */}
-        {/* 4. EL AHORCADO                                                        */}
-        {/* ===================================================================== */}
+        {/* ================= 4. EL AHORCADO ================= */}
         {activeGame === 'hangman' && (
-          <View style={styles.arenaCard}>
-            <View style={styles.arenaHeader}>
-              <View>
-                <Text style={styles.arenaTitle}>El Ahorcado</Text>
-                <Text style={styles.arenaSubtitle}>
-                  Racha: {hangman.streak || 0} • Karlita {hangman.scoreKarla} - {hangman.scoreJavier} Javier
-                </Text>
-              </View>
-              <View style={[styles.miniScorePill, { backgroundColor: `${primaryColor}18` }]}>
-                <Text style={[styles.miniScoreText, { color: primaryColor }]}>
-                  {hangman.category || 'General'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Escenario Visual del Ahorcado + Vidas */}
-            <View style={styles.hangmanStage}>
-              {/* Horca dibujada geométricamente */}
-              <View style={styles.gallowsBox}>
-                <View style={styles.gallowsBase} />
-                <View style={styles.gallowsPole} />
-                <View style={styles.gallowsTop} />
+          <View style={styles.gameBodyCentered}>
+            <View
+              style={[
+                styles.hangmanStageCompact,
+                isFull && { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#1e293b' },
+              ]}
+            >
+              <View style={styles.gallowsBoxCompact}>
+                <View style={[styles.gallowsBase, isFull && { backgroundColor: '#94a3b8' }]} />
+                <View style={[styles.gallowsPole, isFull && { backgroundColor: '#94a3b8' }]} />
+                <View style={[styles.gallowsTop, isFull && { backgroundColor: '#94a3b8' }]} />
                 <View style={styles.gallowsRope} />
-
-                {/* Partes del cuerpo según errores (1 a 6) */}
                 {wrongGuessesCount >= 1 && (
-                  <View style={[styles.hmHead, { borderColor: primaryColor }]} />
+                  <View
+                    style={[
+                      styles.hmHead,
+                      { borderColor: isFull ? '#38bdf8' : primaryColor },
+                    ]}
+                  />
                 )}
                 {wrongGuessesCount >= 2 && (
-                  <View style={[styles.hmBody, { backgroundColor: primaryColor }]} />
+                  <View
+                    style={[
+                      styles.hmBody,
+                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
+                    ]}
+                  />
                 )}
                 {wrongGuessesCount >= 3 && (
-                  <View style={[styles.hmArmLeft, { backgroundColor: primaryColor }]} />
+                  <View
+                    style={[
+                      styles.hmArmLeft,
+                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
+                    ]}
+                  />
                 )}
                 {wrongGuessesCount >= 4 && (
-                  <View style={[styles.hmArmRight, { backgroundColor: primaryColor }]} />
+                  <View
+                    style={[
+                      styles.hmArmRight,
+                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
+                    ]}
+                  />
                 )}
                 {wrongGuessesCount >= 5 && (
-                  <View style={[styles.hmLegLeft, { backgroundColor: primaryColor }]} />
+                  <View
+                    style={[
+                      styles.hmLegLeft,
+                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
+                    ]}
+                  />
                 )}
                 {wrongGuessesCount >= 6 && (
-                  <View style={[styles.hmLegRight, { backgroundColor: primaryColor }]} />
+                  <View
+                    style={[
+                      styles.hmLegRight,
+                      { backgroundColor: isFull ? '#38bdf8' : primaryColor },
+                    ]}
+                  />
                 )}
               </View>
 
-              {/* Información de la pista */}
               <View style={styles.hangmanInfoRight}>
                 <View style={styles.livesIndicatorRow}>
-                  <Ionicons name="heart" size={14} color="#e11d48" />
+                  <Ionicons name="heart" size={13} color="#e11d48" />
                   <Text style={styles.livesCountText}>
-                    Vidas: {Math.max(0, maxWrong - wrongGuessesCount)} / {maxWrong}
+                    Vidas: {Math.max(0, maxWrong - wrongGuessesCount)}/{maxWrong}
                   </Text>
                 </View>
-                <Text style={styles.hangmanAuthorTag}>Por: {hangman.author}</Text>
-                <Text style={styles.hangmanHintBox}>“{hangman.hint}”</Text>
+                <Text
+                  style={[styles.hangmanHintBox, isFull && { color: '#cbd5e1' }]}
+                  numberOfLines={2}
+                >
+                  “{hangman.hint}”
+                </Text>
               </View>
             </View>
 
-            {/* Casillas de la palabra */}
             <View style={styles.wordSlotsWrap}>
               {hangman.word.split('').map((ch, idx) => {
-                if (ch === ' ') return <View key={idx} style={{ width: 12 }} />;
+                if (ch === ' ') return <View key={idx} style={{ width: 8 }} />;
                 const revealed =
                   hangman.guessed.includes(ch) || hangman.status !== 'playing';
                 return (
@@ -1541,11 +2114,24 @@ export const GamesScreen: React.FC = () => {
                     key={idx}
                     style={[
                       styles.wordSlotBox,
-                      { borderColor: revealed ? primaryColor : '#cbd5e1' },
-                      revealed && { backgroundColor: `${primaryColor}12` },
+                      {
+                        borderColor: revealed
+                          ? isFull
+                            ? '#38bdf8'
+                            : primaryColor
+                          : '#475569',
+                      },
+                      revealed && {
+                        backgroundColor: isFull ? '#1e293b' : `${primaryColor}12`,
+                      },
                     ]}
                   >
-                    <Text style={[styles.wordSlotChar, { color: '#0f172a' }]}>
+                    <Text
+                      style={[
+                        styles.wordSlotChar,
+                        { color: isFull ? '#f8fafc' : '#0f172a' },
+                      ]}
+                    >
                       {revealed ? ch : ''}
                     </Text>
                   </View>
@@ -1553,33 +2139,6 @@ export const GamesScreen: React.FC = () => {
               })}
             </View>
 
-            {/* Mensaje de Victoria o Derrota */}
-            {hangman.status !== 'playing' && (
-              <View
-                style={[
-                  styles.statusBanner,
-                  {
-                    backgroundColor:
-                      hangman.status === 'won' ? '#d1fae5' : '#ffe4e6',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBannerText,
-                    { color: hangman.status === 'won' ? '#059669' : '#e11d48' },
-                  ]}
-                >
-                  {hangman.status === 'won'
-                    ? `¡Palabra completada! (+${
-                        hangman.isPartnerChallenge ? 400 : 250
-                      } pts)`
-                    : `Era "${hangman.word}". ¡Intenta la siguiente!`}
-                </Text>
-              </View>
-            )}
-
-            {/* Teclado A-Z */}
             <View style={styles.azKeyboard}>
               {ALPHABET.map((letter) => {
                 const used = hangman.guessed.includes(letter);
@@ -1588,19 +2147,36 @@ export const GamesScreen: React.FC = () => {
                   <TouchableOpacity
                     key={letter}
                     disabled={used || hangman.status !== 'playing'}
-                    onPress={() => handleGuessLetter(letter)}
+                    onPress={() => void handleGuessLetter(letter)}
                     style={[
                       styles.azKey,
+                      isFull && {
+                        width: 34,
+                        height: 34,
+                        backgroundColor: '#1e293b',
+                        borderColor: '#334155',
+                      },
                       used && {
-                        backgroundColor: hit ? primaryColor : '#e2e8f0',
-                        borderColor: hit ? primaryColor : '#e2e8f0',
+                        backgroundColor: hit
+                          ? isFull
+                            ? '#0284c7'
+                            : primaryColor
+                          : isFull
+                          ? '#0f172a'
+                          : '#e2e8f0',
+                        borderColor: hit
+                          ? isFull
+                            ? '#38bdf8'
+                            : primaryColor
+                          : 'transparent',
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.azKeyText,
-                        used && { color: hit ? '#ffffff' : '#94a3b8' },
+                        isFull && { color: '#f8fafc' },
+                        used && { color: hit ? '#ffffff' : '#64748b' },
                       ]}
                     >
                       {letter}
@@ -1610,15 +2186,28 @@ export const GamesScreen: React.FC = () => {
               })}
             </View>
 
-            {/* Botones de Acción del Ahorcado */}
             <View style={styles.chessControlsRow}>
               <TouchableOpacity
-                onPress={handleRandomHangmanWord}
-                style={[styles.secondaryGameBtn, { borderColor: primaryColor }]}
+                onPress={() => void handleRandomHangmanWord()}
+                style={[
+                  styles.secondaryGameBtn,
+                  isFull
+                    ? { backgroundColor: '#1e293b', borderColor: '#38bdf8' }
+                    : { borderColor: primaryColor },
+                ]}
               >
-                <Ionicons name="shuffle" size={16} color={primaryColor} />
-                <Text style={[styles.secondaryGameBtnText, { color: primaryColor }]}>
-                  Nueva Palabra
+                <Ionicons
+                  name="shuffle"
+                  size={14}
+                  color={isFull ? '#38bdf8' : primaryColor}
+                />
+                <Text
+                  style={[
+                    styles.secondaryGameBtnText,
+                    { color: isFull ? '#38bdf8' : primaryColor },
+                  ]}
+                >
+                  Otra Palabra
                 </Text>
               </TouchableOpacity>
 
@@ -1626,16 +2215,976 @@ export const GamesScreen: React.FC = () => {
                 onPress={() => setIsCustomWordModalOpen(true)}
                 style={[
                   styles.primaryGameBtn,
-                  { flex: 1, marginTop: 0, backgroundColor: primaryColor },
+                  {
+                    flex: 1,
+                    marginTop: 0,
+                    backgroundColor: isFull ? '#0284c7' : primaryColor,
+                  },
                 ]}
               >
-                <Ionicons name="flame" size={16} color="#ffffff" />
-                <Text style={styles.primaryGameBtnText}>Retar a mi Pareja (+400)</Text>
+                <Ionicons name="flame" size={14} color="#ffffff" />
+                <Text style={styles.primaryGameBtnText}>Retar Pareja (+400)</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
-      </ScrollView>
+
+        {/* ================= 5. BATTLESHIP 10x10 (INVITACIÓN, ACOMODAR BARCOS Y COMBATE NAVAL) ================= */}
+        {activeGame === 'battleship' && (
+          <View style={styles.gameBodyCentered}>
+            {/* FASE 1: SALA DE INVITACIÓN DE PARTIDA EN VIVO */}
+            {(bs.phase === 'idle' || bs.phase === 'invited') && (
+              <View style={[styles.bsInviteCard, isFull && styles.bsInviteCardDark]}>
+                <Animated.View
+                  style={[
+                    styles.bsRadarCircleIcon,
+                    {
+                      transform: [
+                        {
+                          scale: radarPulseAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.95, 1.08],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Ionicons name="boat" size={36} color="#38bdf8" />
+                </Animated.View>
+
+                <Text style={[styles.bsInviteTitle, isFull && { color: '#f8fafc' }]}>
+                  {bs.phase === 'invited'
+                    ? bs.invitedBy === currentProfile
+                      ? `Invitación enviada a ${currentProfile === 'Karla' ? 'Javier' : 'Karlita'}`
+                      : `¡${bs.invitedBy === 'Karla' ? 'Karlita' : 'Javier'} te desafía a Battleship 10x10!`
+                    : 'Battleship: Batalla Naval 10x10'}
+                </Text>
+
+                <Text style={[styles.bsInviteDesc, isFull && { color: '#94a3b8' }]}>
+                  {bs.phase === 'invited'
+                    ? bs.invitedBy === currentProfile
+                      ? 'Esperando a que tu pareja acepte para que cada uno acomode sus 5 barcos en secreto...'
+                      : 'Acepta el reto para entrar al astillero, colocar tus 5 barcos en el tablero 10x10 y comenzar el combate.'
+                    : 'Manda una invitación de partida para que ambos acomoden su flota secreta de 5 barcos (Portaaviones, Acorazado, Crucero, Submarino y Destructor).'}
+                </Text>
+
+                {bs.phase === 'idle' ? (
+                  <TouchableOpacity
+                    onPress={() => void handleSendBattleshipInvite()}
+                    style={[styles.bsActionLaunchBtn, { backgroundColor: '#0284c7' }]}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="radio" size={18} color="#ffffff" />
+                    <Text style={styles.bsActionLaunchText}>
+                      Mandar Invitación de Partida
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ width: '100%', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => void handleAcceptBattleshipInvite()}
+                      style={[styles.bsActionLaunchBtn, { backgroundColor: '#10b981' }]}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
+                      <Text style={styles.bsActionLaunchText}>
+                        {bs.invitedBy === currentProfile
+                          ? 'Ir a Acomodar Mis Barcos'
+                          : '¡Aceptar Partida y Acomodar Flota!'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* FASE 2: ACOMODAR MIS BARCOS EN EL TABLERO 10x10 (ARRASTRAR Y TOCAR PARA ROTAR AHÍ MISMO) */}
+            {bs.phase === 'setup' && (
+              <>
+                <View style={styles.bsSetupTopBar}>
+                  <Text
+                    style={[
+                      styles.bsSetupInstruction,
+                      isFull && { color: '#38bdf8' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Arrastra cualquier barco o tócalo para rotarlo ahí mismo:
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleRotateSelectedShipInPlace()}
+                    style={[
+                      styles.bsRotateBtn,
+                      { backgroundColor: isFull ? '#1e293b' : '#e0f2fe' },
+                    ]}
+                  >
+                    <Ionicons name="sync" size={13} color="#0284c7" />
+                    <Text style={styles.bsRotateBtnText}>Rotar Barco</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Selector de los 5 Barcos (Toca para seleccionar o volver a tocar para rotar en su lugar) */}
+                <View style={styles.bsShipsPickerRow}>
+                  {myFleet.map((ship) => {
+                    const selected = selectedSetupShipId === ship.id;
+                    return (
+                      <TouchableOpacity
+                        key={ship.id}
+                        onPress={() => {
+                          if (selected) {
+                            handleRotateSelectedShipInPlace(ship.id);
+                          } else {
+                            setSelectedSetupShipId(ship.id);
+                            setSetupOrientation(ship.orientation || 'H');
+                          }
+                        }}
+                        style={[
+                          styles.bsShipPickerPill,
+                          isFull && { backgroundColor: '#1e293b', borderColor: '#334155' },
+                          selected && {
+                            backgroundColor: '#0284c7',
+                            borderColor: '#38bdf8',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.bsShipPickerText,
+                            isFull && { color: '#cbd5e1' },
+                            selected && { color: '#ffffff' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {ship.name.slice(0, 6)}. ({ship.size})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Tablero 10x10 de Despliegue con Soporte de Arrastrar (Drag) y Tocar para Rotar */}
+                <View style={styles.bsGridOuter10x10}>
+                  {/* Encabezado de Columnas 1..10 */}
+                  <View style={styles.chessRow}>
+                    <View
+                      style={{
+                        width: bsCoordHeaderPx,
+                        height: bsCoordHeaderPx,
+                        backgroundColor: '#082f49',
+                      }}
+                    />
+                    {COL_NUMBERS.map((colLbl) => (
+                      <View
+                        key={colLbl}
+                        style={[
+                          styles.bsCoordHeaderCell,
+                          { width: battleshipCellPx, height: bsCoordHeaderPx },
+                        ]}
+                      >
+                        <Text style={styles.bsCoordText}>{colLbl}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={{ flexDirection: 'row' }}>
+                    {/* Columna izquierda de letras A..J */}
+                    <View>
+                      {ROW_LETTERS.map((rowLbl) => (
+                        <View
+                          key={rowLbl}
+                          style={[
+                            styles.bsCoordHeaderCell,
+                            { width: bsCoordHeaderPx, height: battleshipCellPx },
+                          ]}
+                        >
+                          <Text style={styles.bsCoordText}>{rowLbl}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Lienzo 10x10 Interactivo (Arrastrar Barcos Fluido + Tocar Barco para Rotar en su sitio) */}
+                    <View
+                      pointerEvents="box-only"
+                      style={{
+                        width: battleshipCellPx * 10,
+                        height: battleshipCellPx * 10,
+                      }}
+                      onStartShouldSetResponder={() => !amIReady}
+                      onMoveShouldSetResponder={() => !amIReady}
+                      onResponderGrant={(evt) => {
+                        if (amIReady) return;
+                        const col = Math.max(
+                          0,
+                          Math.min(9, Math.floor(evt.nativeEvent.locationX / battleshipCellPx))
+                        );
+                        const row = Math.max(
+                          0,
+                          Math.min(9, Math.floor(evt.nativeEvent.locationY / battleshipCellPx))
+                        );
+                        const cellIdx = row * 10 + col;
+                        const touchedShip = myFleet.find((s) => s.cells.includes(cellIdx));
+
+                        if (touchedShip) {
+                          setSelectedSetupShipId(touchedShip.id);
+                          setSetupOrientation(touchedShip.orientation || 'H');
+                          dragSessionRef.current = {
+                            shipId: touchedShip.id,
+                            startCell: cellIdx,
+                            lastCell: cellIdx,
+                            didDragMove: false,
+                            startedOnSelectedShip: true,
+                          };
+                        } else {
+                          dragSessionRef.current = {
+                            shipId: selectedSetupShipId,
+                            startCell: cellIdx,
+                            lastCell: cellIdx,
+                            didDragMove: true,
+                            startedOnSelectedShip: false,
+                          };
+                          moveOrRotateShipLocally(selectedSetupShipId, cellIdx);
+                        }
+                      }}
+                      onResponderMove={(evt) => {
+                        if (amIReady || !dragSessionRef.current) return;
+                        const col = Math.max(
+                          0,
+                          Math.min(9, Math.floor(evt.nativeEvent.locationX / battleshipCellPx))
+                        );
+                        const row = Math.max(
+                          0,
+                          Math.min(9, Math.floor(evt.nativeEvent.locationY / battleshipCellPx))
+                        );
+                        const cellIdx = row * 10 + col;
+                        if (cellIdx !== dragSessionRef.current.lastCell) {
+                          dragSessionRef.current.lastCell = cellIdx;
+                          dragSessionRef.current.didDragMove = true;
+                          moveOrRotateShipLocally(dragSessionRef.current.shipId, cellIdx);
+                        }
+                      }}
+                      onResponderRelease={() => {
+                        const session = dragSessionRef.current;
+                        dragSessionRef.current = null;
+                        if (session && !session.didDragMove && session.startedOnSelectedShip) {
+                          // Tocar un barco sin arrastrarlo lo rota ahí mismo (Horizontal <-> Vertical)
+                          handleRotateSelectedShipInPlace(session.shipId);
+                        }
+                      }}
+                    >
+                      {ROW_LETTERS.map((rowLbl, r) => (
+                        <View key={rowLbl} style={styles.chessRow}>
+                          {Array.from({ length: 10 }).map((__, c) => {
+                            const idx = r * 10 + c;
+                            const shipHere = myFleet.find((s) => s.cells.includes(idx));
+                            const isSelectedShip = shipHere?.id === selectedSetupShipId;
+
+                            return (
+                              <View
+                                key={idx}
+                                style={[
+                                  styles.bsCell10x10,
+                                  {
+                                    width: battleshipCellPx,
+                                    height: battleshipCellPx,
+                                  },
+                                ]}
+                              >
+                                {shipHere &&
+                                  renderConnectedShipSegment(
+                                    shipHere,
+                                    idx,
+                                    battleshipCellPx,
+                                    false,
+                                    false,
+                                    Boolean(isSelectedShip)
+                                  )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Barra de Confirmación de Flota Lista */}
+                <View style={styles.chessControlsRow}>
+                  <TouchableOpacity
+                    onPress={() => void handleShuffleMyFleet()}
+                    style={[
+                      styles.secondaryGameBtn,
+                      {
+                        borderColor: '#0284c7',
+                        backgroundColor: isFull ? '#1e293b' : '#ffffff',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="shuffle" size={14} color="#38bdf8" />
+                    <Text style={[styles.secondaryGameBtnText, { color: '#0284c7' }]}>
+                      Azar
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => void handleConfirmFleetReady(false)}
+                    style={[
+                      styles.primaryGameBtn,
+                      {
+                        flex: 1,
+                        marginTop: 0,
+                        backgroundColor: amIReady ? '#10b981' : '#0284c7',
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={amIReady ? 'checkmark-done' : 'shield-checkmark'}
+                      size={15}
+                      color="#ffffff"
+                    />
+                    <Text style={styles.primaryGameBtnText}>
+                      {amIReady
+                        ? isPartnerReady
+                          ? '¡Iniciando!'
+                          : 'Listo (Esperando pareja)'
+                        : '¡Flota Lista!'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {amIReady && !isPartnerReady && (
+                    <TouchableOpacity
+                      onPress={() => void handleConfirmFleetReady(true)}
+                      style={[
+                        styles.secondaryGameBtn,
+                        { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
+                      ]}
+                    >
+                      <Text style={[styles.secondaryGameBtnText, { color: '#059669' }]}>
+                        Iniciar Ya
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+
+            {/* FASE 3: COMBATE NAVAL 10x10 (NIEBLA DE GUERRA REAL + BARCOS COMPLETOS) */}
+            {(bs.phase === 'battle' || bs.phase === 'finished') && (
+              <>
+                <Animated.View
+                  style={[
+                    styles.bsTopRow,
+                    { transform: [{ scale: hitBannerScale }] },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.bsStatusPill,
+                      isFull && { backgroundColor: '#0f172a', borderColor: '#1e293b' },
+                      bs.lastShot?.hit && {
+                        backgroundColor: isFull ? '#450a0a' : '#fef2f2',
+                        borderColor: '#ef4444',
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={bs.lastShot?.hit ? 'flame' : 'locate'}
+                      size={14}
+                      color={bs.lastShot?.hit ? '#ef4444' : '#38bdf8'}
+                    />
+                    <Text
+                      style={[
+                        styles.bsStatusText,
+                        isFull && { color: '#f8fafc' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {bs.winner
+                        ? `¡VICTORIA NAVAL DE ${bs.winner === 'Karla' ? 'KARLITA' : 'JAVIER'}!`
+                        : bs.lastShot?.sunkShipName
+                        ? `¡HUNDIDO: ${bs.lastShot.sunkShipName.toUpperCase()}! Dispara ${
+                            bs.turn === 'Karla' ? 'Karlita' : 'Javier'
+                          }`
+                        : bs.lastShot?.hit
+                        ? `¡IMPACTO EN ${
+                            ROW_LETTERS[Math.floor(bs.lastShot.cell / 10)]
+                          }${(bs.lastShot.cell % 10) + 1}! Repite ${
+                            bs.turn === 'Karla' ? 'Karlita' : 'Javier'
+                          }`
+                        : `Turno de fuego: ${bs.turn === 'Karla' ? 'Karlita' : 'Javier'}`}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.bsModeSwitch,
+                      isFull && { backgroundColor: '#1e293b' },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      onPress={() => setBattleshipRadarMode('attack')}
+                      style={[
+                        styles.bsModeBtn,
+                        battleshipRadarMode === 'attack' && {
+                          backgroundColor: '#e11d48',
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.bsModeBtnText,
+                          isFull && { color: '#cbd5e1' },
+                          battleshipRadarMode === 'attack' && { color: '#ffffff' },
+                        ]}
+                      >
+                        Radar Ataque
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => setBattleshipRadarMode('fleet')}
+                      style={[
+                        styles.bsModeBtn,
+                        battleshipRadarMode === 'fleet' && {
+                          backgroundColor: '#0284c7',
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.bsModeBtnText,
+                          isFull && { color: '#cbd5e1' },
+                          battleshipRadarMode === 'fleet' && { color: '#ffffff' },
+                        ]}
+                      >
+                        Mis Barcos ({currentProfile === 'Karla' ? remainingShipsKarla : remainingShipsJavier}/5)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+
+                {/* Monitor de Siluetas de los 5 Barcos (Muestra cuáles siguen a flote y cuáles se hundieron) */}
+                <View style={styles.bsFleetSilhouettesBar}>
+                  {(battleshipRadarMode === 'attack' ? enemyFleet : myFleet).map((ship) => {
+                    const shotsRef =
+                      battleshipRadarMode === 'attack' ? myShots : enemyShotsAtMe;
+                    const sunk = isShipSunk(ship, shotsRef);
+                    return (
+                      <View
+                        key={ship.id}
+                        style={[
+                          styles.bsSilhouetteChip,
+                          sunk ? styles.bsSilhouetteSunk : styles.bsSilhouetteAlive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.bsSilhouetteName,
+                            sunk && { textDecorationLine: 'line-through', color: '#fca5a5' },
+                          ]}
+                        >
+                          {ship.name.slice(0, 5)}
+                        </Text>
+                        <View style={styles.bsSilhouetteBlocks}>
+                          {Array.from({ length: ship.size }).map((_, bIdx) => (
+                            <View
+                              key={bIdx}
+                              style={[
+                                styles.bsSilhouetteMiniBlock,
+                                {
+                                  backgroundColor: sunk ? '#ef4444' : '#38bdf8',
+                                },
+                              ]}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Tablero Táctico 10x10 con Coordenadas A-J y 1-10 */}
+                <View style={styles.bsGridOuter10x10}>
+                  <View style={styles.chessRow}>
+                    <View
+                      style={{
+                        width: bsCoordHeaderPx,
+                        height: bsCoordHeaderPx,
+                        backgroundColor: '#082f49',
+                      }}
+                    />
+                    {COL_NUMBERS.map((colLbl) => (
+                      <View
+                        key={colLbl}
+                        style={[
+                          styles.bsCoordHeaderCell,
+                          { width: battleshipCellPx, height: bsCoordHeaderPx },
+                        ]}
+                      >
+                        <Text style={styles.bsCoordText}>{colLbl}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {ROW_LETTERS.map((rowLbl, r) => (
+                    <View key={rowLbl} style={styles.chessRow}>
+                      <View
+                        style={[
+                          styles.bsCoordHeaderCell,
+                          { width: bsCoordHeaderPx, height: battleshipCellPx },
+                        ]}
+                      >
+                        <Text style={styles.bsCoordText}>{rowLbl}</Text>
+                      </View>
+
+                      {Array.from({ length: 10 }).map((__, c) => {
+                        const idx = r * 10 + c;
+                        const isAttackView = battleshipRadarMode === 'attack';
+
+                        // PRIVACIDAD ESTRICTA:
+                        // - En "Mis Barcos": ves SOLO tu propia flota (`myFleet`) y los impactos que te ha dado tu pareja (`enemyShotsAtMe`).
+                        // - En "Radar Ataque": disparas al mar enemigo (`enemyFleet`), pero SOLO se revelan los barcos enemigos que YA HUNDISTE por completo (`isSunk`).
+                        const targetFleet = isAttackView ? enemyFleet : myFleet;
+                        const activeShots = isAttackView ? myShots : enemyShotsAtMe;
+
+                        const isShot = activeShots.includes(idx);
+                        const shipHere = targetFleet.find((s) => s.cells.includes(idx));
+                        const isHit = isShot && Boolean(shipHere);
+                        const isSunk =
+                          Boolean(shipHere) &&
+                          shipHere!.cells.every((cell) => activeShots.includes(cell));
+
+                        // Solo dibujamos el casco completo si estamos viendo NUESTRA propia flota, o si el barco enemigo YA FUE HUNDIDO
+                        const showConnectedShip =
+                          (!isAttackView && Boolean(shipHere)) ||
+                          Boolean(isSunk && shipHere) ||
+                          Boolean(bs.winner && shipHere);
+
+                        return (
+                          <TouchableOpacity
+                            key={idx}
+                            disabled={!isAttackView || isShot || Boolean(bs.winner)}
+                            onPress={() => void handleBattleshipFire(idx)}
+                            style={[
+                              styles.bsCell10x10,
+                              {
+                                width: battleshipCellPx,
+                                height: battleshipCellPx,
+                              },
+                              isShot && !isHit && styles.bsCellMiss,
+                              isHit && !showConnectedShip && styles.bsCellHit,
+                            ]}
+                            activeOpacity={0.75}
+                          >
+                            {showConnectedShip && shipHere ? (
+                              renderConnectedShipSegment(
+                                shipHere,
+                                idx,
+                                battleshipCellPx,
+                                isHit,
+                                isSunk,
+                                false
+                              )
+                            ) : isHit ? (
+                              <Ionicons
+                                name="flame"
+                                size={Math.max(12, battleshipCellPx * 0.6)}
+                                color="#fde047"
+                              />
+                            ) : isShot ? (
+                              <View style={styles.bsWaterSplashDot} />
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ))}
+                  {/* Proyectil / Bala Animada que vuela desde el cañón hasta la casilla objetivo */}
+                  {firingBullet &&
+                    (() => {
+                      const targetR = Math.floor(firingBullet.cellIdx / 10);
+                      const targetC = firingBullet.cellIdx % 10;
+                      const startX = bsCoordHeaderPx + battleshipCellPx * 5 - 8;
+                      const startY = bsCoordHeaderPx + battleshipCellPx * 10 - 8;
+                      const endX =
+                        bsCoordHeaderPx + targetC * battleshipCellPx + battleshipCellPx / 2 - 8;
+                      const endY =
+                        bsCoordHeaderPx + targetR * battleshipCellPx + battleshipCellPx / 2 - 8;
+
+                      const translateX = bulletProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [startX, endX],
+                      });
+                      const translateY = bulletProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [startY, endY],
+                      });
+                      const bulletScale = bulletProgress.interpolate({
+                        inputRange: [0, 0.5, 1],
+                        outputRange: [0.8, 1.35, 1],
+                      });
+
+                      return (
+                        <View
+                          pointerEvents="none"
+                          style={StyleSheet.absoluteFill}
+                        >
+                          {/* Bala / Misil en vuelo */}
+                          <Animated.View
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: 16,
+                              height: 16,
+                              borderRadius: 8,
+                              backgroundColor: '#facc15',
+                              borderWidth: 2,
+                              borderColor: '#ef4444',
+                              shadowColor: '#f97316',
+                              shadowOffset: { width: 0, height: 0 },
+                              shadowOpacity: 0.95,
+                              shadowRadius: 8,
+                              elevation: 8,
+                              transform: [
+                                { translateX },
+                                { translateY },
+                                { scale: bulletScale },
+                              ],
+                            }}
+                          />
+
+                          {/* Onda expansiva de impacto en la coordenada objetivo */}
+                          <Animated.View
+                            style={{
+                              position: 'absolute',
+                              top: endY - 8,
+                              left: endX - 8,
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              borderWidth: 3,
+                              borderColor: firingBullet.isHit ? '#ef4444' : '#38bdf8',
+                              backgroundColor: firingBullet.isHit
+                                ? 'rgba(239, 68, 68, 0.35)'
+                                : 'rgba(56, 189, 248, 0.3)',
+                              opacity: explosionScale,
+                              transform: [
+                                {
+                                  scale: explosionScale.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0.2, 1.6],
+                                  }),
+                                },
+                              ],
+                            }}
+                          />
+                        </View>
+                      );
+                    })()}
+                </View>
+
+                {/* Controles Inferiores del Combate */}
+                <View style={styles.chessControlsRow}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setBattleshipRadarMode((m) => (m === 'attack' ? 'fleet' : 'attack'))
+                    }
+                    style={[
+                      styles.secondaryGameBtn,
+                      {
+                        borderColor: '#0284c7',
+                        backgroundColor: isFull ? '#1e293b' : '#ffffff',
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={battleshipRadarMode === 'attack' ? 'shield' : 'locate'}
+                      size={14}
+                      color="#38bdf8"
+                    />
+                    <Text style={[styles.secondaryGameBtnText, { color: '#0284c7' }]}>
+                      {battleshipRadarMode === 'attack'
+                        ? 'Ver Mis Barcos'
+                        : 'Volver al Radar'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => void handleSendBattleshipInvite()}
+                    style={[
+                      styles.primaryGameBtn,
+                      {
+                        flex: 1,
+                        marginTop: 0,
+                        backgroundColor: isFull ? '#0284c7' : primaryColor,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="radio" size={15} color="#ffffff" />
+                    <Text style={styles.primaryGameBtnText}>Nueva Partida 10x10</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style={isFullScreenGame ? 'light' : 'dark'} />
+      <AppHeader />
+
+      {/* Contenedor Fijo SIN Scroll */}
+      <View style={styles.fixedViewport}>
+        {/* Marcador Global Compacto */}
+        <View style={[styles.globalScoreCard, { borderColor: `${primaryColor}30` }]}>
+          <View style={styles.playerScoreInline}>
+            <View style={[styles.playerBadgeCircle, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]}>
+              <Text style={[styles.playerBadgeLetter, { color: '#9333ea' }]}>
+                {getDisplayName('Karla').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.playerName}>
+                {getDisplayName('Karla')} ({lb.trophiesKarla}★)
+              </Text>
+              <Text style={[styles.pointsValue, { color: '#9333ea' }]}>{lb.pointsKarla} pts</Text>
+            </View>
+          </View>
+
+          <View style={styles.vsBadge}>
+            <Text style={styles.vsBadgeText}>VS</Text>
+          </View>
+
+          <View style={[styles.playerScoreInline, { justifyContent: 'flex-end' }]}>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.playerName}>
+                {getDisplayName('Javier')} ({lb.trophiesJavier}★)
+              </Text>
+              <Text style={[styles.pointsValue, { color: '#0284c7' }]}>{lb.pointsJavier} pts</Text>
+            </View>
+            <View style={[styles.playerBadgeCircle, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
+              <Text style={[styles.playerBadgeLetter, { color: '#0284c7' }]}>
+                {getDisplayName('Javier').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Selector de los 5 Juegos */}
+        <View style={styles.gamesSelectorGrid}>
+          {[
+            { id: 'tictactoe', label: '3 en Raya', icon: 'grid' },
+            { id: 'sudoku', label: 'Sudoku', icon: 'apps' },
+            { id: 'chess', label: 'Ajedrez', icon: 'trophy' },
+            { id: 'battleship', label: 'Battleship', icon: 'boat' },
+            { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle' },
+          ].map((g) => {
+            const active = activeGame === g.id;
+            return (
+              <TouchableOpacity
+                key={g.id}
+                onPress={() => setActiveGame(g.id as GameTab)}
+                style={[
+                  styles.gameTabCard,
+                  active && {
+                    backgroundColor: primaryColor,
+                    borderColor: primaryColor,
+                  },
+                ]}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name={g.icon as any}
+                  size={13}
+                  color={active ? '#ffffff' : primaryColor}
+                />
+                <Text style={[styles.gameTabTitle, active && { color: '#ffffff' }]} numberOfLines={1}>
+                  {g.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Arena del Juego Activo ajustada al resto de la pantalla */}
+        <View style={{ flex: 1 }}>
+          {renderActiveGameArena(false)}
+        </View>
+      </View>
+
+      {/* ================= MODAL CONSOLA DE JUEGO PROFESIONAL INDEPENDIENTE (MODO ZOOM PRO) ================= */}
+      <Modal
+        visible={isFullScreenGame}
+        animationType="fade"
+        onRequestClose={() => setIsFullScreenGame(false)}
+      >
+        <SafeAreaView style={styles.proConsoleModalContainer}>
+          {/* HUD Superior Estilo Videojuego Profesional Independiente */}
+          <View style={styles.proConsoleTopHud}>
+            <View style={styles.proHudPlayerPill}>
+              <View style={[styles.proHudDot, { backgroundColor: '#e879f9' }]} />
+              <Text style={styles.proHudPlayerName}>KARLITA</Text>
+              <Text style={[styles.proHudPlayerScore, { color: '#e879f9' }]}>
+                {lb.pointsKarla}
+              </Text>
+            </View>
+
+            <View style={styles.proHudCenterBadge}>
+              <Ionicons name="trophy" size={14} color="#f59e0b" />
+              <Text style={styles.proHudCenterText}>
+                {lb.trophiesKarla} - {lb.trophiesJavier}
+              </Text>
+            </View>
+
+            <View style={styles.proHudPlayerPill}>
+              <Text style={[styles.proHudPlayerScore, { color: '#38bdf8' }]}>
+                {lb.pointsJavier}
+              </Text>
+              <Text style={styles.proHudPlayerName}>JAVIER</Text>
+              <View style={[styles.proHudDot, { backgroundColor: '#38bdf8' }]} />
+            </View>
+          </View>
+
+          {/* Barra de Cambio Rápido entre los 5 Juegos Profesionales */}
+          <View style={styles.proConsoleTabsRow}>
+            {[
+              { id: 'tictactoe', label: '3 EN RAYA', icon: 'grid' },
+              { id: 'sudoku', label: 'SUDOKU', icon: 'apps' },
+              { id: 'chess', label: 'AJEDREZ', icon: 'trophy' },
+              { id: 'battleship', label: 'BATTLESHIP', icon: 'boat' },
+              { id: 'hangman', label: 'AHORCADO', icon: 'extension-puzzle' },
+            ].map((g) => {
+              const active = activeGame === g.id;
+              return (
+                <TouchableOpacity
+                  key={`pro-${g.id}`}
+                  onPress={() => setActiveGame(g.id as GameTab)}
+                  style={[
+                    styles.proGameTabBtn,
+                    active && styles.proGameTabBtnActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={g.icon as any}
+                    size={12}
+                    color={active ? '#38bdf8' : '#64748b'}
+                  />
+                  <Text
+                    style={[
+                      styles.proGameTabBtnText,
+                      active && { color: '#f8fafc' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {g.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={{ flex: 1, paddingHorizontal: 10, paddingBottom: 10 }}>
+            {renderActiveGameArena(true)}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ================= GRAN MODAL DE CELEBRACIÓN DE VICTORIA ALEGRE ================= */}
+      <Modal
+        visible={Boolean(victoryCelebration)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVictoryCelebration(null)}
+      >
+        <View style={styles.victoryOverlay}>
+          {victoryCelebration && (
+            <Animated.View
+              style={[
+                styles.victoryCard,
+                {
+                  borderColor: victoryCelebration.color,
+                  transform: [{ scale: victoryScale }],
+                },
+              ]}
+            >
+              {/* Estrellas y Trofeo Grande */}
+              <View style={styles.victorySparklesRow}>
+                <Ionicons name="sparkles" size={28} color="#f59e0b" />
+                <View
+                  style={[
+                    styles.victoryTrophyCircle,
+                    { backgroundColor: `${victoryCelebration.color}18` },
+                  ]}
+                >
+                  <Ionicons name="trophy" size={54} color="#f59e0b" />
+                </View>
+                <Ionicons name="sparkles" size={28} color="#f59e0b" />
+              </View>
+
+              {/* Monito Celebrando */}
+              <View style={{ marginVertical: 6 }}>
+                <MoodMascot
+                  feeling="enamorado"
+                  size="lg"
+                  accentColor={victoryCelebration.color}
+                />
+              </View>
+
+              <Text style={[styles.victoryGameTag, { color: victoryCelebration.color }]}>
+                {victoryCelebration.gameTitle.toUpperCase()}
+              </Text>
+
+              <Text style={styles.victoryWinnerTitle}>
+                ¡GANÓ {victoryCelebration.winnerName.toUpperCase()}!
+              </Text>
+
+              <Text style={styles.victorySubtitle}>{victoryCelebration.subtitle}</Text>
+
+              <View
+                style={[
+                  styles.victoryRewardPill,
+                  { backgroundColor: victoryCelebration.color },
+                ]}
+              >
+                <Ionicons name="star" size={18} color="#fde047" />
+                <Text style={styles.victoryRewardText}>
+                  +{victoryCelebration.pointsEarned} PUNTOS Y +1 TROFEO
+                </Text>
+              </View>
+
+              <View style={styles.victoryButtonsRow}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const cb = victoryCelebration.onPlayAgain;
+                    setVictoryCelebration(null);
+                    cb();
+                  }}
+                  style={[
+                    styles.victoryPlayAgainBtn,
+                    { backgroundColor: victoryCelebration.color },
+                  ]}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="refresh" size={18} color="#ffffff" />
+                  <Text style={styles.victoryPlayAgainText}>Jugar Otra Partida</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setVictoryCelebration(null)}
+                  style={styles.victoryCloseBtn}
+                >
+                  <Text style={styles.victoryCloseText}>Seguir Viendo</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          )}
+        </View>
+      </Modal>
 
       {/* Modal Retar a mi Pareja en el Ahorcado */}
       <Modal
@@ -1667,7 +3216,7 @@ export const GamesScreen: React.FC = () => {
             <TextInput
               value={customCatInput}
               onChangeText={setCustomCatInput}
-              placeholder="Ej. Películas, Comida, Objetos, Animales..."
+              placeholder="Ej. Películas, Comida, Objetos..."
               placeholderTextColor="#adb5bd"
               style={styles.modalInput}
             />
@@ -1682,7 +3231,7 @@ export const GamesScreen: React.FC = () => {
             />
 
             <TouchableOpacity
-              onPress={handleSaveCustomHangman}
+              onPress={() => void handleSaveCustomHangman()}
               style={[styles.primaryGameBtn, { backgroundColor: primaryColor, marginTop: 16 }]}
             >
               <Ionicons name="send" size={16} color="#ffffff" />
@@ -1700,228 +3249,176 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#faf9f9',
   },
-  header: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  fixedViewport: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 8,
     justifyContent: 'space-between',
-  },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#2b2d42',
-    fontFamily: SERIF_FONT,
-  },
-  screenSubtitle: {
-    fontSize: 12,
-    color: '#6c757d',
-    marginTop: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 18,
-    paddingTop: 6,
-    paddingBottom: 40,
   },
   globalScoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderWidth: 1.5,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    marginBottom: 6,
   },
-  playerScoreBox: {
-    flex: 1,
-  },
-  playerAvatarRow: {
+  playerScoreInline: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    flex: 1,
   },
   playerBadgeCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playerBadgeLetter: {
     fontSize: 13,
     fontWeight: '900',
-  },
-  playerEmoji: {
-    fontSize: 24,
+    fontFamily: SERIF_FONT,
   },
   playerName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#2b2d42',
-  },
-  trophyCount: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#d97706',
+    color: '#1e293b',
   },
   pointsValue: {
-    fontSize: 20,
+    fontSize: 14,
     fontWeight: '900',
-  },
-  ptsUnit: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8d99ae',
   },
   vsBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f3f5',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 8,
+    marginHorizontal: 6,
   },
   vsBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
-    color: '#6c757d',
+    color: '#64748b',
   },
   gamesSelectorGrid: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
+    gap: 4,
+    marginBottom: 6,
   },
   gameTabCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 3,
     borderWidth: 1,
     borderColor: '#e9ecef',
   },
   gameTabTitle: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '800',
-    color: '#2b2d42',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  gameTabReward: {
-    fontSize: 9,
-    fontWeight: '700',
-    marginTop: 1,
+    color: '#1e293b',
   },
   arenaCard: {
+    flex: 1,
     backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#f1f3f5',
+    justifyContent: 'space-between',
+  },
+  arenaCardFull: {
+    padding: 18,
     borderRadius: 24,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
   },
   arenaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 12,
+    marginBottom: 4,
   },
   arenaTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#2b2d42',
+    color: '#1e293b',
     fontFamily: SERIF_FONT,
   },
   arenaSubtitle: {
     fontSize: 11,
-    color: '#6c757d',
-    marginTop: 2,
+    color: '#64748b',
   },
-  miniScorePill: {
-    paddingHorizontal: 12,
+  fullScreenToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 14,
+    borderRadius: 12,
   },
-  miniScoreText: {
-    fontSize: 12,
+  fullScreenToggleText: {
+    fontSize: 11,
     fontWeight: '800',
+  },
+  gameBodyCentered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
   },
   statusBanner: {
     width: '100%',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 14,
   },
   statusBannerText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   tttBoard: {
-    width: 264,
-    height: 264,
+    borderRadius: 18,
+    padding: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    borderRadius: 20,
-    padding: 8,
-    gap: 8,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    alignContent: 'space-between',
   },
   tttCell: {
-    width: 77,
-    height: 77,
+    width: '31.5%',
+    height: '31.5%',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
   },
   tttPiece: {
-    fontSize: 40,
+    fontWeight: '900',
   },
   primaryGameBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    paddingVertical: 13,
-    borderRadius: 14,
-    marginTop: 6,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
   },
   primaryGameBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: '#ffffff',
   },
@@ -1929,56 +3426,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderRadius: 14,
+    gap: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     borderWidth: 1.5,
+    backgroundColor: '#ffffff',
   },
   secondaryGameBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
+  // Sudoku
   sudokuTopControls: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 10,
   },
   diffPillsRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
   },
   diffChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
   },
   diffChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#475569',
   },
-  mistakesPill: {
-    backgroundColor: '#ffe4e6',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+  sudokuToolsMiniRow: {
+    flexDirection: 'row',
+    gap: 6,
   },
-  mistakesPillText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#e11d48',
+  miniToolBtn: {
+    width: 30,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sudokuGridContainer: {
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: '#0f172a',
     borderRadius: 8,
     overflow: 'hidden',
-    marginBottom: 12,
+    backgroundColor: '#ffffff',
   },
   sudokuRow: {
     flexDirection: 'row',
@@ -1986,137 +3486,77 @@ const styles = StyleSheet.create({
   sudokuCell: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
   },
   sudokuValText: {
-    fontSize: 17,
+    fontSize: 14,
   },
   sudokuNotesText: {
-    fontSize: 8,
+    fontSize: 7,
     color: '#64748b',
     textAlign: 'center',
-    paddingHorizontal: 1,
-  },
-  sudokuToolsBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 6,
-    marginBottom: 12,
-  },
-  sudokuToolBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  sudokuToolText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
   },
   sudokuKeypadRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
+    gap: 4,
   },
   sudokuKeyBtn: {
-    width: Math.floor((BOARD_SIZE - 40) / 9),
-    height: 48,
+    flex: 1,
+    paddingVertical: 5,
     borderRadius: 10,
-    borderWidth: 1.5,
+    borderWidth: 1,
     backgroundColor: '#f8fafc',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   sudokuKeyDigit: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '900',
   },
   sudokuKeyLeft: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#94a3b8',
     fontWeight: '700',
   },
-  checkWarningBadge: {
-    backgroundColor: '#ffe4e6',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#f43f5e',
-  },
-  checkWarningText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#e11d48',
-  },
-  chessPlayerBar: {
+  // Ajedrez
+  chessTopStatusRow: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginVertical: 6,
   },
-  chessPlayerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  colorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  chessPlayerLabel: {
+  chessTurnLabel: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#1e293b',
+  },
+  checkWarningBadge: {
+    backgroundColor: '#e11d48',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  checkWarningText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#ffffff',
   },
   advantageTag: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: '#059669',
     backgroundColor: '#d1fae5',
     paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingVertical: 2,
     borderRadius: 6,
-  },
-  capturedRowText: {
-    fontSize: 15,
-    maxWidth: '48%',
   },
   chessBoardOuter: {
     borderWidth: 2,
     borderColor: '#1e293b',
     borderRadius: 8,
-    padding: 2,
-    backgroundColor: '#f1f5f9',
+    overflow: 'hidden',
   },
   chessRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rankCoordBox: {
-    width: 16,
-    alignItems: 'center',
-  },
-  fileCoordsRow: {
-    flexDirection: 'row',
-    paddingTop: 2,
-  },
-  coordLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748b',
   },
   chessSquare: {
     alignItems: 'center',
@@ -2124,188 +3564,171 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   chessGlyph: {
-    fontSize: 27,
+    lineHeight: 28,
   },
   chessMoveIndicator: {
     position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(16, 185, 129, 0.8)',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(16, 185, 129, 0.75)',
   },
   chessCaptureIndicator: {
-    width: CHESS_CELL - 4,
-    height: CHESS_CELL - 4,
-    borderRadius: (CHESS_CELL - 4) / 2,
+    width: '86%',
+    height: '86%',
+    borderRadius: 6,
     backgroundColor: 'transparent',
-    borderWidth: 3,
-    borderColor: 'rgba(244, 63, 94, 0.85)',
+    borderWidth: 2.5,
+    borderColor: '#e11d48',
   },
   chessControlsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     width: '100%',
-    marginTop: 10,
   },
-  hangmanStage: {
+  // Ahorcado
+  hangmanStageCompact: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
     backgroundColor: '#f8fafc',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 14,
-    gap: 14,
+    borderRadius: 14,
+    padding: 8,
+    width: '100%',
+    gap: 10,
   },
-  gallowsBox: {
-    width: 100,
-    height: 120,
+  gallowsBoxCompact: {
+    width: 72,
+    height: 78,
     position: 'relative',
   },
   gallowsBase: {
     position: 'absolute',
-    bottom: 6,
-    left: 10,
-    width: 80,
-    height: 4,
+    bottom: 4,
+    left: 6,
+    width: 52,
+    height: 3,
     backgroundColor: '#334155',
-    borderRadius: 2,
   },
   gallowsPole: {
     position: 'absolute',
-    bottom: 6,
-    left: 24,
-    width: 4,
-    height: 104,
+    bottom: 4,
+    left: 16,
+    width: 3,
+    height: 68,
     backgroundColor: '#334155',
   },
   gallowsTop: {
     position: 'absolute',
-    top: 10,
-    left: 24,
-    width: 48,
-    height: 4,
+    top: 6,
+    left: 16,
+    width: 34,
+    height: 3,
     backgroundColor: '#334155',
   },
   gallowsRope: {
     position: 'absolute',
-    top: 10,
-    left: 68,
+    top: 6,
+    left: 47,
     width: 2,
-    height: 16,
+    height: 11,
     backgroundColor: '#94a3b8',
   },
   hmHead: {
     position: 'absolute',
-    top: 26,
-    left: 58,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 3,
+    top: 17,
+    left: 40,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2.5,
   },
   hmBody: {
     position: 'absolute',
-    top: 48,
-    left: 67.5,
-    width: 3,
-    height: 30,
+    top: 33,
+    left: 47,
+    width: 2.5,
+    height: 20,
   },
   hmArmLeft: {
     position: 'absolute',
-    top: 52,
-    left: 56,
-    width: 14,
-    height: 3,
+    top: 36,
+    left: 39,
+    width: 10,
+    height: 2.5,
     transform: [{ rotate: '-30deg' }],
   },
   hmArmRight: {
     position: 'absolute',
-    top: 52,
-    left: 68,
-    width: 14,
-    height: 3,
+    top: 36,
+    left: 47,
+    width: 10,
+    height: 2.5,
     transform: [{ rotate: '30deg' }],
   },
   hmLegLeft: {
     position: 'absolute',
-    top: 82,
-    left: 57,
-    width: 15,
-    height: 3,
+    top: 52,
+    left: 40,
+    width: 10,
+    height: 2.5,
     transform: [{ rotate: '-45deg' }],
   },
   hmLegRight: {
     position: 'absolute',
-    top: 82,
-    left: 66,
-    width: 15,
-    height: 3,
+    top: 52,
+    left: 46,
+    width: 10,
+    height: 2.5,
     transform: [{ rotate: '45deg' }],
   },
   hangmanInfoRight: {
     flex: 1,
+    gap: 2,
   },
   livesIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginBottom: 6,
+    gap: 4,
   },
   livesCountText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  heartsLives: {
-    fontSize: 15,
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  hangmanAuthorTag: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-    marginBottom: 4,
+    fontWeight: '800',
+    color: '#e11d48',
   },
   hangmanHintBox: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontSize: 11,
+    color: '#334155',
     fontStyle: 'italic',
-    lineHeight: 18,
+    lineHeight: 15,
   },
   wordSlotsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 6,
-    marginBottom: 16,
+    gap: 5,
   },
   wordSlotBox: {
-    width: 30,
-    height: 38,
-    borderRadius: 8,
-    borderWidth: 2,
+    width: 26,
+    height: 30,
+    borderBottomWidth: 2.5,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
   },
   wordSlotChar: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '900',
   },
   azKeyboard: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 5,
-    marginBottom: 8,
+    gap: 4,
   },
   azKey: {
-    width: 34,
-    height: 38,
-    borderRadius: 8,
+    width: 29,
+    height: 29,
+    borderRadius: 7,
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#cbd5e1',
@@ -2313,50 +3736,498 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   azKeyText: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
     color: '#1e293b',
   },
+  fullScreenModalContainer: {
+    flex: 1,
+    backgroundColor: '#faf9f9',
+  },
+  fullScreenTopBar: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+  },
+  // Celebración Grande y Alegre
+  victoryOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  victoryCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 32,
+    padding: 26,
+    alignItems: 'center',
+    borderWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  victorySparklesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 4,
+  },
+  victoryTrophyCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  victoryGameTag: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginTop: 6,
+  },
+  victoryWinnerTitle: {
+    fontSize: 30,
+    fontWeight: '900',
+    color: '#0f172a',
+    fontFamily: SERIF_FONT,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  victorySubtitle: {
+    fontSize: 14,
+    color: '#475569',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  victoryRewardPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 16,
+  },
+  victoryRewardText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: 0.6,
+  },
+  victoryButtonsRow: {
+    width: '100%',
+    marginTop: 20,
+    gap: 10,
+  },
+  victoryPlayAgainBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  victoryPlayAgainText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  victoryCloseBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  victoryCloseText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 370,
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    padding: 20,
+    padding: 22,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 14,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: '#2b2d42',
+    fontFamily: SERIF_FONT,
   },
   inputLabel: {
     fontSize: 12,
     fontWeight: '700',
     color: '#495057',
+    marginBottom: 6,
     marginTop: 10,
-    marginBottom: 5,
   },
   modalInput: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: '#cbd5e1',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#2b2d42',
+    color: '#0f172a',
+  },
+  // Modo Consola de Juego Profesional Independiente (Modo Zoom Pro)
+  arenaCardProDark: {
+    padding: 14,
+    borderRadius: 22,
+    backgroundColor: '#090e1a',
+    borderColor: '#1e293b',
+    borderWidth: 1.5,
+  },
+  proLiveBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proLiveBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: 1,
+  },
+  proConsoleModalContainer: {
+    flex: 1,
+    backgroundColor: '#050811',
+  },
+  proConsoleTopHud: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  proHudPlayerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  proHudDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  proHudPlayerName: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#cbd5e1',
+    letterSpacing: 0.8,
+  },
+  proHudPlayerScore: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  proHudCenterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  proHudCenterText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#fde047',
+  },
+  proConsoleTabsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+  },
+  proGameTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 3,
+  },
+  proGameTabBtnActive: {
+    backgroundColor: '#1e293b',
+    borderColor: '#38bdf8',
+  },
+  proGameTabBtnText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#64748b',
+    letterSpacing: 0.4,
+  },
+  // Battleship 10x10 Pro (Batalla Naval de Mesa Completa)
+  bsInviteCard: {
+    width: '100%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    padding: 18,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#bae6fd',
+    gap: 10,
+  },
+  bsInviteCardDark: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0369a1',
+  },
+  bsRadarCircleIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(2, 132, 199, 0.14)',
+    borderWidth: 2,
+    borderColor: '#38bdf8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bsInviteTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#0f172a',
+    textAlign: 'center',
+    fontFamily: SERIF_FONT,
+  },
+  bsInviteDesc: {
+    fontSize: 12,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  bsActionLaunchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  bsActionLaunchText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#ffffff',
+  },
+  bsSetupTopBar: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  bsSetupInstruction: {
+    flex: 1,
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  bsRotateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+  },
+  bsRotateBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0284c7',
+  },
+  bsShipsPickerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  bsShipPickerPill: {
+    flex: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+  },
+  bsShipPickerText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  bsTopRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  bsStatusPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  bsStatusText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  bsModeSwitch: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 2,
+    gap: 2,
+  },
+  bsModeBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  bsModeBtnText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  bsFleetSilhouettesBar: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  bsSilhouetteChip: {
+    flex: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+    borderRadius: 7,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  bsSilhouetteAlive: {
+    backgroundColor: '#0c4a6e',
+    borderColor: '#0284c7',
+  },
+  bsSilhouetteSunk: {
+    backgroundColor: '#450a0a',
+    borderColor: '#ef4444',
+  },
+  bsSilhouetteName: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#e0f2fe',
+    marginBottom: 2,
+  },
+  bsSilhouetteBlocks: {
+    flexDirection: 'row',
+    gap: 1.5,
+  },
+  bsSilhouetteMiniBlock: {
+    width: 5,
+    height: 4,
+    borderRadius: 1,
+  },
+  bsGridOuter10x10: {
+    borderWidth: 2,
+    borderColor: '#0284c7',
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#082f49',
+  },
+  bsCoordHeaderCell: {
+    backgroundColor: '#082f49',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.3,
+    borderColor: '#0369a1',
+  },
+  bsCoordText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#7dd3fc',
+  },
+  bsCell10x10: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.4,
+    borderColor: 'rgba(56, 189, 248, 0.28)',
+    backgroundColor: '#0c4a6e',
+    position: 'relative',
+  },
+  shipHullSegment: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shipTurretCircle: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#cbd5e1',
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  shipBridgeDeck: {
+    width: 7,
+    height: 7,
+    borderRadius: 2,
+    backgroundColor: '#94a3b8',
+  },
+  bsCellMiss: {
+    backgroundColor: '#082f49',
+  },
+  bsCellHit: {
+    backgroundColor: '#9a3412',
+    borderColor: '#f97316',
+  },
+  bsWaterSplashDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#7dd3fc',
+    opacity: 0.75,
   },
 });
