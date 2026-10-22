@@ -341,7 +341,7 @@ export const MemoriesScreen: React.FC = () => {
               onPress={() => setAlbumPage((p) => Math.max(0, p - 1))}
               style={[styles.pagerBtn, safePage === 0 && { opacity: 0.35 }]}
             >
-              <Ionicons name="chevron-back" size={15} color="#334155" />
+              <Ionicons name="chevron-back" size={17} color="#334155" />
               <Text style={styles.pagerBtnText}>Anterior</Text>
             </TouchableOpacity>
 
@@ -370,7 +370,7 @@ export const MemoriesScreen: React.FC = () => {
               style={[styles.pagerBtn, safePage >= totalPages - 1 && { opacity: 0.35 }]}
             >
               <Text style={styles.pagerBtnText}>Siguiente</Text>
-              <Ionicons name="chevron-forward" size={15} color="#334155" />
+              <Ionicons name="chevron-forward" size={17} color="#334155" />
             </TouchableOpacity>
           </View>
         )}
@@ -558,7 +558,7 @@ export const MemoriesScreen: React.FC = () => {
               onPress={() => setTimelinePage((p) => Math.max(0, p - 1))}
               style={[styles.pagerBtn, safePage === 0 && { opacity: 0.35 }]}
             >
-              <Ionicons name="chevron-back" size={15} color="#334155" />
+              <Ionicons name="chevron-back" size={17} color="#334155" />
               <Text style={styles.pagerBtnText}>Anterior</Text>
             </TouchableOpacity>
 
@@ -587,7 +587,7 @@ export const MemoriesScreen: React.FC = () => {
               style={[styles.pagerBtn, safePage >= totalPages - 1 && { opacity: 0.35 }]}
             >
               <Text style={styles.pagerBtnText}>Siguiente</Text>
-              <Ionicons name="chevron-forward" size={15} color="#334155" />
+              <Ionicons name="chevron-forward" size={17} color="#334155" />
             </TouchableOpacity>
           </View>
         )}
@@ -615,7 +615,7 @@ export const MemoriesScreen: React.FC = () => {
               scaleTo={0.92}
               accessibilityLabel="Agregar recuerdo"
             >
-              <Ionicons name="add" size={20} color={colors.primaryOn} />
+              <Ionicons name="add" size={24} color={colors.primaryOn} />
             </PressableScale>
           </View>
         </View>
@@ -645,7 +645,7 @@ export const MemoriesScreen: React.FC = () => {
             >
               <Ionicons
                 name={item.icon as any}
-                size={14}
+                size={16}
                 color={active ? colors.primaryOn : colors.textMuted}
               />
               <Text
@@ -1041,12 +1041,15 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontStyle: 'italic',
   },
   letterCloseBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    minHeight: 42,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   letterCloseBtnText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     color: '#ffffff',
   },
@@ -1070,20 +1073,24 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     gap: 8,
   },
   headerThemeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerAddBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   screenTitle: {
     fontSize: 18,
@@ -1100,10 +1107,10 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.surfaceAlt,
-    borderRadius: 14,
-    padding: 3,
+    borderRadius: 16,
+    padding: 4,
     marginHorizontal: 16,
-    marginVertical: 6,
+    marginVertical: 8,
     borderWidth: 1,
     borderColor: c.border,
     gap: 4,
@@ -1116,13 +1123,14 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   viewToggleBtn: {
     flex: 1,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 7,
-    paddingHorizontal: 2,
-    borderRadius: 10,
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 4,
+    borderRadius: 12,
     borderWidth: 1,
   },
   viewToggleBtnActive: {
@@ -1134,7 +1142,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     elevation: 2,
   },
   viewToggleText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
     color: c.textSecondary,
   },
@@ -1230,26 +1238,32 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 6,
+    paddingTop: 8,
   },
   pagerBtn: {
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 12,
     backgroundColor: c.surface,
     borderWidth: 1,
     borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   pagerBtnText: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: '700',
     color: c.textSecondary,
   },
   pagerIndicator: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: c.textSecondary,
   },
@@ -1501,9 +1515,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     position: 'absolute',
     top: 14,
     right: 14,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1535,32 +1549,37 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 14,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: c.border,
+    gap: 10,
   },
   deleteMilestoneBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    minHeight: 42,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     backgroundColor: '#fff0f3',
   },
   deleteMilestoneText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#e63946',
   },
   closeMilestoneBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    minHeight: 42,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
     backgroundColor: '#f1f3f5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeMilestoneText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#495057',
   },

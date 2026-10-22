@@ -676,9 +676,13 @@ export const MoviesScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Tarjetas de Películas Paginadas (Cero Scroll) */}
-            <View style={styles.cardsDeck}>
-              {visibleMovies.length === 0 ? (
+            {/* Lista Desplazable de Películas (Tarjetas Completas Sin Cortes) */}
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.cardsScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {activeMovieList.length === 0 ? (
                 <EmptyState
                   icon={subTab === 'pending' ? 'film-outline' : 'sparkles-outline'}
                   title={subTab === 'pending' ? 'Sin películas pendientes' : 'Aún no han calificado'}
@@ -689,7 +693,7 @@ export const MoviesScreen: React.FC = () => {
                   }
                 />
               ) : (
-                visibleMovies.map((movie) => {
+                activeMovieList.map((movie) => {
                   const avg =
                     movie.ratingJavier && movie.ratingKarla
                       ? ((movie.ratingJavier + movie.ratingKarla) / 2).toFixed(1)
@@ -699,7 +703,7 @@ export const MoviesScreen: React.FC = () => {
                     <PressableScale
                       key={movie.id}
                       onPress={() => openRateModal(movie)}
-                      style={styles.movieCard}
+                      style={[styles.movieCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                       scaleTo={0.98}
                     >
                       <View style={styles.movieCardTop}>
@@ -714,10 +718,10 @@ export const MoviesScreen: React.FC = () => {
                             colors={[colors.primaryLight, colors.surfaceAlt]}
                             style={styles.moviePosterPlaceholder}
                           >
-                            <Ionicons name="film" size={20} color={colors.primary} />
+                            <Ionicons name="film" size={22} color={colors.primary} />
                             <Text
                               style={[styles.posterPlaceholderTitle, { color: colors.primary }]}
-                              numberOfLines={3}
+                              numberOfLines={2}
                             >
                               {movie.title}
                             </Text>
@@ -744,15 +748,32 @@ export const MoviesScreen: React.FC = () => {
                               {movie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
                             </Text>
                           </View>
-                          <Text style={styles.movieTitle} numberOfLines={2}>
+                          <Text style={[styles.movieTitle, { color: colors.text }]} numberOfLines={2}>
                             {movie.title}
                           </Text>
-                          {movie.notes ? (
-                            <Text style={styles.movieNotesInline} numberOfLines={1}>
+                          {movie.watched && (movie.ratingKarla || movie.ratingJavier) ? (
+                            <View style={styles.movieRatingPillsRow}>
+                              {movie.ratingKarla && (
+                                <View style={[styles.miniRatingPill, { backgroundColor: '#f3e8ff' }]}>
+                                  <Text style={[styles.miniRatingText, { color: '#9333ea' }]}>
+                                    Karlita: ★ {movie.ratingKarla}
+                                  </Text>
+                                </View>
+                              )}
+                              {movie.ratingJavier && (
+                                <View style={[styles.miniRatingPill, { backgroundColor: '#e0f2fe' }]}>
+                                  <Text style={[styles.miniRatingText, { color: '#0284c7' }]}>
+                                    Javier: ★ {movie.ratingJavier}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          ) : movie.notes ? (
+                            <Text style={[styles.movieNotesInline, { color: colors.textSecondary }]} numberOfLines={2}>
                               “{movie.notes}”
                             </Text>
                           ) : movie.director ? (
-                            <Text style={styles.movieDirectorText} numberOfLines={1}>
+                            <Text style={[styles.movieDirectorText, { color: colors.textMuted }]} numberOfLines={1}>
                               Dir. {movie.director}
                             </Text>
                           ) : null}
@@ -761,13 +782,14 @@ export const MoviesScreen: React.FC = () => {
                         <View style={styles.cardRightActions}>
                           {movie.watched && avg ? (
                             <View style={[styles.avgBadge, { backgroundColor: colors.primary }]}>
-                              <Ionicons name="star" size={12} color={colors.primaryOn} />
+                              <Ionicons name="star" size={13} color={colors.primaryOn} />
                               <Text style={[styles.avgBadgeText, { color: colors.primaryOn }]}>
                                 {avg}
                               </Text>
                             </View>
                           ) : (
-                            <View
+                            <TouchableOpacity
+                              onPress={() => openRateModal(movie)}
                               style={[
                                 styles.markWatchedBtn,
                                 {
@@ -776,27 +798,27 @@ export const MoviesScreen: React.FC = () => {
                                 },
                               ]}
                             >
-                              <Ionicons name="star" size={12} color={colors.primary} />
+                              <Ionicons name="star" size={13} color={colors.primary} />
                               <Text style={[styles.markWatchedText, { color: colors.primary }]}>
                                 Calificar
                               </Text>
-                            </View>
+                            </TouchableOpacity>
                           )}
 
-                          <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                             {movie.watched && (
                               <TouchableOpacity
                                 onPress={() => handleRemoveMovieReview(movie)}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <Ionicons name="arrow-undo-outline" size={15} color="#e11d48" />
+                                <Ionicons name="arrow-undo-outline" size={16} color="#e11d48" />
                               </TouchableOpacity>
                             )}
                             <TouchableOpacity
                               onPress={() => handleDeleteMovie(movie)}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
-                              <Ionicons name="trash-outline" size={15} color={colors.textMuted} />
+                              <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -805,35 +827,7 @@ export const MoviesScreen: React.FC = () => {
                   );
                 })
               )}
-            </View>
-
-            {/* Controles de Página para Cero Scroll */}
-            {totalMoviePages > 1 && (
-              <View style={styles.paginationBar}>
-                <TouchableOpacity
-                  disabled={safeMoviePage === 0}
-                  onPress={() => setMoviePage((p) => Math.max(0, p - 1))}
-                  style={[styles.pageBtn, safeMoviePage === 0 && { opacity: 0.4 }]}
-                >
-                  <Ionicons name="chevron-back" size={15} color="#1e293b" />
-                  <Text style={styles.pageBtnText}>Anterior</Text>
-                </TouchableOpacity>
-                <Text style={styles.pageIndicator}>
-                  Página {safeMoviePage + 1} de {totalMoviePages}
-                </Text>
-                <TouchableOpacity
-                  disabled={safeMoviePage >= totalMoviePages - 1}
-                  onPress={() => setMoviePage((p) => Math.min(totalMoviePages - 1, p + 1))}
-                  style={[
-                    styles.pageBtn,
-                    safeMoviePage >= totalMoviePages - 1 && { opacity: 0.4 },
-                  ]}
-                >
-                  <Text style={styles.pageBtnText}>Siguiente</Text>
-                  <Ionicons name="chevron-forward" size={15} color="#1e293b" />
-                </TouchableOpacity>
-              </View>
-            )}
+            </ScrollView>
           </View>
         )}
 
@@ -1245,6 +1239,26 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     justifyContent: 'flex-start',
     gap: 8,
   },
+  cardsScrollContent: {
+    gap: 10,
+    paddingBottom: 24,
+    paddingTop: 2,
+  },
+  movieRatingPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  miniRatingPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  miniRatingText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
   emptyBox: {
     flex: 1,
     backgroundColor: c.surface,
@@ -1285,8 +1299,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     alignItems: 'center',
   },
   movieCardPoster: {
-    width: 48,
-    height: 68,
+    width: 56,
+    height: 80,
     borderRadius: 10,
     marginRight: 10,
     backgroundColor: c.surfaceAlt,

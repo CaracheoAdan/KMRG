@@ -883,13 +883,13 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
             onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
             style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
             activeOpacity={0.85}
           >
-            <Ionicons name="add-circle-outline" size={13} color="#ffffff" />
+            <Ionicons name="add-circle-outline" size={16} color="#ffffff" />
             <Text style={styles.newPinBannerBtnText}>Nuevo Pin</Text>
           </TouchableOpacity>
 
@@ -898,7 +898,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             style={[styles.newPinBannerBtn, { backgroundColor: primaryColor }]}
             activeOpacity={0.85}
           >
-            <Ionicons name="expand-outline" size={13} color="#ffffff" />
+            <Ionicons name="expand-outline" size={16} color="#ffffff" />
             <Text style={styles.newPinBannerBtnText}>Mapa Completo</Text>
           </TouchableOpacity>
         </View>
@@ -950,7 +950,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       </View>
 
       {/* ================= FILTRO DE CATEGORÍAS ================= */}
-      <View style={{ height: 34, marginBottom: 6 }}>
+      <View style={{ height: 38, marginBottom: 8 }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -968,7 +968,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           >
             <Ionicons
               name="compass"
-              size={12}
+              size={14}
               color={activeCategory === 'Todos' ? '#ffffff' : '#64748b'}
             />
             <Text
@@ -994,7 +994,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
               >
                 <Ionicons
                   name={cat.icon}
-                  size={12}
+                  size={14}
                   color={isSelected ? '#ffffff' : cat.color}
                 />
                 <Text
@@ -1041,7 +1041,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             style={styles.stepPinBtn}
             activeOpacity={0.8}
           >
-            <Ionicons name="chevron-back" size={16} color="#475569" />
+            <Ionicons name="chevron-back" size={18} color="#475569" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1072,7 +1072,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             onPress={() => handleOpenExternalMaps(selectedPlace)}
             style={[styles.gpsMiniBtn, { backgroundColor: `${primaryColor}15` }]}
           >
-            <Ionicons name="navigate" size={14} color={primaryColor} />
+            <Ionicons name="navigate" size={18} color={primaryColor} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1080,7 +1080,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             style={styles.stepPinBtn}
             activeOpacity={0.8}
           >
-            <Ionicons name="chevron-forward" size={16} color="#475569" />
+            <Ionicons name="chevron-forward" size={18} color="#475569" />
           </TouchableOpacity>
         </View>
       )}
@@ -1388,13 +1388,14 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   newPinBannerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    gap: 6,
+    minHeight: 38,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 12,
   },
   newPinBannerBtnText: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: '700',
     color: c.primaryOn,
     fontFamily: FONTS.sans,
@@ -1467,17 +1468,18 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: c.surface,
     borderWidth: 1,
     borderColor: c.border,
   },
   categoryChipText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: c.textSecondary,
     fontFamily: FONTS.sans,
   },
@@ -1713,8 +1715,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     zIndex: 45,
   },
   mapControlBtn: {
-    width: 35,
-    height: 35,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     alignItems: 'center',
@@ -1767,9 +1769,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     gap: 8,
   },
   stepPinBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1780,9 +1782,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flex: 1,
   },
   gpsMiniBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1847,9 +1849,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontWeight: '700',
   },
   closeIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: c.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
