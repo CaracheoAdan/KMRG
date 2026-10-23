@@ -170,6 +170,9 @@ export const TodayScreen: React.FC = () => {
         partnerNote = (todayMsg.content || '').trim();
       }
 
+      const todayStr = toLocalDateString(new Date());
+      const isStreakActive = syncedHome.lastInteractionDate === todayStr;
+
       void syncWidgetData({
         daysTogether,
         anniversaryDate: syncedHome.anniversaryDate,
@@ -177,6 +180,8 @@ export const TodayScreen: React.FC = () => {
         noteSender: partnerNote ? partnerDisplayName : '',
         nextEventTitle: syncedHome.nextEventTitle || '',
         nextEventDate: syncedHome.nextEventDate || '',
+        accentColor: primaryColor,
+        streakActive: isStreakActive,
       });
     } catch {
       // Ignorar si el widget no está activo
@@ -381,6 +386,10 @@ export const TodayScreen: React.FC = () => {
       timestamp: new Date().toISOString(),
     });
     void clearHeartbeatInWidget();
+    void syncWidgetData({
+      streakActive: true,
+      accentColor: primaryColor,
+    });
 
     setInteractionFeedback({
       text: result.success

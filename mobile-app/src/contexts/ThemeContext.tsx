@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from './ProfileContext';
 import { buildPalette, ThemePalette } from '../theme/designSystem';
+import { syncWidgetData } from '../services/WidgetSyncService';
 
 export interface ThemeColorPreset {
   id: string;
@@ -77,18 +78,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((savedId) => {
+      let resolvedTheme = THEME_COLOR_PRESETS[0];
       if (savedId) {
         // Si el usuario tenía guardado el tema antiguo 'black' por defecto heredado, migrar a Rosa Coral cálido
         if (savedId === 'black') {
-          setCurrentTheme(THEME_COLOR_PRESETS[0]);
+          resolvedTheme = THEME_COLOR_PRESETS[0];
           void AsyncStorage.setItem(STORAGE_KEY, 'coral');
         } else {
           const found = THEME_COLOR_PRESETS.find((p) => p.id === savedId);
-          if (found) setCurrentTheme(found);
+          if (found) resolvedTheme = found;
         }
-      } else {
-        setCurrentTheme(THEME_COLOR_PRESETS[0]);
       }
+      setCurrentTheme(resolvedTheme);
+      // Sincronizar el color de acento con los widgets nativos
+      void syncWidgetData({ accentColor: resolvedTheme.hex });
     });
   }, [profile]);
 
@@ -97,6 +100,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (found) {
       setCurrentTheme(found);
       await AsyncStorage.setItem(STORAGE_KEY, id);
+      // Actualizar inmediatamente los widgets con el nuevo color de acento
+      void syncWidgetData({ accentColor: found.hex });
     }
   };
 
