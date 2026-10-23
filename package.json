@@ -14,6 +14,7 @@
     "dev:mobile": "npm --workspace=mobile-app run start",
     "build:backend": "npm --workspace=backend run build",
     "build:admin": "npm --workspace=admin-web run build",
+    "build:apk": "npm --prefix mobile-app exec -- eas build -p android --profile preview",
     "postinstall": "node scripts/patch-expo-notifications.js"
   },
   "keywords": [],

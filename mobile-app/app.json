@@ -7,11 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#faf5ff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kmrg.app"
@@ -65,6 +60,15 @@
               "updatePeriodMillis": 1800000
             }
           ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#faf5ff"
         }
       ]
     ],
