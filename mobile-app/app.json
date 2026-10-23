@@ -34,7 +34,38 @@
           "color": "#e63946"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "KmrgCoupleWidget",
+              "label": "KMRG Amor (Completo)",
+              "minWidth": "320dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "description": "Nuestros días juntos, la notita del día y aviso de latidos de amor.",
+              "resizeMode": "horizontal|vertical",
+              "widgetCategory": "home_screen|keyguard",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "KmrgMiniWidget",
+              "label": "KMRG Amor (Compacto)",
+              "minWidth": "160dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "description": "Contador de días juntos y aviso de latidos.",
+              "resizeMode": "horizontal|vertical",
+              "widgetCategory": "home_screen|keyguard",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {

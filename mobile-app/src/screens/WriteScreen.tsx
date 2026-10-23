@@ -28,6 +28,7 @@ import {
   getSentMessages,
   formatDisplayDate,
 } from '../services/StorageService';
+import { syncWidgetData } from '../services/WidgetSyncService';
 
 const SERIF_FONT = Platform.select({
   ios: 'Georgia',
@@ -92,6 +93,12 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       });
 
       if (result.success) {
+        if (scheduledDate <= toLocalDateString(new Date())) {
+          void syncWidgetData({
+            noteText: content.trim(),
+            noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
+          });
+        }
         setIsSealingEnvelope(true);
         Animated.sequence([
           Animated.timing(sealAnim, {

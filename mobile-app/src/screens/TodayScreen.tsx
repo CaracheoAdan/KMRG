@@ -52,6 +52,11 @@ import {
   saveHomeState,
   DEFAULT_HOME_STATE,
 } from '../services/CoupleSyncService';
+import {
+  syncWidgetData,
+  notifyHeartbeatInWidget,
+  clearHeartbeatInWidget,
+} from '../services/WidgetSyncService';
 import { supabase } from '../config/supabase';
 
 const SERIF_FONT = Platform.select({
@@ -147,6 +152,31 @@ export const TodayScreen: React.FC = () => {
       void markSupabaseMessageRead(todayMsg.id);
     }
 
+    // Sincronizar datos automáticamente con los Widgets de la pantalla de inicio
+    try {
+      const start = new Date(`${syncedHome.anniversaryDate}T00:00:00`);
+      const diffMs = Math.max(0, Date.now() - start.getTime());
+      const daysTogether = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const noteText =
+        syncedHome.stickyNote?.text ||
+        todayMsg?.content ||
+        'Pensando en ti en cada instante...';
+      const noteAuthor =
+        syncedHome.stickyNote?.author ||
+        todayMsg?.sender ||
+        (currentProfile === 'Karla' ? 'Javier' : 'Karla');
+      const noteSender = noteAuthor === 'Karla' ? 'Karlita' : 'Javier';
+
+      void syncWidgetData({
+        daysTogether,
+        anniversaryDate: syncedHome.anniversaryDate,
+        noteText,
+        noteSender,
+      });
+    } catch {
+      // Ignorar si el widget no está activo
+    }
+
     setLoading(false);
   }, [currentProfile]);
 
@@ -172,6 +202,7 @@ export const TodayScreen: React.FC = () => {
             newInteraction.sender !== currentProfile
           ) {
             const senderName = newInteraction.sender === 'Javier' ? 'Javier' : 'Karlita';
+            void notifyHeartbeatInWidget(senderName);
             Alert.alert(
               'Pensando en ti',
               `${senderName} acaba de enviarte un latido desde su corazón.`
@@ -316,6 +347,7 @@ export const TodayScreen: React.FC = () => {
       message_id: message?.id || null,
       timestamp: new Date().toISOString(),
     });
+    void clearHeartbeatInWidget();
 
     setInteractionFeedback({
       text: result.success
@@ -370,8 +402,17 @@ export const TodayScreen: React.FC = () => {
           updatedAt: new Date().toISOString(),
         },
       },
+      stickyNote: {
+        author: currentProfile,
+        text: finalStatus,
+        updatedAt: new Date().toISOString(),
+      },
     };
     await updateAndSyncHome(nextHome);
+    void syncWidgetData({
+      noteText: finalStatus,
+      noteSender: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
+    });
     setIsMoodModalOpen(false);
   };
 
@@ -1035,6 +1076,14 @@ export const TodayScreen: React.FC = () => {
         value={homeState.anniversaryDate}
         onSelect={(selected) => {
           void updateAndSyncHome({ ...homeState, anniversaryDate: selected });
+          try {
+            const start = new Date(`${selected}T00:00:00`);
+            const diffMs = Math.max(0, Date.now() - start.getTime());
+            const daysTogether = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            void syncWidgetData({ anniversaryDate: selected, daysTogether });
+          } catch {
+            // Ignorar
+          }
         }}
         onClose={() => setShowAnniversaryPicker(false)}
         title="Fecha de nuestro aniversario"
