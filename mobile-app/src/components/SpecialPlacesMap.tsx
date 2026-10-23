@@ -122,9 +122,9 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   } | null>(null);
 
   // Estado de la cámara del mapa real (Centro GPS + Nivel de Zoom 3..18)
-  const [centerLat, setCenterLat] = useState<number>(19.4194);
-  const [centerLon, setCenterLon] = useState<number>(-99.1625);
-  const [zoom, setZoom] = useState<number>(12);
+  const [centerLat, setCenterLat] = useState<number>(20.51399);
+  const [centerLon, setCenterLon] = useState<number>(-100.82658);
+  const [zoom, setZoom] = useState<number>(15);
 
   // Buscador de lugares reales en vivo sobre el mapa
   const [mapSearchQuery, setMapSearchQuery] = useState('');
@@ -140,8 +140,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   const [newNotes, setNewNotes] = useState('');
   const [newRating, setNewRating] = useState(5);
   const [newImageUri, setNewImageUri] = useState<string | null>(null);
-  const [newLat, setNewLat] = useState(19.4194);
-  const [newLon, setNewLon] = useState(-99.1625);
+  const [newLat, setNewLat] = useState(20.51399);
+  const [newLon, setNewLon] = useState(-100.82658);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Modal de detalle de un lugar existente
@@ -225,7 +225,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           setMapSearchSuggestions(
             data.features.map((f: any) => {
               const props = f.properties || {};
-              const coords = f.geometry?.coordinates || [-99.1625, 19.4194];
+              const coords = f.geometry?.coordinates || [-100.82658, 20.51399];
               const nameParts = [
                 props.name,
                 props.street,
