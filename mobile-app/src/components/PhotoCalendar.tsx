@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from './ui/Icon';
 import { useTheme } from '../contexts/ThemeContext';
+import { toLocalDateString } from '../services/StorageService';
 
 interface PhotoCalendarProps {
   selectedDate: string; // 'YYYY-MM-DD'
@@ -23,10 +24,23 @@ export const PhotoCalendar: React.FC<PhotoCalendarProps> = ({
 }) => {
   const { primaryColor } = useTheme();
 
-  // Inicializar en el mes de la fecha seleccionada o la fecha actual
-  const initialDate = selectedDate ? new Date(selectedDate + 'T12:00:00') : new Date();
-  const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth()); // 0-11
+  // Inicializar en el mes de la fecha seleccionada de forma exacta sin desfase horario
+  const initialParts = selectedDate ? selectedDate.substring(0, 10).split('-').map(Number) : [];
+  const initialYear = initialParts.length === 3 && !isNaN(initialParts[0]) ? initialParts[0] : new Date().getFullYear();
+  const initialMonth = initialParts.length === 3 && !isNaN(initialParts[1]) ? initialParts[1] - 1 : new Date().getMonth();
+
+  const [currentYear, setCurrentYear] = useState(initialYear);
+  const [currentMonth, setCurrentMonth] = useState(initialMonth); // 0-11
+
+  useEffect(() => {
+    if (selectedDate) {
+      const parts = selectedDate.substring(0, 10).split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        setCurrentYear(parts[0]);
+        setCurrentMonth(parts[1] - 1);
+      }
+    }
+  }, [selectedDate]);
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -67,10 +81,7 @@ export const PhotoCalendar: React.FC<PhotoCalendarProps> = ({
     days.push({ dayNum: d, dateString: dateStr });
   }
 
-  const todayStr = (() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  })();
+  const todayStr = toLocalDateString(new Date());
 
   return (
     <View style={styles.container}>

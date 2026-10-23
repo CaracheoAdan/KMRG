@@ -47,13 +47,39 @@ export const resetCurrentProfile = async (): Promise<void> => {
 };
 
 /**
- * Formatea fechas a YYYY-MM-DD sin desfase horario
+ * Formatea fechas a YYYY-MM-DD sin desfase horario.
+ * Si dateInput ya es un string YYYY-MM-DD, lo preserva directamente sin parsear a UTC.
  */
-export const toLocalDateString = (dateInput: string | Date): string => {
-  if (typeof dateInput === 'string' && dateInput.includes('T')) {
-    return dateInput.substring(0, 10);
+export const toLocalDateString = (dateInput?: string | Date | null): string => {
+  if (!dateInput) {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
-  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    // Si ya empieza con YYYY-MM-DD (e.g. "2026-10-24" o "2026-10-24T00:00:00")
+    if (trimmed.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      return trimmed.substring(0, 10);
+    }
+    // Si viene en otro formato de texto
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const year = parsed.getFullYear();
+      const month = String(parsed.getMonth() + 1).padStart(2, '0');
+      const day = String(parsed.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) {
+    const fallback = new Date();
+    return `${fallback.getFullYear()}-${String(fallback.getMonth() + 1).padStart(2, '0')}-${String(fallback.getDate()).padStart(2, '0')}`;
+  }
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -61,12 +87,15 @@ export const toLocalDateString = (dateInput: string | Date): string => {
 };
 
 export const formatDisplayDate = (
-  dateInput: string | Date,
+  dateInput?: string | Date | null,
   options?: Intl.DateTimeFormatOptions
 ): string => {
+  if (!dateInput) return '';
   const str = toLocalDateString(dateInput);
-  const [year, month, day] = str.split('-').map(Number);
-  const d = new Date(year, month - 1, day, 12, 0, 0);
+  const parts = str.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return str;
+  // Usar las 12:00 del mediodía local para evitar cualquier salto de huso horario
+  const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
   return d.toLocaleDateString(
     'es-ES',
     options || {

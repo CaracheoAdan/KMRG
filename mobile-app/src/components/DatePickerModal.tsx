@@ -8,7 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from './ui/Icon';
-import { formatDisplayDate } from '../services/StorageService';
+import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface DatePickerModalProps {
@@ -37,11 +37,14 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
 }) => {
   const { primaryColor } = useTheme();
 
-  // Inicializar en el mes de la fecha actual
+  // Inicializar en el mes de la fecha actual (extrayendo año y mes de forma exacta sin desfase UTC)
   const effectiveVal = (minDate && value && value < minDate) ? minDate : value;
-  const initialDate = effectiveVal ? new Date(effectiveVal + 'T12:00:00') : new Date();
-  const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth()); // 0-11
+  const initialParts = effectiveVal ? effectiveVal.split('-').map(Number) : [];
+  const initialYear = initialParts.length === 3 && !isNaN(initialParts[0]) ? initialParts[0] : new Date().getFullYear();
+  const initialMonth = initialParts.length === 3 && !isNaN(initialParts[1]) ? initialParts[1] - 1 : new Date().getMonth();
+
+  const [currentYear, setCurrentYear] = useState(initialYear);
+  const [currentMonth, setCurrentMonth] = useState(initialMonth); // 0-11
   const [tempDate, setTempDate] = useState(effectiveVal);
 
   // Sincronizar cuando cambia el valor recibido
@@ -49,10 +52,10 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
     const val = (minDate && value && value < minDate) ? minDate : value;
     if (val) {
       setTempDate(val);
-      const d = new Date(val + 'T12:00:00');
-      if (!isNaN(d.getTime())) {
-        setCurrentYear(d.getFullYear());
-        setCurrentMonth(d.getMonth());
+      const parts = val.split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        setCurrentYear(parts[0]);
+        setCurrentMonth(parts[1] - 1);
       }
     }
   }, [value, visible, minDate]);
@@ -75,17 +78,15 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
     }
   };
 
-  // Accesos rápidos: Hoy y Ayer
+  // Accesos rápidos: Hoy y Ayer (en zona horaria local)
   const setQuickDate = (daysAgo: number) => {
     const target = new Date();
     target.setDate(target.getDate() - daysAgo);
-    const y = target.getFullYear();
-    const m = String(target.getMonth() + 1).padStart(2, '0');
-    const d = String(target.getDate()).padStart(2, '0');
-    const str = `${y}-${m}-${d}`;
+    const str = toLocalDateString(target);
     setTempDate(str);
-    setCurrentYear(y);
-    setCurrentMonth(target.getMonth());
+    const parts = str.split('-').map(Number);
+    setCurrentYear(parts[0]);
+    setCurrentMonth(parts[1] - 1);
   };
 
   // Cuadrícula de días
@@ -143,9 +144,13 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
               <>
                 <TouchableOpacity
                   onPress={() => {
-                    const t = new Date(); t.setDate(t.getDate() + 1);
-                    const s = t.toISOString().slice(0, 10);
-                    setTempDate(s); setCurrentYear(t.getFullYear()); setCurrentMonth(t.getMonth());
+                    const t = new Date();
+                    t.setDate(t.getDate() + 1);
+                    const s = toLocalDateString(t);
+                    setTempDate(s);
+                    const parts = s.split('-').map(Number);
+                    setCurrentYear(parts[0]);
+                    setCurrentMonth(parts[1] - 1);
                   }}
                   style={styles.quickBtn}
                   activeOpacity={0.8}
@@ -154,9 +159,13 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
-                    const t = new Date(); t.setDate(t.getDate() + 7);
-                    const s = t.toISOString().slice(0, 10);
-                    setTempDate(s); setCurrentYear(t.getFullYear()); setCurrentMonth(t.getMonth());
+                    const t = new Date();
+                    t.setDate(t.getDate() + 7);
+                    const s = toLocalDateString(t);
+                    setTempDate(s);
+                    const parts = s.split('-').map(Number);
+                    setCurrentYear(parts[0]);
+                    setCurrentMonth(parts[1] - 1);
                   }}
                   style={styles.quickBtn}
                   activeOpacity={0.8}
@@ -165,9 +174,13 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
-                    const t = new Date(); t.setDate(t.getDate() + 30);
-                    const s = t.toISOString().slice(0, 10);
-                    setTempDate(s); setCurrentYear(t.getFullYear()); setCurrentMonth(t.getMonth());
+                    const t = new Date();
+                    t.setDate(t.getDate() + 30);
+                    const s = toLocalDateString(t);
+                    setTempDate(s);
+                    const parts = s.split('-').map(Number);
+                    setCurrentYear(parts[0]);
+                    setCurrentMonth(parts[1] - 1);
                   }}
                   style={styles.quickBtn}
                   activeOpacity={0.8}
