@@ -101,7 +101,7 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
           {/* Encabezado */}
           <View style={styles.header}>
             <View style={styles.logoBadge}>
-              <Ionicons name="shield-checkmark-outline" size={14} color="#e63946" />
+              <Ionicons name="heart" size={14} color="#9333ea" />
               <Text style={styles.logoText}>KMRG</Text>
             </View>
             <Text style={styles.title}>Nuestra Historia</Text>
@@ -270,13 +270,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#fff0f3',
+    backgroundColor: '#f3e8ff',
     marginBottom: 12,
   },
   logoText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#e63946',
+    color: '#9333ea',
     letterSpacing: 2,
     fontFamily: FONTS.sans,
   },
@@ -403,8 +403,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   pinInputError: {
-    borderColor: '#e63946',
-    backgroundColor: '#fff0f3',
+    borderColor: '#ef4444',
+    backgroundColor: '#fee2e2',
   },
   confirmButton: {
     flexDirection: 'row',
