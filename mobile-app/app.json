@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "KMRG Mobile",
+    "name": "KMRG",
     "slug": "kmrg-mobile",
     "scheme": "kmrg",
     "version": "1.0.0",
@@ -35,6 +35,12 @@
         }
       ],
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7f11a031-8db2-49bd-be59-44f2a3426c2a"
+      }
+    },
+    "owner": "kmrg"
   }
 }
