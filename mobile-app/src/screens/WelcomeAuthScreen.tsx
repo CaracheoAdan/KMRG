@@ -252,7 +252,7 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#ffffff',
   },
   scrollContent: {
     padding: 24,
