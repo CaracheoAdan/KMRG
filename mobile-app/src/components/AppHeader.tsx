@@ -9,6 +9,7 @@ import {
   TextInput,
   Image,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from './ui/Icon';
@@ -26,7 +27,7 @@ interface AppHeaderProps {
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
-  const { profile, setProfile, logout, getDisplayName, getAvatarUri, updatePartnerProfile } =
+  const { profile, setProfile, logout, getDisplayName, getAvatarUri, saveProfileSettings } =
     useProfile();
   const { colors, isDark, toggleDark, openThemeModal } = useTheme();
   const streak = useStreak();
@@ -38,6 +39,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
   const [myNameInput, setMyNameInput] = useState(getDisplayName(currentProfile));
   const [partnerNameInput, setPartnerNameInput] = useState(getDisplayName(partnerRole));
   const [myAvatarDraft, setMyAvatarDraft] = useState<string | null>(getAvatarUri(currentProfile));
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isProfileModalOpen) {
@@ -48,33 +50,50 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
   }, [isProfileModalOpen, currentProfile, partnerRole, getDisplayName, getAvatarUri]);
 
   const handlePickAvatar = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permiso necesario', 'Necesitamos acceso a tu galería para elegir tu foto de perfil.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.45,
-      base64: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setMyAvatarDraft(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted && permission.status !== 'granted') {
+        Alert.alert('Permiso necesario', 'Necesitamos acceso a tu galería para elegir tu foto de perfil.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        const uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        setMyAvatarDraft(uri);
+      }
+    } catch (err) {
+      console.warn('Error al seleccionar avatar:', err);
+      Alert.alert('Error', 'No se pudo abrir la galería de fotos.');
     }
   };
 
   const handleSaveProfileChanges = async () => {
-    await updatePartnerProfile(currentProfile, {
-      displayName: myNameInput.trim() || (currentProfile === 'Karla' ? 'Karlita' : 'Javier'),
-      avatarUri: myAvatarDraft,
-    });
-    if (partnerNameInput.trim()) {
-      await updatePartnerProfile(partnerRole, { displayName: partnerNameInput.trim() });
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await saveProfileSettings({
+        myRole: currentProfile,
+        myDisplayName: myNameInput,
+        myAvatarUri: myAvatarDraft,
+        partnerRole: partnerRole,
+        partnerDisplayName: partnerNameInput,
+      });
+      setIsProfileModalOpen(false);
+      Alert.alert('¡Perfil Guardado! ❤️', 'Tu foto y datos se actualizaron y sincronizaron con éxito.');
+    } catch (err) {
+      console.warn('Error guardando perfil:', err);
+      Alert.alert('Aviso', 'Se guardó tu perfil localmente.');
+      setIsProfileModalOpen(false);
+    } finally {
+      setIsSaving(false);
     }
-    setIsProfileModalOpen(false);
   };
 
   const handleSwitchProfileRole = async () => {
@@ -269,10 +288,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
 
             <PressableScale
               onPress={() => void handleSaveProfileChanges()}
-              style={[styles.saveBtn, { backgroundColor: colors.primary, width: '100%' }]}
+              disabled={isSaving}
+              style={[styles.saveBtn, { backgroundColor: colors.primary, width: '100%', opacity: isSaving ? 0.7 : 1 }]}
             >
-              <Ionicons name="checkmark-circle" size={16} color={colors.primaryOn} />
-              <Text style={[styles.saveBtnText, { color: colors.primaryOn }]}>Guardar perfil</Text>
+              {isSaving ? (
+                <ActivityIndicator size="small" color={colors.primaryOn} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.primaryOn} />
+                  <Text style={[styles.saveBtnText, { color: colors.primaryOn }]}>Guardar perfil</Text>
+                </>
+              )}
             </PressableScale>
 
             <View style={styles.bottomProfileActions}>
