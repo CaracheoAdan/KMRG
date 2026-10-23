@@ -59,6 +59,10 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [themeColor, setThemeColor] = useState(primaryColor);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSealingEnvelope, setIsSealingEnvelope] = useState(false);
+  const [sealedModalData, setSealedModalData] = useState<{
+    scheduledDate: string;
+    recipientDisplay: string;
+  } | null>(null);
   const sealAnim = useRef(new Animated.Value(0)).current;
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [sentLetters, setSentLetters] = useState<Message[]>([]);
@@ -106,24 +110,14 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             duration: 650,
             useNativeDriver: true,
           }),
-          Animated.delay(300),
+          Animated.delay(200),
         ]).start(() => {
           setIsSealingEnvelope(false);
           sealAnim.setValue(0);
-          Alert.alert(
-            'Carta Sellada',
-            `Tu sobre quedó cerrado con candado y se abrirá para ${recipientDisplay} el ${formatDisplayDate(scheduledDate)}.`,
-            [
-              {
-                text: 'Aceptar',
-                onPress: () => {
-                  setContent('');
-                  getSentMessages(profile).then(setSentLetters);
-                  navigation.navigate('Hoy');
-                },
-              },
-            ]
-          );
+          setSealedModalData({
+            scheduledDate,
+            recipientDisplay,
+          });
         });
       } else {
         Alert.alert('Aviso', result.error || 'No se pudo enviar la carta.');
@@ -463,6 +457,113 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Modal de Confirmación: Carta Sellada con Candado */}
+      <Modal
+        visible={Boolean(sealedModalData)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (sealedModalData) {
+            setSealedModalData(null);
+            setContent('');
+            getSentMessages(profile).then(setSentLetters);
+            navigation.navigate('Hoy');
+          }
+        }}
+      >
+        <View style={styles.sealingOverlay}>
+          <View
+            style={[
+              styles.sealedSuccessCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: `${themeColor}40`,
+              },
+            ]}
+          >
+            {/* Halo del sobre sellado */}
+            <View
+              style={[
+                styles.sealedEmblemHalo,
+                {
+                  backgroundColor: `${themeColor}15`,
+                  borderColor: `${themeColor}35`,
+                },
+              ]}
+            >
+              <View style={[styles.sealedEmblemInner, { backgroundColor: themeColor }]}>
+                <Ionicons name="lock-closed" size={28} color="#ffffff" />
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.sealedPillBadge,
+                {
+                  backgroundColor: `${themeColor}18`,
+                  borderColor: `${themeColor}40`,
+                },
+              ]}
+            >
+              <Ionicons name="sparkles" size={11} color={themeColor} />
+              <Text style={[styles.sealedPillText, { color: themeColor }]}>
+                CARTA SELLADA CON CANDADO
+              </Text>
+            </View>
+
+            <Text style={[styles.sealedSuccessTitle, { color: colors.text }]}>
+              ¡Tu carta está protegida!
+            </Text>
+
+            <Text style={[styles.sealedSuccessMessage, { color: colors.textSecondary }]}>
+              Tu sobre quedó cerrado con candado y se abrirá mágicamente para{' '}
+              <Text style={{ fontWeight: '800', color: colors.text }}>
+                {sealedModalData?.recipientDisplay}
+              </Text>{' '}
+              el{' '}
+              <Text style={{ fontWeight: '800', color: themeColor }}>
+                {sealedModalData ? formatDisplayDate(sealedModalData.scheduledDate) : ''}
+              </Text>
+              .
+            </Text>
+
+            <View
+              style={[
+                styles.sealedInfoBox,
+                {
+                  backgroundColor: isDark ? '#27272a' : '#f8fafc',
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name="shield-checkmark"
+                size={16}
+                color={themeColor}
+                style={{ marginTop: 2 }}
+              />
+              <Text style={[styles.sealedInfoText, { color: colors.textMuted }]}>
+                Nadie podrá leer su contenido hasta la fecha programada. Podrás consultarla en tu
+                historial de cartas enviadas.
+              </Text>
+            </View>
+
+            <PressableScale
+              onPress={() => {
+                setSealedModalData(null);
+                setContent('');
+                getSentMessages(profile).then(setSentLetters);
+                navigation.navigate('Hoy');
+              }}
+              style={[styles.sealedDoneBtn, { backgroundColor: themeColor }]}
+              scaleTo={0.96}
+            >
+              <Text style={styles.sealedDoneBtnText}>Guardar en el Corazón 💕</Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -672,6 +773,96 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 18,
+  },
+  sealedSuccessCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 26,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 22,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  sealedEmblemHalo: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    marginBottom: 12,
+  },
+  sealedEmblemInner: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sealedPillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  sealedPillText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  sealedSuccessTitle: {
+    fontSize: 18.5,
+    fontWeight: '800',
+    textAlign: 'center',
+    fontFamily: SERIF_FONT,
+    marginBottom: 8,
+  },
+  sealedSuccessMessage: {
+    fontSize: 13.5,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 6,
+  },
+  sealedInfoBox: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 18,
+  },
+  sealedInfoText: {
+    flex: 1,
+    fontSize: 11.5,
+    lineHeight: 16.5,
+  },
+  sealedDoneBtn: {
+    width: '100%',
+    paddingVertical: 13,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sealedDoneBtnText: {
+    color: '#ffffff',
+    fontSize: 14.5,
+    fontWeight: '800',
   },
   envelopeConfigRow: {
     flexDirection: 'row',

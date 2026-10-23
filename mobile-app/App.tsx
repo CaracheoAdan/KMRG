@@ -7,6 +7,7 @@ import { WelcomeAuthScreen } from './src/screens/WelcomeAuthScreen';
 import { ProfileProvider, useProfile } from './src/contexts/ProfileContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { ThemeSelectorModal } from './src/components/ThemeSelectorModal';
+import { CustomAlertProvider } from './src/components/CustomAlertModal';
 import { syncSupabaseMessages, syncSupabaseMilestones } from './src/services/SupabaseService';
 import { scheduleDailyMessage } from './src/services/NotificationService';
 
@@ -62,8 +63,10 @@ export default function App() {
     <SafeAreaProvider>
       <ProfileProvider>
         <ThemeProvider>
-          <MainNavigator />
-          <ThemeSelectorModal />
+          <CustomAlertProvider>
+            <MainNavigator />
+            <ThemeSelectorModal />
+          </CustomAlertProvider>
         </ThemeProvider>
       </ProfileProvider>
     </SafeAreaProvider>

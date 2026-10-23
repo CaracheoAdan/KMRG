@@ -16,6 +16,7 @@ import { TimeCapsuleItem, UserProfile } from '../types';
 import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
 import { DatePickerModal } from './DatePickerModal';
 import { FONTS } from '../theme/designSystem';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   capsules: TimeCapsuleItem[];
@@ -40,6 +41,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
   onSaveCapsule,
   onDeleteCapsule,
 }) => {
+  const { colors, isDark } = useTheme();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [occasion, setOccasion] = useState(OCCASIONS[0]);
@@ -143,6 +145,8 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
               style={[
                 styles.capsuleCard,
                 {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
                   borderLeftColor: isUnlocked ? '#10b981' : primaryColor,
                   borderLeftWidth: 4,
                 },
@@ -187,7 +191,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
                   </View>
                 </View>
 
-                <Text style={styles.capsuleTitle} numberOfLines={2}>
+                <Text style={[styles.capsuleTitle, { color: colors.text }]} numberOfLines={2}>
                   {cap.title}
                 </Text>
                 <Text style={styles.capsuleMeta}>
@@ -215,11 +219,11 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
         onRequestClose={() => setOpenedCapsule(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
             {openedCapsule && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{openedCapsule.title}</Text>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{openedCapsule.title}</Text>
                   <TouchableOpacity
                     onPress={() => setOpenedCapsule(null)}
                     style={styles.closeBtn}
@@ -231,8 +235,8 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
                   {openedCapsule.occasion.toUpperCase()} • DE{' '}
                   {openedCapsule.sender === 'Karla' ? 'KARLITA' : 'JAVIER'}
                 </Text>
-                <View style={[styles.letterBox, { borderColor: `${primaryColor}30` }]}>
-                  <Text style={styles.letterContent}>“{openedCapsule.content}”</Text>
+                <View style={[styles.letterBox, { backgroundColor: isDark ? '#27272a' : '#f8fafc', borderColor: `${primaryColor}30` }]}>
+                  <Text style={[styles.letterContent, { color: colors.text }]}>“{openedCapsule.content}”</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setOpenedCapsule(null)}
@@ -257,9 +261,9 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sellar Cápsula del Tiempo</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Sellar Cápsula del Tiempo</Text>
               <TouchableOpacity
                 onPress={() => setIsAddOpen(false)}
                 style={styles.closeBtn}

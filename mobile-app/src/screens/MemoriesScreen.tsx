@@ -83,6 +83,7 @@ export const MemoriesScreen: React.FC = () => {
 
   // Modal para ver carta completa con animación de sobre
   const [selectedLetter, setSelectedLetter] = useState<Message | null>(null);
+  const [sealedLetterPreview, setSealedLetterPreview] = useState<Message | null>(null);
   const letterAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -478,10 +479,7 @@ export const MemoriesScreen: React.FC = () => {
                 <PressableScale
                   onPress={() => {
                     if (isSealed) {
-                      Alert.alert(
-                        'Carta Sellada con Candado 🔒',
-                        `Esta carta fue preparada para ti y se abrirá el ${formattedDate}.`
-                      );
+                      setSealedLetterPreview(item);
                       return;
                     }
                     setSelectedLetter(item);
@@ -923,6 +921,147 @@ export const MemoriesScreen: React.FC = () => {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Modal para Ver Detalles de Carta Sellada con Candado */}
+      <Modal
+        visible={Boolean(sealedLetterPreview)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSealedLetterPreview(null)}
+      >
+        <View style={styles.letterModalOverlay}>
+          <View
+            style={[
+              styles.sealedPreviewCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: `${sealedLetterPreview?.theme_color || primaryColor}45`,
+              },
+            ]}
+          >
+            {/* Halo con sobre sellado */}
+            <View
+              style={[
+                styles.sealedPreviewHalo,
+                {
+                  backgroundColor: `${sealedLetterPreview?.theme_color || primaryColor}15`,
+                  borderColor: `${sealedLetterPreview?.theme_color || primaryColor}35`,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.sealedPreviewInner,
+                  { backgroundColor: sealedLetterPreview?.theme_color || primaryColor },
+                ]}
+              >
+                <Ionicons name="lock-closed" size={28} color="#ffffff" />
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.sealedPreviewBadge,
+                {
+                  backgroundColor: `${sealedLetterPreview?.theme_color || primaryColor}18`,
+                  borderColor: `${sealedLetterPreview?.theme_color || primaryColor}40`,
+                },
+              ]}
+            >
+              <Ionicons
+                name="sparkles"
+                size={11}
+                color={sealedLetterPreview?.theme_color || primaryColor}
+              />
+              <Text
+                style={[
+                  styles.sealedPreviewBadgeText,
+                  { color: sealedLetterPreview?.theme_color || primaryColor },
+                ]}
+              >
+                CARTA SELLADA CON CANDADO
+              </Text>
+            </View>
+
+            <Text style={[styles.sealedPreviewTitle, { color: colors.text }]}>
+              Sorpresa Especial de Amor
+            </Text>
+
+            <Text style={[styles.sealedPreviewSub, { color: colors.textSecondary }]}>
+              Esta carta fue escrita por{' '}
+              <Text style={{ fontWeight: '800', color: colors.text }}>
+                {sealedLetterPreview?.sender === 'Karla' ? 'Karlita' : 'Javier'}
+              </Text>{' '}
+              para abrirse el{' '}
+              <Text
+                style={{
+                  fontWeight: '800',
+                  color: sealedLetterPreview?.theme_color || primaryColor,
+                }}
+              >
+                {sealedLetterPreview ? formatDisplayDate(sealedLetterPreview.scheduled_date) : ''}
+              </Text>
+              .
+            </Text>
+
+            {/* Countdown chip */}
+            {(() => {
+              if (!sealedLetterPreview?.scheduled_date) return null;
+              const target = new Date(`${sealedLetterPreview.scheduled_date}T00:00:00`);
+              const diffMs = Math.max(0, target.getTime() - Date.now());
+              const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+              const label =
+                days <= 0
+                  ? '¡Se desbloquea hoy mismo!'
+                  : days === 1
+                  ? '¡Falta solo 1 día para descubrirla!'
+                  : `Faltan ${days} días para desbloquearla`;
+
+              return (
+                <View
+                  style={[
+                    styles.sealedCountdownPill,
+                    {
+                      backgroundColor: `${sealedLetterPreview?.theme_color || primaryColor}14`,
+                      borderColor: `${sealedLetterPreview?.theme_color || primaryColor}30`,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={13}
+                    color={sealedLetterPreview?.theme_color || primaryColor}
+                  />
+                  <Text
+                    style={[
+                      styles.sealedCountdownText,
+                      { color: sealedLetterPreview?.theme_color || primaryColor },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            <Text style={[styles.sealedPreviewDesc, { color: colors.textMuted }]}>
+              El candado se abrirá automáticamente en la fecha indicada. ¡La magia y la espera
+              valdrán la pena!
+            </Text>
+
+            <PressableScale
+              onPress={() => setSealedLetterPreview(null)}
+              style={[
+                styles.sealedCloseBtn,
+                { backgroundColor: sealedLetterPreview?.theme_color || primaryColor },
+              ]}
+              scaleTo={0.96}
+            >
+              <Text style={styles.sealedCloseBtnText}>Esperar con ilusión 💕</Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1011,6 +1150,102 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  sealedPreviewCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 26,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 22,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  sealedPreviewHalo: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    marginBottom: 12,
+  },
+  sealedPreviewInner: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sealedPreviewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  sealedPreviewBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  sealedPreviewTitle: {
+    fontSize: 18.5,
+    fontWeight: '800',
+    textAlign: 'center',
+    fontFamily: SERIF_FONT,
+    marginBottom: 8,
+  },
+  sealedPreviewSub: {
+    fontSize: 13.5,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 6,
+  },
+  sealedCountdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  sealedCountdownText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  sealedPreviewDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginBottom: 18,
+    paddingHorizontal: 8,
+  },
+  sealedCloseBtn: {
+    width: '100%',
+    paddingVertical: 13,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sealedCloseBtnText: {
+    color: '#ffffff',
+    fontSize: 14.5,
+    fontWeight: '800',
   },
   safeArea: {
     flex: 1,
