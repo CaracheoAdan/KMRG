@@ -120,7 +120,12 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     isPinDropModeRef.current = isPinDropMode;
   }, [isPinDropMode]);
 
-  const [draftPinCoords, setDraftPinCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [draftPinCoords, setDraftPinCoords] = useState<{
+    lat: number;
+    lon: number;
+    name?: string;
+    address?: string;
+  } | null>(null);
 
   // Estado de la cámara del mapa real (Centro GPS + Nivel de Zoom 3..18)
   const [centerLat, setCenterLat] = useState<number>(19.4194);
@@ -318,7 +323,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   // Al confirmar un punto del mapa para abrir el formulario de Nuevo Pin
   const openAddPlaceModalAtCoordinates = useCallback(
     async (lat: number, lon: number, prefilledAddress?: string, prefilledTitle?: string) => {
-      setDraftPinCoords({ lat, lon });
+      setDraftPinCoords({ lat, lon, name: prefilledTitle, address: prefilledAddress });
       setNewLat(lat);
       setNewLon(lon);
       setCenterLat(lat);
@@ -426,10 +431,14 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     setCenterLat(sug.lat);
     setCenterLon(sug.lon);
     setZoom(16);
-    setDraftPinCoords({ lat: sug.lat, lon: sug.lon });
+    setDraftPinCoords({
+      lat: sug.lat,
+      lon: sug.lon,
+      name: sug.shortName,
+      address: sug.displayName,
+    });
     setMapSearchQuery('');
     setMapSearchSuggestions([]);
-    void openAddPlaceModalAtCoordinates(sug.lat, sug.lon, sug.displayName, sug.shortName);
   };
 
   const handlePickPlacePhoto = async () => {
@@ -650,31 +659,76 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           </View>
         </View>
 
-        {/* 3. Pin Temporal al tocar cualquier calle (Fuera del PanResponder para que el botón siempre responda al toque) */}
+        {/* 3. Pin Temporal al tocar una calle o buscar un lugar (Fuera del PanResponder para que responda al toque) */}
         {draftScreenPt &&
-          draftScreenPt.sx >= -30 &&
-          draftScreenPt.sx <= viewportW + 30 &&
-          draftScreenPt.sy >= -30 &&
-          draftScreenPt.sy <= viewportH + 30 && (
+          draftScreenPt.sx >= -60 &&
+          draftScreenPt.sx <= viewportW + 60 &&
+          draftScreenPt.sy >= -60 &&
+          draftScreenPt.sy <= viewportH + 60 && (
             <View
               pointerEvents="box-none"
               style={[
                 styles.draftPinAnchor,
-                { left: draftScreenPt.sx, top: draftScreenPt.sy },
+                {
+                  left: draftScreenPt.sx,
+                  top: draftScreenPt.sy,
+                },
               ]}
             >
-              <TouchableOpacity
-                onPress={() => {
-                  if (draftPinCoords) {
-                    void openAddPlaceModalAtCoordinates(draftPinCoords.lat, draftPinCoords.lon);
-                  }
-                }}
-                style={[styles.draftPinActionBubble, { backgroundColor: primaryColor }]}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="add-circle" size={15} color="#ffffff" />
-                <Text style={styles.draftPinActionText}>Guardar Pin Aquí</Text>
-              </TouchableOpacity>
+              <View style={styles.draftCardContainer}>
+                {draftPinCoords?.name ? (
+                  <View style={styles.draftCardTitleRow}>
+                    <Ionicons name="location" size={13} color={primaryColor} />
+                    <Text
+                      style={[styles.draftCardTitle, { color: colors.text }]}
+                      numberOfLines={1}
+                    >
+                      {draftPinCoords.name}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setDraftPinCoords(null)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.draftCardCloseBtn}
+                      accessibilityLabel="Descartar ubicación"
+                    >
+                      <Ionicons name="close" size={13} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                <View style={styles.draftCardButtonRow}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (draftPinCoords) {
+                        void openAddPlaceModalAtCoordinates(
+                          draftPinCoords.lat,
+                          draftPinCoords.lon,
+                          draftPinCoords.address,
+                          draftPinCoords.name
+                        );
+                      }
+                    }}
+                    style={[styles.draftPinActionBubble, { backgroundColor: primaryColor }]}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="add-circle" size={14} color="#ffffff" />
+                    <Text style={styles.draftPinActionText}>
+                      {draftPinCoords?.name ? 'Guardar lugar' : 'Guardar Pin Aquí'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {!draftPinCoords?.name && (
+                    <TouchableOpacity
+                      onPress={() => setDraftPinCoords(null)}
+                      style={[styles.draftPinDismissBtn, { backgroundColor: colors.surface }]}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityLabel="Descartar pin"
+                    >
+                      <Ionicons name="close" size={13} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
               <View style={[styles.draftPinDot, { borderColor: primaryColor }]} />
             </View>
           )}
@@ -913,7 +967,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           <TextInput
             value={mapSearchQuery}
             onChangeText={setMapSearchQuery}
-            placeholder="Busca calle, restaurante o ciudad para pinear..."
+            placeholder="Buscar calle, restaurante o ciudad..."
             placeholderTextColor="#94a3b8"
             style={styles.searchInput}
           />
@@ -943,7 +997,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                   </Text>
                 </View>
                 <Text style={[styles.suggestionAction, { color: primaryColor }]}>
-                  Ir y Pinear
+                  Ver en mapa
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1147,7 +1201,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                       </Text>
                     </View>
                     <Text style={[styles.suggestionAction, { color: primaryColor }]}>
-                      Ir y Pinear
+                      Ver en mapa
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1578,8 +1632,55 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   draftPinAnchor: {
     position: 'absolute',
     alignItems: 'center',
-    transform: [{ translateX: -62 }, { translateY: -44 }],
+    justifyContent: 'flex-end',
+    width: 220,
     zIndex: 45,
+  },
+  draftCardContainer: {
+    backgroundColor: c.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: 4,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+    alignItems: 'center',
+    maxWidth: 215,
+  },
+  draftCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingTop: 3,
+    paddingBottom: 4,
+    maxWidth: 205,
+  },
+  draftCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: FONTS.sans,
+    flexShrink: 1,
+  },
+  draftCardCloseBtn: {
+    padding: 2,
+    marginLeft: 3,
+  },
+  draftCardButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  draftPinDismissBtn: {
+    padding: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   draftPinActionBubble: {
     flexDirection: 'row',
@@ -1587,12 +1688,12 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     gap: 5,
     paddingHorizontal: 11,
     paddingVertical: 6,
-    borderRadius: 14,
+    borderRadius: 12,
     shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   draftPinActionText: {
     fontSize: 11,
