@@ -33,7 +33,8 @@
           "icon": "./assets/icon.png",
           "color": "#e63946"
         }
-      ]
+      ],
+      "expo-status-bar"
     ]
   }
 }

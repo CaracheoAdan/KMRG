@@ -55,7 +55,7 @@ export const PressableScale: React.FC<{
   };
 
   const flatStyle = StyleSheet.flatten(style) || {};
-  const pressableLayout: ViewStyle = {};
+  const pressableLayout: Record<string, any> = {};
   if (flatStyle.flex !== undefined) pressableLayout.flex = flatStyle.flex;
   if (flatStyle.flexGrow !== undefined) pressableLayout.flexGrow = flatStyle.flexGrow;
   if (flatStyle.flexShrink !== undefined) pressableLayout.flexShrink = flatStyle.flexShrink;

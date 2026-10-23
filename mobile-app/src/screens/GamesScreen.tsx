@@ -228,7 +228,7 @@ export const GamesScreen: React.FC = () => {
   const [sudoku, setSudoku] = useState<SavedSudokuSession>(() => createSudokuSession('easy'));
   const [selectedSudokuCell, setSelectedSudokuCell] = useState<[number, number] | null>(null);
   const [isNoteMode, setIsNoteMode] = useState(false);
-  const sudokuInputRef = useRef<TextInput>(null);
+  const sudokuInputRef = useRef<any>(null);
 
   // --- Estado de Ajedrez ---
   const [selectedChessPos, setSelectedChessPos] = useState<[number, number] | null>(null);

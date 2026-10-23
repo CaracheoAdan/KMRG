@@ -62,7 +62,7 @@ export const MoviesScreen: React.FC = () => {
   // Paginación para evitar el scroll vertical
   const [moviePage, setMoviePage] = useState(0);
   const [bucketPage, setBucketPage] = useState(0);
-  const tabsScrollRef = useRef<ScrollView>(null);
+  const tabsScrollRef = useRef<any>(null);
 
   useEffect(() => {
     tabsScrollRef.current?.scrollTo({ x: 0, animated: false });
