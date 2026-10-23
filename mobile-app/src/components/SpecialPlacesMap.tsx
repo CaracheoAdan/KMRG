@@ -113,18 +113,12 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   });
   const [tileError, setTileError] = useState(false);
 
-  // Modo interactivo para pinear tocando cualquier calle del mapa real
-  const [isPinDropMode, setIsPinDropMode] = useState<boolean>(false);
-  const isPinDropModeRef = useRef<boolean>(false);
-  useEffect(() => {
-    isPinDropModeRef.current = isPinDropMode;
-  }, [isPinDropMode]);
-
-  const [draftPinCoords, setDraftPinCoords] = useState<{
+  // Info del lugar buscado recientemente para prellenar si el apuntador sigue sobre él
+  const [searchedPlaceInfo, setSearchedPlaceInfo] = useState<{
+    name: string;
+    address: string;
     lat: number;
     lon: number;
-    name?: string;
-    address?: string;
   } | null>(null);
 
   // Estado de la cámara del mapa real (Centro GPS + Nivel de Zoom 3..18)
@@ -323,13 +317,14 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   // Al confirmar un punto del mapa para abrir el formulario de Nuevo Pin
   const openAddPlaceModalAtCoordinates = useCallback(
     async (lat: number, lon: number, prefilledAddress?: string, prefilledTitle?: string) => {
-      setDraftPinCoords({ lat, lon, name: prefilledTitle, address: prefilledAddress });
       setNewLat(lat);
       setNewLon(lon);
       setCenterLat(lat);
       setCenterLon(lon);
       if (prefilledTitle) {
         setNewTitle(prefilledTitle);
+      } else {
+        setNewTitle('');
       }
       if (prefilledAddress) {
         setNewAddress(prefilledAddress);
@@ -353,7 +348,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             .join(',')
             .trim();
           setNewAddress(shortAddr);
-          if (data?.name) {
+          if (data?.name && !prefilledTitle) {
             setNewTitle((prev) => prev.trim() || String(data.name));
           }
         }
@@ -364,12 +359,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     []
   );
 
-  const openModalRef = useRef(openAddPlaceModalAtCoordinates);
-  useEffect(() => {
-    openModalRef.current = openAddPlaceModalAtCoordinates;
-  }, [openAddPlaceModalAtCoordinates]);
-
-  // Creador de gestos exclusivo para el lienzo de teselas (con pointerEvents="box-only" para coordenadas 100% exactas y sin bloquear botones)
+  // Creador de gestos para arrastrar el mapa bajo el apuntador central exacto
   const createCanvasPanResponder = (viewportW: number, viewportH: number) =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -386,25 +376,8 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         setCenterLat(nextCoords.lat);
         setCenterLon(nextCoords.lon);
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        const movedDist = Math.hypot(gestureState.dx, gestureState.dy);
-        if (movedDist < 8) {
-          const { locationX, locationY } = evt.nativeEvent;
-          if (typeof locationX === 'number' && typeof locationY === 'number') {
-            const { lat, lon, zoom: z } = centerRef.current;
-            const centerWorld = latLonToWorldPixel(lat, lon, z);
-            const tapWorldX = centerWorld.x - viewportW / 2 + locationX;
-            const tapWorldY = centerWorld.y - viewportH / 2 + locationY;
-            const tappedCoords = worldPixelToLatLon(tapWorldX, tapWorldY, z);
-
-            if (isPinDropModeRef.current) {
-              setIsPinDropMode(false);
-              void openModalRef.current(tappedCoords.lat, tappedCoords.lon);
-            } else {
-              setDraftPinCoords(tappedCoords);
-            }
-          }
-        }
+      onPanResponderRelease: () => {
+        // La posición exacta siempre la define el apuntador central del mapa
       },
     });
 
@@ -419,9 +392,26 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     [fullScreenMapHeight]
   );
 
+  const handlePinCenterLocation = useCallback(() => {
+    const isNearSearched =
+      searchedPlaceInfo &&
+      Math.abs(centerLat - searchedPlaceInfo.lat) < 0.003 &&
+      Math.abs(centerLon - searchedPlaceInfo.lon) < 0.003;
+
+    if (isNearSearched) {
+      void openAddPlaceModalAtCoordinates(
+        centerLat,
+        centerLon,
+        searchedPlaceInfo.address,
+        searchedPlaceInfo.name
+      );
+    } else {
+      void openAddPlaceModalAtCoordinates(centerLat, centerLon);
+    }
+  }, [centerLat, centerLon, searchedPlaceInfo, openAddPlaceModalAtCoordinates]);
+
   const focusPlaceOnMap = (place: SpecialPlace) => {
     setSelectedPlace(place);
-    setDraftPinCoords(null);
     setCenterLat(place.latitude);
     setCenterLon(place.longitude);
     if (zoom < 13) setZoom(14);
@@ -431,11 +421,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     setCenterLat(sug.lat);
     setCenterLon(sug.lon);
     setZoom(16);
-    setDraftPinCoords({
-      lat: sug.lat,
-      lon: sug.lon,
+    setSearchedPlaceInfo({
       name: sug.shortName,
       address: sug.displayName,
+      lat: sug.lat,
+      lon: sug.lon,
     });
     setMapSearchQuery('');
     setMapSearchSuggestions([]);
@@ -494,7 +484,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     setSelectedPlace(item);
     setCenterLat(item.latitude);
     setCenterLon(item.longitude);
-    setDraftPinCoords(null);
+    setSearchedPlaceInfo(null);
     setNewTitle('');
     setNewAddress('');
     setNewNotes('');
@@ -576,17 +566,6 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       return { place, index, sx, sy };
     });
 
-    // Proyectar pin temporal si el usuario tocó una calle del mapa
-    const draftScreenPt = draftPinCoords
-      ? (() => {
-          const wPt = latLonToWorldPixel(draftPinCoords.lat, draftPinCoords.lon, zoom);
-          return {
-            sx: viewportW / 2 + (wPt.x - centerWorld.x),
-            sy: viewportH / 2 + (wPt.y - centerWorld.y),
-          };
-        })()
-      : null;
-
     return (
       <View
         style={[
@@ -598,7 +577,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           },
         ]}
       >
-        {/* 1. LIENZO TÁCTIL DE TESELAS (pointerEvents="box-only" evita que las imágenes o botones rompan las coordenadas) */}
+        {/* 1. LIENZO TÁCTIL DE TESELAS (pointerEvents="box-only" para arrastre suave y exacto) */}
         <View
           pointerEvents="box-only"
           style={StyleSheet.absoluteFill}
@@ -648,88 +627,60 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                 />
               );
             })}
-
-          {/* Mira central sutil */}
-          <View style={styles.centerCrosshair}>
-            <Ionicons
-              name="add"
-              size={16}
-              color={mapStyle === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.35)'}
-            />
-          </View>
         </View>
 
-        {/* 3. Pin Temporal al tocar una calle o buscar un lugar (Fuera del PanResponder para que responda al toque) */}
-        {draftScreenPt &&
-          draftScreenPt.sx >= -60 &&
-          draftScreenPt.sx <= viewportW + 60 &&
-          draftScreenPt.sy >= -60 &&
-          draftScreenPt.sy <= viewportH + 60 && (
-            <View
-              pointerEvents="box-none"
-              style={[
-                styles.draftPinAnchor,
-                {
-                  left: draftScreenPt.sx,
-                  top: draftScreenPt.sy,
-                },
-              ]}
-            >
-              <View style={styles.draftCardContainer}>
-                {draftPinCoords?.name ? (
-                  <View style={styles.draftCardTitleRow}>
-                    <Ionicons name="location" size={13} color={primaryColor} />
-                    <Text
-                      style={[styles.draftCardTitle, { color: colors.text }]}
-                      numberOfLines={1}
-                    >
-                      {draftPinCoords.name}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setDraftPinCoords(null)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={styles.draftCardCloseBtn}
-                      accessibilityLabel="Descartar ubicación"
-                    >
-                      <Ionicons name="close" size={13} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
+        {/* 3. APUNTADOR CENTRAL DE ALTA PRECISIÓN (Siempre en 50% exacto de la pantalla) */}
+        <View pointerEvents="none" style={styles.centerCrosshair}>
+          <View
+            style={[
+              styles.crosshairH,
+              { backgroundColor: mapStyle === 'dark' ? 'rgba(255,255,255,0.5)' : primaryColor },
+            ]}
+          />
+          <View
+            style={[
+              styles.crosshairV,
+              { backgroundColor: mapStyle === 'dark' ? 'rgba(255,255,255,0.5)' : primaryColor },
+            ]}
+          />
+          <View
+            style={[
+              styles.crosshairRing,
+              {
+                borderColor: mapStyle === 'dark' ? 'rgba(255,255,255,0.7)' : primaryColor,
+              },
+            ]}
+          />
+          <View style={[styles.crosshairDot, { backgroundColor: primaryColor }]} />
+        </View>
 
-                <View style={styles.draftCardButtonRow}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (draftPinCoords) {
-                        void openAddPlaceModalAtCoordinates(
-                          draftPinCoords.lat,
-                          draftPinCoords.lon,
-                          draftPinCoords.address,
-                          draftPinCoords.name
-                        );
-                      }
-                    }}
-                    style={[styles.draftPinActionBubble, { backgroundColor: primaryColor }]}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="add-circle" size={14} color="#ffffff" />
-                    <Text style={styles.draftPinActionText}>
-                      {draftPinCoords?.name ? 'Guardar lugar' : 'Guardar Pin Aquí'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {!draftPinCoords?.name && (
-                    <TouchableOpacity
-                      onPress={() => setDraftPinCoords(null)}
-                      style={[styles.draftPinDismissBtn, { backgroundColor: colors.surface }]}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      accessibilityLabel="Descartar pin"
-                    >
-                      <Ionicons name="close" size={13} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-              <View style={[styles.draftPinDot, { borderColor: primaryColor }]} />
+        {/* 4. Banner flotante con botón para pinear si el usuario acaba de buscar un lugar */}
+        {searchedPlaceInfo &&
+          Math.abs(centerLat - searchedPlaceInfo.lat) < 0.003 &&
+          Math.abs(centerLon - searchedPlaceInfo.lon) < 0.003 && (
+            <View style={[styles.searchedBanner, { backgroundColor: colors.surface }]}>
+              <Ionicons name="location" size={13} color={primaryColor} />
+              <Text
+                style={[styles.searchedBannerTitle, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {searchedPlaceInfo.name}
+              </Text>
+              <TouchableOpacity
+                onPress={handlePinCenterLocation}
+                style={[styles.searchedBannerBtn, { backgroundColor: primaryColor }]}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add" size={13} color="#ffffff" />
+                <Text style={styles.searchedBannerBtnText}>Pinear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSearchedPlaceInfo(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ padding: 2 }}
+              >
+                <Ionicons name="close" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -824,21 +775,16 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
           );
         })}
 
-        {/* Banner de Modo Pinear Activo */}
-        {isPinDropMode && (
-          <View style={[styles.pinDropBanner, { backgroundColor: primaryColor }]}>
-            <Ionicons name="finger-print-outline" size={16} color="#ffffff" />
-            <Text style={styles.pinDropBannerText}>
-              Toca cualquier calle o punto del mapa para colocar tu pin
-            </Text>
-            <TouchableOpacity onPress={() => setIsPinDropMode(false)}>
-              <Ionicons name="close-circle" size={18} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Controles Flotantes Derechos en Columna Unificada */}
         <View pointerEvents="box-none" style={styles.mapRightControls}>
+          <TouchableOpacity
+            onPress={handlePinCenterLocation}
+            style={[styles.mapControlBtn, { backgroundColor: primaryColor }]}
+            accessibilityLabel="Pinear ubicación del apuntador"
+          >
+            <Ionicons name="location" size={17} color="#ffffff" />
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => setIsFullScreen(!isFullScreen)}
             style={styles.mapControlBtn}
@@ -936,7 +882,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         <View style={styles.roundActionsRow}>
           <View style={styles.roundActionItem}>
             <TouchableOpacity
-              onPress={() => void openAddPlaceModalAtCoordinates(centerLat, centerLon)}
+              onPress={handlePinCenterLocation}
               style={[styles.roundActionBtn, { backgroundColor: primaryColor }]}
               activeOpacity={0.85}
               accessibilityLabel="Nuevo pin"
@@ -1629,84 +1575,44 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     opacity: 0.82,
     zIndex: 12,
   },
-  draftPinAnchor: {
+  searchedBanner: {
     position: 'absolute',
+    top: 10,
+    left: 12,
+    right: 58,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    width: 220,
-    zIndex: 45,
-  },
-  draftCardContainer: {
-    backgroundColor: c.surface,
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: c.border,
-    padding: 4,
-    shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 5,
-    alignItems: 'center',
-    maxWidth: 215,
-  },
-  draftCardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingTop: 3,
-    paddingBottom: 4,
-    maxWidth: 205,
-  },
-  draftCardTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: FONTS.sans,
-    flexShrink: 1,
-  },
-  draftCardCloseBtn: {
-    padding: 2,
-    marginLeft: 3,
-  },
-  draftCardButtonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  draftPinDismissBtn: {
-    padding: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  draftPinActionBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 12,
     shadowColor: c.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 4,
+    zIndex: 45,
   },
-  draftPinActionText: {
+  searchedBannerTitle: {
+    flex: 1,
+    fontSize: 11.5,
+    fontWeight: '700',
+    fontFamily: FONTS.sans,
+  },
+  searchedBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  searchedBannerBtnText: {
     fontSize: 11,
     fontWeight: '800',
-    color: c.primaryOn,
-  },
-  draftPinDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: c.surface,
-    borderWidth: 3.5,
-    marginTop: 3,
+    color: '#ffffff',
   },
   pinAnchor: {
     position: 'absolute',
@@ -1791,27 +1697,35 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     position: 'absolute',
     left: '50%',
     top: '50%',
-    transform: [{ translateX: -8 }, { translateY: -8 }],
-    zIndex: 5,
-  },
-  pinDropBanner: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 54,
-    flexDirection: 'row',
+    width: 36,
+    height: 36,
+    marginLeft: -18,
+    marginTop: -18,
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    zIndex: 50,
+    justifyContent: 'center',
+    zIndex: 25,
   },
-  pinDropBannerText: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '700',
-    color: c.primaryOn,
+  crosshairRing: {
+    position: 'absolute',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+  },
+  crosshairDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  crosshairH: {
+    position: 'absolute',
+    width: 36,
+    height: 1.5,
+  },
+  crosshairV: {
+    position: 'absolute',
+    width: 1.5,
+    height: 36,
   },
   bottomMapBar: {
     position: 'absolute',
