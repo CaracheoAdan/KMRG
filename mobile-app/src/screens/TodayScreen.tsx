@@ -157,10 +157,7 @@ export const TodayScreen: React.FC = () => {
       const start = new Date(`${syncedHome.anniversaryDate}T00:00:00`);
       const diffMs = Math.max(0, Date.now() - start.getTime());
       const daysTogether = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const noteText =
-        syncedHome.stickyNote?.text ||
-        todayMsg?.content ||
-        'Pensando en ti en cada instante...';
+      const noteContent = (syncedHome.stickyNote?.text || todayMsg?.content || '').trim();
       const noteAuthor =
         syncedHome.stickyNote?.author ||
         todayMsg?.sender ||
@@ -170,8 +167,10 @@ export const TodayScreen: React.FC = () => {
       void syncWidgetData({
         daysTogether,
         anniversaryDate: syncedHome.anniversaryDate,
-        noteText,
-        noteSender,
+        noteText: noteContent,
+        noteSender: noteContent ? noteSender : '',
+        nextEventTitle: syncedHome.nextEventTitle || '',
+        nextEventDate: syncedHome.nextEventDate || '',
       });
     } catch {
       // Ignorar si el widget no está activo
@@ -262,14 +261,19 @@ export const TodayScreen: React.FC = () => {
 
   // Cuenta regresiva a próxima cita calculada desde medianoche de hoy
   const daysUntilNextEvent = useMemo(() => {
-    if (!homeState.nextEventDate) return 0;
-    const [y, m, d] = homeState.nextEventDate.split('-').map(Number);
+    if (!homeState.nextEventDate || !homeState.nextEventDate.trim()) return null;
+    const parts = homeState.nextEventDate.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    const [y, m, d] = parts;
     const target = new Date(y, m - 1, d, 0, 0, 0);
+    if (isNaN(target.getTime())) return null;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
   }, [homeState.nextEventDate, currentDateTick]);
+
+  const hasValidNextEvent = daysUntilNextEvent !== null;
 
   // Mascota de pareja (estilo Pou: se mantiene feliz cuando se mandan corazones)
   const petInfo = useMemo(() => {
@@ -417,11 +421,29 @@ export const TodayScreen: React.FC = () => {
   };
 
   const handleSaveNextEvent = async () => {
-    if (!tempEventTitle.trim()) return;
+    const title = tempEventTitle.trim();
+    if (!title) return;
     await updateAndSyncHome({
       ...homeState,
-      nextEventTitle: tempEventTitle.trim(),
+      nextEventTitle: title,
       nextEventDate: tempEventDate,
+    });
+    void syncWidgetData({
+      nextEventTitle: title,
+      nextEventDate: tempEventDate,
+    });
+    setIsNextEventModalOpen(false);
+  };
+
+  const handleClearNextEvent = async () => {
+    await updateAndSyncHome({
+      ...homeState,
+      nextEventTitle: '',
+      nextEventDate: '',
+    });
+    void syncWidgetData({
+      nextEventTitle: '',
+      nextEventDate: '',
     });
     setIsNextEventModalOpen(false);
   };
@@ -621,8 +643,8 @@ export const TodayScreen: React.FC = () => {
 
           <PressableScale
             onPress={() => {
-              setTempEventTitle(homeState.nextEventTitle);
-              setTempEventDate(homeState.nextEventDate);
+              setTempEventTitle(homeState.nextEventTitle || '');
+              setTempEventDate(hasValidNextEvent ? homeState.nextEventDate : toLocalDateString(new Date()));
               setIsNextEventModalOpen(true);
             }}
             style={styles.dsCard}
@@ -645,24 +667,28 @@ export const TodayScreen: React.FC = () => {
               minimumFontScale={0.8}
               maxFontSizeMultiplier={1.2}
             >
-              {homeState.nextEventTitle}
+              {hasValidNextEvent ? (homeState.nextEventTitle || 'Cita especial') : 'Sin citas programadas'}
             </Text>
 
             <View style={styles.eventBottomRow}>
               <Text style={styles.dsEventDate} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                {formatDisplayDate(homeState.nextEventDate, { day: 'numeric', month: 'short' })}
+                {hasValidNextEvent
+                  ? formatDisplayDate(homeState.nextEventDate, { day: 'numeric', month: 'short' })
+                  : 'Toca para agendar'}
               </Text>
-              <View style={[styles.dsCountdownPill, { backgroundColor: colors.primary }]}>
-                <Text
-                  style={[styles.dsCountdownText, { color: colors.primaryOn }]}
-                  numberOfLines={1}
-                  maxFontSizeMultiplier={1.2}
-                >
-                  {daysUntilNextEvent === 0
-                    ? '¡Es hoy!'
-                    : `Faltan ${plural(daysUntilNextEvent, 'día', 'días')}`}
-                </Text>
-              </View>
+              {hasValidNextEvent && daysUntilNextEvent !== null && (
+                <View style={[styles.dsCountdownPill, { backgroundColor: colors.primary }]}>
+                  <Text
+                    style={[styles.dsCountdownText, { color: colors.primaryOn }]}
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.2}
+                  >
+                    {daysUntilNextEvent === 0
+                      ? '¡Es hoy!'
+                      : `Faltan ${plural(daysUntilNextEvent, 'día', 'días')}`}
+                  </Text>
+                </View>
+              )}
             </View>
           </PressableScale>
         </FadeSection>
@@ -1215,13 +1241,24 @@ export const TodayScreen: React.FC = () => {
               <Text style={styles.dateSelectorText}>{formatDisplayDate(tempEventDate)}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => void handleSaveNextEvent()}
-              style={[styles.primaryBtn, { backgroundColor: primaryColor }]}
-            >
-              <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
-              <Text style={styles.primaryBtnText}>Guardar Cita</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              {hasValidNextEvent && (
+                <TouchableOpacity
+                  onPress={() => void handleClearNextEvent()}
+                  style={[styles.primaryBtn, { flex: 1, backgroundColor: '#fee2e2' }]}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  <Text style={[styles.primaryBtnText, { color: '#ef4444' }]}>Quitar</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => void handleSaveNextEvent()}
+                style={[styles.primaryBtn, { flex: hasValidNextEvent ? 2 : 1, backgroundColor: primaryColor }]}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
+                <Text style={styles.primaryBtnText}>Guardar Cita</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>

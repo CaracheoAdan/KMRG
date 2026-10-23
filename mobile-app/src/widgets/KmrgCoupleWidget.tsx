@@ -1,34 +1,45 @@
 import React from 'react';
-import { FlexWidget, TextWidget } from 'react-native-android-widget';
-import { KmrgWidgetData } from './types';
+import { FlexWidget, TextWidget, SvgWidget } from 'react-native-android-widget';
+import { KmrgWidgetData, computeTimeTogether } from './types';
+
+// Iconos vectoriales de línea fina (SVG) en rosa (#e11d48) y blanco (#ffffff) - Cero emojis
+const HEART_PINK_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+
+const HEART_WHITE_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+
+const ENVELOPE_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="3"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`;
+
+const INFINITY_SVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9f7e86" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c-2-2.5-4-4-6.5-4A4.5 4.5 0 0 0 1 12.5a4.5 4.5 0 0 0 4.5 4.5c2.5 0 4.5-1.5 6.5-4zm0 0c2 2.5 4 4 6.5 4a4.5 4.5 0 0 0 4.5-4.5 4.5 4.5 0 0 0-4.5-4.5c-2.5 0-4.5 1.5-6.5 4z"/></svg>`;
 
 export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
   daysTogether,
+  anniversaryDate,
   noteText,
   noteSender,
   hasNewHeart,
   heartSender,
 }) => {
-  const displayDays = daysTogether > 0 ? `${daysTogether} días juntos` : 'Siempre juntos';
-  const displaySender = noteSender || 'Tu amor';
-  const displayNote = noteText?.trim() || 'Pensando en ti en cada instante...';
+  const { totalDays } = computeTimeTogether(anniversaryDate, daysTogether);
+  const cleanNote = noteText?.trim() || '';
+  const displaySender = noteSender?.trim() || 'Tu amor';
+  const hasNote = cleanNote.length > 0;
 
   return (
     <FlexWidget
       style={{
         height: 'match_parent',
         width: 'match_parent',
-        backgroundColor: '#fff1f2',
-        borderRadius: 22,
+        backgroundColor: '#FFF1F2E6',
+        borderRadius: 18,
         padding: 12,
         flexDirection: 'column',
         justifyContent: 'space-between',
-        borderColor: '#fecdd3',
-        borderWidth: 1.5,
+        borderColor: '#FECDD380',
+        borderWidth: 1,
       }}
       clickAction="OPEN_APP"
     >
-      {/* 1. Fila Superior: Badge KMRG y Contador de Días de Relación */}
+      {/* 1. Encabezado: Logo KMRG sutil a la izquierda y Pill de Días Juntos a la derecha */}
       <FlexWidget
         style={{
           width: 'match_parent',
@@ -37,104 +48,150 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
           justifyContent: 'space-between',
         }}
       >
+        {/* Logo KMRG sutil con corazón de línea fina */}
+        <FlexWidget
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 2,
+          }}
+        >
+          <SvgWidget svg={HEART_PINK_SVG} style={{ width: 12, height: 12 }} />
+          <TextWidget
+            text=" KMRG"
+            style={{
+              fontSize: 11.5,
+              fontWeight: '700',
+              fontFamily: 'serif',
+              color: '#e11d48',
+              letterSpacing: 1.5,
+            }}
+          />
+        </FlexWidget>
+
+        {/* Contador de días como pill destacada arriba a la derecha */}
         <FlexWidget
           style={{
             backgroundColor: '#ffffff',
-            borderRadius: 12,
+            borderRadius: 14,
             paddingHorizontal: 9,
             paddingVertical: 3.5,
             flexDirection: 'row',
             alignItems: 'center',
-            borderColor: '#fda4af',
+            borderColor: '#FCE7EC',
             borderWidth: 1,
           }}
         >
           <TextWidget
-            text="💕 KMRG"
+            text={`${totalDays} `}
             style={{
-              fontSize: 11,
+              fontSize: 11.5,
               fontWeight: '800',
               color: '#e11d48',
+              fontFamily: 'serif',
             }}
           />
-        </FlexWidget>
-
-        <FlexWidget
-          style={{
-            backgroundColor: '#ffe4e6',
-            borderRadius: 12,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderColor: '#f43f5e',
-            borderWidth: 1,
-          }}
-        >
           <TextWidget
-            text={displayDays}
+            text="días juntos"
             style={{
-              fontSize: 11,
-              fontWeight: '800',
-              color: '#9f1239',
+              fontSize: 10,
+              fontWeight: '500',
+              color: '#9f7e86',
             }}
           />
         </FlexWidget>
       </FlexWidget>
 
-      {/* 2. Tarjeta Central: La Notita que se dejan el uno al otro */}
+      {/* 2. Tarjeta Central Blanca: NOTITA DE HOY (PROTAGONISTA) */}
       <FlexWidget
         style={{
           width: 'match_parent',
+          flex: 1,
           backgroundColor: '#ffffff',
-          borderRadius: 14,
-          paddingHorizontal: 10,
-          paddingVertical: 8,
+          borderRadius: 16,
+          paddingHorizontal: 12,
+          paddingVertical: 9,
           marginVertical: 4,
           flexDirection: 'column',
-          borderColor: '#ffe4e6',
+          justifyContent: 'space-between',
+          borderColor: '#F1F5F9',
           borderWidth: 1,
         }}
       >
+        {/* Encabezado interno con icono vectorial de sobre en rosa */}
         <FlexWidget
           style={{
             width: 'match_parent',
             flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: 3,
+            marginBottom: 2,
           }}
         >
+          <SvgWidget svg={ENVELOPE_SVG} style={{ width: 12, height: 12 }} />
           <TextWidget
-            text="💌 Notita de hoy"
+            text=" Notita de hoy"
             style={{
               fontSize: 10,
               fontWeight: '700',
-              color: '#be123c',
-            }}
-          />
-          <TextWidget
-            text={`De: ${displaySender}`}
-            style={{
-              fontSize: 9.5,
-              fontWeight: '700',
-              color: '#fb7185',
+              color: '#e11d48',
+              letterSpacing: 0.4,
             }}
           />
         </FlexWidget>
 
-        <TextWidget
-          text={`“${displayNote}”`}
+        {/* Frase en serif cursiva con buen interlineado y comillas tipográficas */}
+        {hasNote ? (
+          <TextWidget
+            text={`“${cleanNote}”`}
+            style={{
+              fontSize: 12.5,
+              fontFamily: 'serif',
+              fontStyle: 'italic',
+              fontWeight: '500',
+              color: '#0f172a',
+              lineHeight: 17,
+            }}
+            maxLines={3}
+            truncate="END"
+          />
+        ) : (
+          <TextWidget
+            text="“Aún no hay notita de hoy. Escríbele una para alegrarle el día.”"
+            style={{
+              fontSize: 11.5,
+              fontFamily: 'serif',
+              fontStyle: 'italic',
+              fontWeight: '400',
+              color: '#64748b',
+              lineHeight: 16,
+            }}
+            maxLines={3}
+            truncate="END"
+          />
+        )}
+
+        {/* Remitente alineado abajo a la derecha */}
+        <FlexWidget
           style={{
-            fontSize: 11.5,
-            fontWeight: '600',
-            color: '#1e293b',
-            fontStyle: 'italic',
+            width: 'match_parent',
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
           }}
-          maxLines={2}
-          truncate="END"
-        />
+        >
+          <TextWidget
+            text={hasNote ? `De: ${displaySender}` : 'Escribir notita →'}
+            style={{
+              fontSize: 9.5,
+              fontWeight: '600',
+              color: hasNote ? '#64748b' : '#e11d48',
+              textAlign: 'right',
+            }}
+          />
+        </FlexWidget>
       </FlexWidget>
 
-      {/* 3. Fila Inferior: Notificación de Corazón (Latido) o Estado de Conexión */}
+      {/* 3. Fila Inferior: Notificación de latido o pie discreto */}
       {hasNewHeart ? (
         <FlexWidget
           style={{
@@ -148,11 +205,12 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
             justifyContent: 'center',
           }}
         >
+          <SvgWidget svg={HEART_WHITE_SVG} style={{ width: 12, height: 12 }} />
           <TextWidget
-            text={`❤️ ¡${heartSender || 'Tu amor'} te mandó un latido!`}
+            text={` ¡${heartSender || 'Tu amor'} te envió un latido!`}
             style={{
-              fontSize: 11,
-              fontWeight: '800',
+              fontSize: 10.5,
+              fontWeight: '700',
               color: '#ffffff',
             }}
           />
@@ -161,27 +219,31 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
         <FlexWidget
           style={{
             width: 'match_parent',
-            backgroundColor: '#ffffff',
-            borderRadius: 12,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderColor: '#fecdd3',
-            borderWidth: 0.8,
+            paddingHorizontal: 2,
           }}
         >
-          <TextWidget
-            text="💓 Conectados de corazón"
+          <FlexWidget
             style={{
-              fontSize: 9.5,
-              fontWeight: '700',
-              color: '#881337',
+              flexDirection: 'row',
+              alignItems: 'center',
             }}
-          />
+          >
+            <SvgWidget svg={INFINITY_SVG} style={{ width: 11, height: 11 }} />
+            <TextWidget
+              text=" Conectados de corazón"
+              style={{
+                fontSize: 9.5,
+                fontWeight: '600',
+                color: '#9f7e86',
+              }}
+            />
+          </FlexWidget>
+
           <TextWidget
-            text="Toca para abrir ✨"
+            text="Toca para abrir"
             style={{
               fontSize: 9.5,
               fontWeight: '700',
