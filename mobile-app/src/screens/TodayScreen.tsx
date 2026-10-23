@@ -23,7 +23,7 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../components/ui/Icon';
 import { FadeSection, PressableScale, HeartbeatButton } from '../components/ui/Kit';
-import { Message, HomeState } from '../types';
+import { Message, HomeState, UserProfile } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -157,18 +157,24 @@ export const TodayScreen: React.FC = () => {
       const start = new Date(`${syncedHome.anniversaryDate}T00:00:00`);
       const diffMs = Math.max(0, Date.now() - start.getTime());
       const daysTogether = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const noteContent = (syncedHome.stickyNote?.text || todayMsg?.content || '').trim();
-      const noteAuthor =
-        syncedHome.stickyNote?.author ||
-        todayMsg?.sender ||
-        (currentProfile === 'Karla' ? 'Javier' : 'Karla');
-      const noteSender = noteAuthor === 'Karla' ? 'Karlita' : 'Javier';
+      const partnerRole: 'Javier' | 'Karla' = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+      const partnerDisplayName = getDisplayName(partnerRole);
+
+      // El widget de este dispositivo muestra la notita que le dejó su pareja (NO la que uno mismo escribió)
+      let partnerNote = '';
+      if (syncedHome.stickyNote && syncedHome.stickyNote.author === partnerRole) {
+        partnerNote = (syncedHome.stickyNote.text || '').trim();
+      } else if (syncedHome.moods && syncedHome.moods[partnerRole]?.status) {
+        partnerNote = (syncedHome.moods[partnerRole].status || '').trim();
+      } else if (todayMsg && todayMsg.sender === partnerRole) {
+        partnerNote = (todayMsg.content || '').trim();
+      }
 
       void syncWidgetData({
         daysTogether,
         anniversaryDate: syncedHome.anniversaryDate,
-        noteText: noteContent,
-        noteSender: noteContent ? noteSender : '',
+        noteText: partnerNote,
+        noteSender: partnerNote ? partnerDisplayName : '',
         nextEventTitle: syncedHome.nextEventTitle || '',
         nextEventDate: syncedHome.nextEventDate || '',
       });
@@ -192,7 +198,30 @@ export const TodayScreen: React.FC = () => {
           if (!newInteraction) return;
 
           if (newInteraction.type === 'sync_home_state' && newInteraction.payload) {
-            setHomeState((prev) => ({ ...prev, ...newInteraction.payload }));
+            const incomingHome = newInteraction.payload as Partial<HomeState>;
+            setHomeState((prev) => ({ ...prev, ...incomingHome }));
+
+            // Sincronizar en vivo el widget si la pareja actualizó su notita/estado o la próxima cita
+            const partnerRole: 'Javier' | 'Karla' = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+            const partnerDisplayName = getDisplayName(partnerRole);
+
+            let partnerNote: string | undefined = undefined;
+            if (incomingHome.stickyNote) {
+              if (incomingHome.stickyNote.author === partnerRole) {
+                partnerNote = (incomingHome.stickyNote.text || '').trim();
+              }
+            } else if (incomingHome.moods && incomingHome.moods[partnerRole]) {
+              partnerNote = (incomingHome.moods[partnerRole]?.status || '').trim();
+            }
+
+            void syncWidgetData({
+              ...(partnerNote !== undefined ? {
+                noteText: partnerNote,
+                noteSender: partnerNote ? partnerDisplayName : '',
+              } : {}),
+              ...(incomingHome.nextEventDate !== undefined ? { nextEventDate: incomingHome.nextEventDate } : {}),
+              ...(incomingHome.nextEventTitle !== undefined ? { nextEventTitle: incomingHome.nextEventTitle } : {}),
+            });
             return;
           }
 
@@ -413,10 +442,7 @@ export const TodayScreen: React.FC = () => {
       },
     };
     await updateAndSyncHome(nextHome);
-    void syncWidgetData({
-      noteText: finalStatus,
-      noteSender: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
-    });
+
     setIsMoodModalOpen(false);
   };
 

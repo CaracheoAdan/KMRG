@@ -96,10 +96,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
     }
   };
 
-  const handleSwitchProfileRole = async () => {
-    setIsProfileModalOpen(false);
-    await setProfile(partnerRole);
-  };
+
 
   const myDisplayName = getDisplayName(currentProfile);
   const myAvatarUri = getAvatarUri(currentProfile);
@@ -303,24 +300,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
 
             <View style={styles.bottomProfileActions}>
               <TouchableOpacity
-                onPress={() => void handleSwitchProfileRole()}
-                style={[styles.switchRoleBtn, { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Ionicons name="swap-horizontal" size={15} color={colors.textSecondary} />
-                <Text style={[styles.switchRoleText, { color: colors.text }]} numberOfLines={1}>
-                  Cambiar a {getDisplayName(partnerRole)}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 onPress={() => {
                   setIsProfileModalOpen(false);
                   void logout();
                 }}
-                style={[styles.logoutBtn, { backgroundColor: colors.surfaceAlt }]}
+                style={[styles.logoutBtn, { backgroundColor: colors.surfaceAlt, flex: 1, justifyContent: 'center' }]}
               >
-                <Ionicons name="lock-closed-outline" size={14} color={colors.danger} />
-                <Text style={[styles.logoutText, { color: colors.danger }]}>Bloquear</Text>
+                <Ionicons name="lock-closed-outline" size={15} color={colors.danger} />
+                <Text style={[styles.logoutText, { color: colors.danger, marginLeft: 6 }]}>Cerrar sesión / Bloquear</Text>
               </TouchableOpacity>
             </View>
           </View>
