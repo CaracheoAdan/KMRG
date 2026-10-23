@@ -70,6 +70,15 @@
           "resizeMode": "contain",
           "backgroundColor": "#faf5ff"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": false,
+            "extraProguardRules": "-keep class androidx.work.** { *; }\n-keep class androidx.room.** { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-keep class * extends androidx.work.InputMerger { <init>(); }\n-keep class * extends androidx.work.Worker { <init>(...); }\n-keep class * extends androidx.work.ListenableWorker { <init>(...); }"
+          }
+        }
       ]
     ],
     "extra": {
