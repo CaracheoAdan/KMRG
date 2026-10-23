@@ -128,6 +128,107 @@ export const MoviesScreen: React.FC = () => {
     await saveMoviesState(currentProfile, nextState);
   };
 
+interface CatalogMovieResult {
+  title: string;
+  year: string;
+  director: string;
+  genre: string;
+  posterUrl: string;
+  synopsis: string;
+}
+
+// Búsqueda inteligente multi-fuente: TMDB -> IMDb Oficial -> TVMaze
+async function searchMovieCatalog(
+  query: string,
+  preferredGenre?: string | null
+): Promise<CatalogMovieResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  // 1. Si hay clave de TMDB configurada en el entorno, intentarla primero
+  const tmdbKey = process.env.EXPO_PUBLIC_TMDB_API_KEY;
+  if (tmdbKey) {
+    try {
+      const tmdbRes = await fetch(
+        `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(q)}&language=es-MX`
+      );
+      const tmdbData = await tmdbRes.json();
+      if (Array.isArray(tmdbData?.results) && tmdbData.results.length > 0) {
+        return tmdbData.results.slice(0, 8).map((r: any) => ({
+          title: r.title || r.name || q,
+          year: r.release_date || r.first_air_date ? String(r.release_date || r.first_air_date).slice(0, 4) : '',
+          director: '',
+          genre: preferredGenre || (r.media_type === 'tv' ? 'Serie' : 'Película'),
+          posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : '',
+          synopsis: r.overview || '',
+        }));
+      }
+    } catch {
+      // Continuar con IMDb si falla
+    }
+  }
+
+  // 2. Búsqueda oficial global con IMDb Suggestion API (gratuita, sin API key, pósters oficiales en HD)
+  try {
+    const clean = q
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    if (clean) {
+      const firstChar = clean[0];
+      const imdbRes = await fetch(`https://v3.sg.media-imdb.com/suggestion/${firstChar}/${clean}.json`);
+      const imdbData = await imdbRes.json();
+
+      if (Array.isArray(imdbData?.d)) {
+        const titles = imdbData.d.filter((item: any) => item.id && String(item.id).startsWith('tt'));
+        if (titles.length > 0) {
+          return titles.slice(0, 8).map((item: any) => ({
+            title: item.l || q,
+            year: item.y ? String(item.y) : '',
+            director: item.s || '',
+            genre:
+              preferredGenre ||
+              (item.q === 'TV series' || item.q === 'tvMiniSeries' ? 'Serie' : 'Película'),
+            posterUrl: item.i?.imageUrl || '',
+            synopsis: item.s ? `Reparto: ${item.s}` : '',
+          }));
+        }
+      }
+    }
+  } catch {
+    // Continuar con TVMaze si falla
+  }
+
+  // 3. Fallback adicional con TVMaze (ideal para series y programas de TV)
+  try {
+    const tvRes = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`);
+    const tvData = await tvRes.json();
+    if (Array.isArray(tvData) && tvData.length > 0) {
+      return tvData.slice(0, 6).map((item: any) => {
+        const show = item.show || {};
+        const year = show.premiered ? String(show.premiered).slice(0, 4) : '';
+        const cleanSummary = show.summary ? String(show.summary).replace(/<[^>]*>/g, '').trim() : '';
+        return {
+          title: show.name || q,
+          year,
+          director: '',
+          genre: preferredGenre || (show.genres && show.genres[0]) || 'Serie',
+          posterUrl: show.image?.original || show.image?.medium || '',
+          synopsis: cleanSummary,
+        };
+      });
+    }
+  } catch {
+    // Sin resultados
+  }
+
+  return [];
+}
+
   // --- Autocompletado en vivo mientras escribes el nombre de la película ---
   useEffect(() => {
     const q = quickTitle.trim();
@@ -142,49 +243,7 @@ export const MoviesScreen: React.FC = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const tmdbKey = process.env.EXPO_PUBLIC_TMDB_API_KEY;
-        let mapped: any[] = [];
-
-        if (tmdbKey) {
-          try {
-            const tmdbRes = await fetch(
-              `https://api.themoviedb.org/3/search/multi?api_key=${tmdbKey}&query=${encodeURIComponent(q)}&language=es-MX`
-            );
-            const tmdbData = await tmdbRes.json();
-            if (Array.isArray(tmdbData?.results) && tmdbData.results.length > 0) {
-              mapped = tmdbData.results.slice(0, 6).map((r: any) => ({
-                title: r.title || r.name || q,
-                year: r.release_date || r.first_air_date ? String(r.release_date || r.first_air_date).slice(0, 4) : '',
-                director: '',
-                genre: quickGenre || (r.media_type === 'tv' ? 'Serie' : 'Película'),
-                posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : '',
-                synopsis: r.overview || '',
-              }));
-            }
-          } catch {
-            // fallback a iTunes si falla TMDB
-          }
-        }
-
-        if (mapped.length === 0) {
-          const response = await fetch(
-            `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=movie&entity=movie&limit=6&country=mx`
-          );
-          const data = await response.json();
-          if (Array.isArray(data?.results)) {
-            mapped = data.results.map((r: any) => ({
-              title: r.trackName || q,
-              year: r.releaseDate ? String(r.releaseDate).slice(0, 4) : '',
-              director: r.artistName || '',
-              genre: quickGenre || r.primaryGenreName || 'Película',
-              posterUrl: r.artworkUrl100
-                ? String(r.artworkUrl100).replace('100x100bb', '600x900bb')
-                : '',
-              synopsis: r.longDescription || r.shortDescription || '',
-            }));
-          }
-        }
-
+        const mapped = await searchMovieCatalog(q, quickGenre);
         if (!cancelled) {
           setCatalogResults(mapped);
         }
@@ -193,7 +252,7 @@ export const MoviesScreen: React.FC = () => {
       } finally {
         if (!cancelled) setIsSearchingCatalog(false);
       }
-    }, 300);
+    }, 280);
 
     return () => {
       cancelled = true;
@@ -253,18 +312,13 @@ export const MoviesScreen: React.FC = () => {
       synopsis = top.synopsis;
     } else {
       try {
-        const response = await fetch(
-          `https://itunes.apple.com/search?term=${encodeURIComponent(rawTitle)}&media=movie&entity=movie&limit=1&country=mx`
-        );
-        const data = await response.json();
-        if (Array.isArray(data?.results) && data.results.length > 0) {
-          const r = data.results[0];
-          posterUrl = r.artworkUrl100
-            ? String(r.artworkUrl100).replace('100x100bb', '600x900bb')
-            : undefined;
-          year = r.releaseDate ? String(r.releaseDate).slice(0, 4) : undefined;
-          director = r.artistName || undefined;
-          synopsis = r.longDescription || r.shortDescription || undefined;
+        const results = await searchMovieCatalog(rawTitle, quickGenre);
+        if (results.length > 0) {
+          const top = results[0];
+          posterUrl = top.posterUrl;
+          year = top.year;
+          director = top.director;
+          synopsis = top.synopsis;
         }
       } catch {
         // Fallback gracefully without throwing
@@ -300,6 +354,43 @@ export const MoviesScreen: React.FC = () => {
     setTempRatingJavier(movie.ratingJavier || 5);
     setTempRatingKarla(movie.ratingKarla || 5);
     setTempNotes(movie.notes || '');
+
+    // Auto-recuperar póster si no lo tenía previamente
+    if (!movie.posterUrl) {
+      void (async () => {
+        try {
+          const results = await searchMovieCatalog(movie.title, movie.genre);
+          if (results.length > 0 && results[0].posterUrl) {
+            const found = results[0];
+            setSelectedMovie((prev) =>
+              prev && prev.id === movie.id
+                ? {
+                    ...prev,
+                    posterUrl: found.posterUrl,
+                    year: prev.year || found.year,
+                    director: prev.director || found.director,
+                    synopsis: prev.synopsis || found.synopsis,
+                  }
+                : prev
+            );
+            const nextMovies = state.movies.map((m) =>
+              m.id === movie.id
+                ? {
+                    ...m,
+                    posterUrl: found.posterUrl,
+                    year: m.year || found.year,
+                    director: m.director || found.director,
+                    synopsis: m.synopsis || found.synopsis,
+                  }
+                : m
+            );
+            void updateAndSync({ ...state, movies: nextMovies });
+          }
+        } catch {
+          // Ignorar
+        }
+      })();
+    }
   };
 
   const handleSaveMovieRating = async () => {
@@ -679,7 +770,20 @@ export const MoviesScreen: React.FC = () => {
                             style={styles.posterResultImg}
                             resizeMode="cover"
                           />
-                        ) : null}
+                        ) : (
+                          <View
+                            style={[
+                              styles.posterResultImg,
+                              {
+                                backgroundColor: colors.surface,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              },
+                            ]}
+                          >
+                            <Ionicons name="film-outline" size={24} color={colors.primary} />
+                          </View>
+                        )}
                         <Text style={styles.posterResultName} numberOfLines={1}>
                           {item.title}
                         </Text>
@@ -1061,14 +1165,27 @@ export const MoviesScreen: React.FC = () => {
             {selectedMovie && (
               <>
                 <View style={styles.modalHeader}>
+                  {selectedMovie.posterUrl ? (
+                    <Image
+                      source={{ uri: selectedMovie.posterUrl }}
+                      style={styles.modalPosterThumb}
+                      resizeMode="cover"
+                    />
+                  ) : null}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.modalTitle} numberOfLines={1}>
                       {selectedMovie.title}
                     </Text>
                     <Text style={styles.modalSubtitle}>
+                      {selectedMovie.year ? `${selectedMovie.year} • ` : ''}
                       {selectedMovie.genre} • Propuesta por{' '}
                       {selectedMovie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
                     </Text>
+                    {selectedMovie.director ? (
+                      <Text style={styles.modalDirectorText} numberOfLines={1}>
+                        {selectedMovie.director}
+                      </Text>
+                    ) : null}
                   </View>
                   <TouchableOpacity onPress={() => setSelectedMovie(null)}>
                     <Ionicons name="close" size={22} color="#64748b" />
@@ -1602,6 +1719,18 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  modalPosterThumb: {
+    width: 44,
+    height: 64,
+    borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: c.surfaceAlt,
+  },
+  modalDirectorText: {
+    fontSize: 11,
+    color: c.textMuted,
+    marginTop: 2,
   },
   modalTitle: {
     fontSize: 18,
