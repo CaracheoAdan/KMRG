@@ -29,6 +29,8 @@ import { BattleshipArena } from '../components/games/BattleshipArena';
 import { MoodMascot } from '../components/MoodMascot';
 import { GameHeader } from '../components/games/common/GameHeader';
 import { CelebrationOverlay } from '../components/games/common/CelebrationOverlay';
+import { GameScoreBreakdownModal } from '../components/games/common/GameScoreBreakdownModal';
+import { GAMES_THEME, triggerGameHaptic } from '../theme/gamesTheme';
 import {
   getGamesState,
   saveGamesState,
@@ -38,6 +40,11 @@ import {
   createInitialChessBoard,
   createRandomBattleshipFleet,
   BattleshipShip,
+  GameScoreBreakdown,
+  UNIFIED_GAME_REWARDS,
+  getWeeklyResetKey,
+  createDefaultBreakdown,
+  createDefaultGameScoreItem,
 } from '../services/CoupleSyncService';
 import { supabase } from '../config/supabase';
 
@@ -226,6 +233,16 @@ export const GamesScreen: React.FC = () => {
   const [gamesState, setGamesState] = useState<GamesState>(DEFAULT_GAMES_STATE);
   const [isFullScreenGame, setIsFullScreenGame] = useState<boolean>(false);
 
+  // Modal de desglose de puntos por juego y torneo semanal
+  const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
+  const [breakdownPlayer, setBreakdownPlayer] = useState<'all' | 'Karla' | 'Javier'>('all');
+
+  const handleOpenScoreBreakdown = (player: 'all' | 'Karla' | 'Javier' = 'all') => {
+    void triggerGameHaptic('light');
+    setBreakdownPlayer(player);
+    setIsBreakdownModalOpen(true);
+  };
+
   // Estado de Celebración Grande y Alegre al Ganar
   const [victoryCelebration, setVictoryCelebration] = useState<VictoryCelebration | null>(null);
   const victoryScale = useRef(new Animated.Value(0.5)).current;
@@ -366,15 +383,68 @@ export const GamesScreen: React.FC = () => {
   const addLeaderboardReward = (
     baseState: GamesState,
     winner: 'Karla' | 'Javier',
-    points: number,
-    trophy = 1
+    points: number = UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+    trophy: number = UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+    gameKey?: keyof GameScoreBreakdown
   ): GamesState['leaderboard'] => {
     const lb = baseState.leaderboard || DEFAULT_GAMES_STATE.leaderboard;
+    const currentWeek = getWeeklyResetKey();
+
+    const nextPointsKarla = winner === 'Karla' ? lb.pointsKarla + points : lb.pointsKarla;
+    const nextPointsJavier = winner === 'Javier' ? lb.pointsJavier + points : lb.pointsJavier;
+    const nextTrophiesKarla = winner === 'Karla' ? lb.trophiesKarla + trophy : lb.trophiesKarla;
+    const nextTrophiesJavier = winner === 'Javier' ? lb.trophiesJavier + trophy : lb.trophiesJavier;
+
+    const breakdown: GameScoreBreakdown = { ...(lb.breakdown || createDefaultBreakdown()) };
+    if (gameKey) {
+      const prev = breakdown[gameKey] || createDefaultGameScoreItem();
+      breakdown[gameKey] = {
+        winsKarla: winner === 'Karla' ? prev.winsKarla + 1 : prev.winsKarla,
+        winsJavier: winner === 'Javier' ? prev.winsJavier + 1 : prev.winsJavier,
+        pointsKarla: winner === 'Karla' ? prev.pointsKarla + points : prev.pointsKarla,
+        pointsJavier: winner === 'Javier' ? prev.pointsJavier + points : prev.pointsJavier,
+        trophiesKarla: winner === 'Karla' ? prev.trophiesKarla + trophy : prev.trophiesKarla,
+        trophiesJavier: winner === 'Javier' ? prev.trophiesJavier + trophy : prev.trophiesJavier,
+      };
+    }
+
     return {
-      pointsKarla: winner === 'Karla' ? lb.pointsKarla + points : lb.pointsKarla,
-      pointsJavier: winner === 'Javier' ? lb.pointsJavier + points : lb.pointsJavier,
-      trophiesKarla: winner === 'Karla' ? lb.trophiesKarla + trophy : lb.trophiesKarla,
-      trophiesJavier: winner === 'Javier' ? lb.trophiesJavier + trophy : lb.trophiesJavier,
+      pointsKarla: nextPointsKarla,
+      pointsJavier: nextPointsJavier,
+      trophiesKarla: nextTrophiesKarla,
+      trophiesJavier: nextTrophiesJavier,
+      weekKey: currentWeek,
+      breakdown,
+      lastWeekSummary: lb.lastWeekSummary || null,
+    };
+  };
+
+  const addLeaderboardTie = (
+    baseState: GamesState,
+    gameKey?: keyof GameScoreBreakdown
+  ): GamesState['leaderboard'] => {
+    const lb = baseState.leaderboard || DEFAULT_GAMES_STATE.leaderboard;
+    const currentWeek = getWeeklyResetKey();
+    const tiePts = UNIFIED_GAME_REWARDS.POINTS_PER_TIE;
+
+    const breakdown: GameScoreBreakdown = { ...(lb.breakdown || createDefaultBreakdown()) };
+    if (gameKey) {
+      const prev = breakdown[gameKey] || createDefaultGameScoreItem();
+      breakdown[gameKey] = {
+        ...prev,
+        pointsKarla: prev.pointsKarla + tiePts,
+        pointsJavier: prev.pointsJavier + tiePts,
+      };
+    }
+
+    return {
+      pointsKarla: lb.pointsKarla + tiePts,
+      pointsJavier: lb.pointsJavier + tiePts,
+      trophiesKarla: lb.trophiesKarla,
+      trophiesJavier: lb.trophiesJavier,
+      weekKey: currentWeek,
+      breakdown,
+      lastWeekSummary: lb.lastWeekSummary || null,
     };
   };
 
@@ -436,13 +506,15 @@ export const GamesScreen: React.FC = () => {
 
     let nextLeaderboard = gamesState.leaderboard;
     if (winner === 'Karla' || winner === 'Javier') {
-      nextLeaderboard = addLeaderboardReward(gamesState, winner, 150, 1);
+      nextLeaderboard = addLeaderboardReward(
+        gamesState,
+        winner,
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'tictactoe'
+      );
     } else if (winner === 'Empate') {
-      nextLeaderboard = {
-        ...gamesState.leaderboard,
-        pointsKarla: gamesState.leaderboard.pointsKarla + 40,
-        pointsJavier: gamesState.leaderboard.pointsJavier + 40,
-      };
+      nextLeaderboard = addLeaderboardTie(gamesState, 'tictactoe');
     }
 
     await updateAndSyncGames({
@@ -463,7 +535,7 @@ export const GamesScreen: React.FC = () => {
       triggerVictoryCelebration({
         winnerName: winner === 'Karla' ? 'Karlita' : 'Javier',
         gameTitle: 'Tres en Raya',
-        pointsEarned: 150,
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
         subtitle: 'Tres en línea impecables. ¡Qué gran jugada!',
         color: winner === 'Karla' ? '#9333ea' : '#0284c7',
         onPlayAgain: () => void handleNewTicTacToeRound(),
@@ -563,7 +635,13 @@ export const GamesScreen: React.FC = () => {
           ? Math.max(gamesState.sudoku.bestScoreJavier, finalScore)
           : gamesState.sudoku.bestScoreJavier;
 
-      const nextLb = addLeaderboardReward(gamesState, currentProfile, finalScore, 1);
+      const nextLb = addLeaderboardReward(
+        gamesState,
+        currentProfile,
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'sudoku'
+      );
 
       await updateAndSyncGames({
         ...gamesState,
@@ -578,7 +656,7 @@ export const GamesScreen: React.FC = () => {
       triggerVictoryCelebration({
         winnerName: getDisplayName(currentProfile),
         gameTitle: 'Sudoku Completado',
-        pointsEarned: finalScore,
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
         subtitle: 'Resolviste el tablero completo con maestría absoluta.',
         color: primaryColor,
         onPlayAgain: () => void handleNewSudokuGame(sudoku.difficulty),
@@ -813,9 +891,21 @@ export const GamesScreen: React.FC = () => {
 
         let nextLb = gamesState.leaderboard;
         if (nextWinner === 'w') {
-          nextLb = addLeaderboardReward(gamesState, 'Karla', 600, 1);
+          nextLb = addLeaderboardReward(
+            gamesState,
+            'Karla',
+            UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+            UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+            'chess'
+          );
         } else if (nextWinner === 'b') {
-          nextLb = addLeaderboardReward(gamesState, 'Javier', 600, 1);
+          nextLb = addLeaderboardReward(
+            gamesState,
+            'Javier',
+            UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+            UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+            'chess'
+          );
         }
 
         setSelectedChessPos(null);
@@ -838,7 +928,7 @@ export const GamesScreen: React.FC = () => {
           triggerVictoryCelebration({
             winnerName: nextWinner === 'w' ? 'Karlita' : 'Javier',
             gameTitle: '¡Jaque Mate en Ajedrez!',
-            pointsEarned: 600,
+            pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
             subtitle: 'Victoria magistral en el tablero real.',
             color: nextWinner === 'w' ? '#9333ea' : '#0284c7',
             onPlayAgain: () => void handleResetChess(),
@@ -908,22 +998,17 @@ export const GamesScreen: React.FC = () => {
     let nextStreak = hangman.streak || 0;
     let nextLb = gamesState.leaderboard;
 
-    if (isHit) {
-      nextLb = addLeaderboardReward(gamesState, currentProfile, 30, 0);
-    }
-
-    const winBonus = hangman.isPartnerChallenge ? 400 : 250;
-
     if (allRevealed) {
       nextStatus = 'won';
       nextStreak += 1;
       if (currentProfile === 'Karla') nextScoreKarla += 1;
       else nextScoreJavier += 1;
       nextLb = addLeaderboardReward(
-        { ...gamesState, leaderboard: nextLb },
+        gamesState,
         currentProfile,
-        winBonus,
-        1
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'hangman'
       );
     } else if (nextWrong >= maxWrong) {
       nextStatus = 'lost';
@@ -947,7 +1032,7 @@ export const GamesScreen: React.FC = () => {
       triggerVictoryCelebration({
         winnerName: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
         gameTitle: '¡Palabra Descifrada!',
-        pointsEarned: winBonus,
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
         subtitle: `Adivinaste "${hangman.word}" y sumaste racha de ${nextStreak}.`,
         color: primaryColor,
         onPlayAgain: () => void handleRandomHangmanWord(),
@@ -1288,15 +1373,13 @@ export const GamesScreen: React.FC = () => {
       : 'Karla';
 
     let nextLb = gamesState.leaderboard;
-    if (isHit) {
-      nextLb = addLeaderboardReward(gamesState, shooter, justSunk ? 100 : 35, 0);
-    }
     if (nextWinner) {
       nextLb = addLeaderboardReward(
-        { ...gamesState, leaderboard: nextLb },
+        gamesState,
         nextWinner,
-        650,
-        1
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'battleship'
       );
     }
 
@@ -1325,7 +1408,7 @@ export const GamesScreen: React.FC = () => {
       triggerVictoryCelebration({
         winnerName: getDisplayName(nextWinner),
         gameTitle: '¡Flota Enemiga Hundida!',
-        pointsEarned: 650,
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
         subtitle: 'Destruiste los 5 buques de guerra en el radar 10x10.',
         color: nextWinner === 'Karla' ? '#9333ea' : '#0284c7',
         onPlayAgain: () => void handleResetBattleship(),
@@ -1710,7 +1793,12 @@ export const GamesScreen: React.FC = () => {
       <View style={styles.lobbyZeroScrollContainer}>
         {/* 1. Marcador Compacto Karlita vs Javier */}
         <View style={[styles.lobbyScoreboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.lobbyPlayer}>
+          <TouchableOpacity
+            style={styles.lobbyPlayer}
+            onPress={() => handleOpenScoreBreakdown('Karla')}
+            activeOpacity={0.7}
+            accessibilityLabel={`Ver desglose de puntos de ${getDisplayName('Karla')}`}
+          >
             <View style={[styles.lobbyAvatarCircle, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]}>
               <Text style={[styles.lobbyAvatarText, { color: '#9333ea' }]}>
                 {getDisplayName('Karla').charAt(0).toUpperCase()}
@@ -1725,13 +1813,24 @@ export const GamesScreen: React.FC = () => {
                 <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>• {lb.trophiesKarla} ★</Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
-          <View style={[styles.lobbyVsBadge, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.lobbyVsBadge, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+            onPress={() => handleOpenScoreBreakdown('all')}
+            activeOpacity={0.7}
+            accessibilityLabel="Ver desglose comparativo de todos los juegos"
+          >
             <Text style={[styles.lobbyVsText, { color: colors.primary }]}>VS</Text>
-          </View>
+            <Ionicons name="bar-chart-outline" size={10} color={colors.primary} style={{ marginTop: 1 }} />
+          </TouchableOpacity>
 
-          <View style={[styles.lobbyPlayer, { justifyContent: 'flex-end', flexDirection: 'row-reverse' }]}>
+          <TouchableOpacity
+            style={[styles.lobbyPlayer, { justifyContent: 'flex-end', flexDirection: 'row-reverse' }]}
+            onPress={() => handleOpenScoreBreakdown('Javier')}
+            activeOpacity={0.7}
+            accessibilityLabel={`Ver desglose de puntos de ${getDisplayName('Javier')}`}
+          >
             <View style={[styles.lobbyAvatarCircle, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
               <Text style={[styles.lobbyAvatarText, { color: '#0284c7' }]}>
                 {getDisplayName('Javier').charAt(0).toUpperCase()}
@@ -1746,8 +1845,18 @@ export const GamesScreen: React.FC = () => {
                 <Text style={[styles.lobbyPoints, { color: '#0284c7' }]}>{lb.pointsJavier} pts</Text>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          onPress={() => handleOpenScoreBreakdown('all')}
+          style={styles.breakdownHintRow}
+          activeOpacity={0.75}
+          accessibilityLabel="Abrir desglose semanal de juegos"
+        >
+          <Ionicons name="stats-chart" size={12} color="#f43f5e" />
+          <Text style={styles.breakdownHintText}>Toca los puntos para ver el desglose semanal ↗</Text>
+        </TouchableOpacity>
 
         {/* 2. Grid de 5 Juegos: 2 Columnas x 3 Filas (Misma altura para todas mediante flex) */}
         {(() => {
@@ -2044,6 +2153,7 @@ export const GamesScreen: React.FC = () => {
               }
               onBack={() => setActiveGame(null)}
               onReset={() => handleResetCurrentGame()}
+              onPressScore={(p) => handleOpenScoreBreakdown(p || 'all')}
               primaryColor={primaryColor}
             />
           )}
@@ -2125,11 +2235,20 @@ export const GamesScreen: React.FC = () => {
               style={[styles.primaryGameBtn, { backgroundColor: primaryColor, marginTop: 16 }]}
             >
               <Ionicons name="send" size={16} color="#ffffff" />
-              <Text style={styles.primaryGameBtnText}>Lanzar Reto (+400 pts)</Text>
+              <Text style={styles.primaryGameBtnText}>Lanzar Reto (+100 pts)</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* ================= MODAL DE DESGLOSE DE PUNTOS Y TORNEO SEMANAL ================= */}
+      <GameScoreBreakdownModal
+        visible={isBreakdownModalOpen}
+        onClose={() => setIsBreakdownModalOpen(false)}
+        leaderboard={gamesState.leaderboard}
+        initialPlayer={breakdownPlayer}
+        primaryColor={primaryColor}
+      />
     </SafeAreaView>
   );
 };
@@ -2416,6 +2535,20 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  breakdownHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: -4,
+    marginBottom: 2,
+    paddingVertical: 2,
+  },
+  breakdownHintText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#e11d48',
   },
   unifiedTurnPill: {
     flexDirection: 'row',

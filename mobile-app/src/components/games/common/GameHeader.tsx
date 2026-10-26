@@ -18,6 +18,7 @@ interface GameHeaderProps {
   currentTurnPlayer?: UserProfile | 'w' | 'b' | 'Empate' | null;
   onBack: () => void;
   onReset: () => void;
+  onPressScore?: (player?: 'all' | 'Karla' | 'Javier') => void;
   primaryColor?: string;
 }
 
@@ -29,6 +30,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   currentTurnPlayer,
   onBack,
   onReset,
+  onPressScore,
 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -114,34 +116,52 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
       <View style={styles.rightSection}>
         <View style={styles.avatarsRow}>
           {/* Avatar Karla */}
-          <Animated.View
-            style={[
-              styles.miniAvatar,
-              { backgroundColor: '#fdf2f8', borderColor: isKarlaTurn ? '#ec4899' : '#ffffff' },
-              isKarlaTurn && {
-                borderWidth: 2.5,
-                transform: [{ scale: pulseAnim }],
-                ...GAMES_THEME.shadows.glowCoral,
-              },
-            ]}
+          <TouchableOpacity
+            onPress={() => {
+              void triggerGameHaptic('light');
+              onPressScore?.('Karla');
+            }}
+            activeOpacity={0.75}
+            accessibilityLabel="Ver desglose de Karlita"
           >
-            <Text style={[styles.avatarLetterKarla, isKarlaTurn && { fontWeight: '900' }]}>K</Text>
-          </Animated.View>
+            <Animated.View
+              style={[
+                styles.miniAvatar,
+                { backgroundColor: '#fdf2f8', borderColor: isKarlaTurn ? '#ec4899' : '#ffffff' },
+                isKarlaTurn && {
+                  borderWidth: 2.5,
+                  transform: [{ scale: pulseAnim }],
+                  ...GAMES_THEME.shadows.glowCoral,
+                },
+              ]}
+            >
+              <Text style={[styles.avatarLetterKarla, isKarlaTurn && { fontWeight: '900' }]}>K</Text>
+            </Animated.View>
+          </TouchableOpacity>
 
           {/* Avatar Javier (Separado, sin superponerse) */}
-          <Animated.View
-            style={[
-              styles.miniAvatar,
-              { backgroundColor: '#f0f9ff', borderColor: isJavierTurn ? '#0ea5e9' : '#ffffff' },
-              isJavierTurn && {
-                borderWidth: 2.5,
-                transform: [{ scale: pulseAnim }],
-                ...GAMES_THEME.shadows.glowCyan,
-              },
-            ]}
+          <TouchableOpacity
+            onPress={() => {
+              void triggerGameHaptic('light');
+              onPressScore?.('Javier');
+            }}
+            activeOpacity={0.75}
+            accessibilityLabel="Ver desglose de Javier"
           >
-            <Text style={[styles.avatarLetterJavier, isJavierTurn && { fontWeight: '900' }]}>J</Text>
-          </Animated.View>
+            <Animated.View
+              style={[
+                styles.miniAvatar,
+                { backgroundColor: '#f0f9ff', borderColor: isJavierTurn ? '#0ea5e9' : '#ffffff' },
+                isJavierTurn && {
+                  borderWidth: 2.5,
+                  transform: [{ scale: pulseAnim }],
+                  ...GAMES_THEME.shadows.glowCyan,
+                },
+              ]}
+            >
+              <Text style={[styles.avatarLetterJavier, isJavierTurn && { fontWeight: '900' }]}>J</Text>
+            </Animated.View>
+          </TouchableOpacity>
         </View>
 
         {/* Botón Reiniciar Partida */}

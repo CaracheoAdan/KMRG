@@ -283,7 +283,7 @@ export const HangmanArena: React.FC<Props> = ({
           accessibilityLabel="Retar a mi pareja con palabra secreta"
         >
           <Ionicons name="sparkles" size={16} color="#ffffff" />
-          <Text style={styles.challengePartnerBtnText}>+400 Retar Pareja</Text>
+          <Text style={styles.challengePartnerBtnText}>Retar Pareja</Text>
         </TouchableOpacity>
       </View>
     </View>

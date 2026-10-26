@@ -172,13 +172,88 @@ export const createRandomBattleshipFleet = (): BattleshipShip[] => {
   return fleet;
 };
 
+export interface GameScoreItem {
+  winsKarla: number;
+  winsJavier: number;
+  pointsKarla: number;
+  pointsJavier: number;
+  trophiesKarla: number;
+  trophiesJavier: number;
+}
+
+export interface GameScoreBreakdown {
+  tictactoe: GameScoreItem;
+  sudoku: GameScoreItem;
+  chess: GameScoreItem;
+  hangman: GameScoreItem;
+  battleship: GameScoreItem;
+}
+
+export interface WeeklyChampionSummary {
+  weekKey: string;
+  winner: UserProfile | 'Empate';
+  pointsKarla: number;
+  pointsJavier: number;
+  trophiesKarla: number;
+  trophiesJavier: number;
+}
+
+export interface GamesLeaderboard {
+  pointsKarla: number;
+  pointsJavier: number;
+  trophiesKarla: number;
+  trophiesJavier: number;
+  weekKey: string;
+  breakdown: GameScoreBreakdown;
+  lastWeekSummary?: WeeklyChampionSummary | null;
+}
+
+export const UNIFIED_GAME_REWARDS = {
+  POINTS_PER_WIN: 100,
+  TROPHIES_PER_WIN: 1,
+  POINTS_PER_TIE: 30,
+  TROPHIES_PER_TIE: 0,
+} as const;
+
+export function getWeeklyResetKey(d: Date = new Date()): string {
+  const target = new Date(d.getTime());
+  const dayNr = (target.getDay() + 6) % 7; // Monday = 0, Sunday = 6
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  const weekNumber = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+  const year = new Date(firstThursday).getFullYear();
+  return `${year}-W${String(weekNumber).padStart(2, '0')}`;
+}
+
+export function getDaysRemainingInWeek(d: Date = new Date()): number {
+  const day = d.getDay();
+  if (day === 0) return 0;
+  return 7 - day;
+}
+
+export const createDefaultGameScoreItem = (): GameScoreItem => ({
+  winsKarla: 0,
+  winsJavier: 0,
+  pointsKarla: 0,
+  pointsJavier: 0,
+  trophiesKarla: 0,
+  trophiesJavier: 0,
+});
+
+export const createDefaultBreakdown = (): GameScoreBreakdown => ({
+  tictactoe: createDefaultGameScoreItem(),
+  sudoku: createDefaultGameScoreItem(),
+  chess: createDefaultGameScoreItem(),
+  hangman: createDefaultGameScoreItem(),
+  battleship: createDefaultGameScoreItem(),
+});
+
 export interface GamesState {
-  leaderboard: {
-    pointsKarla: number;
-    pointsJavier: number;
-    trophiesKarla: number;
-    trophiesJavier: number;
-  };
+  leaderboard: GamesLeaderboard;
   ticTacToe: {
     board: Array<'Javier' | 'Karla' | null>;
     winningLine: number[] | null;
@@ -270,6 +345,9 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     pointsJavier: 0,
     trophiesKarla: 0,
     trophiesJavier: 0,
+    weekKey: getWeeklyResetKey(),
+    breakdown: createDefaultBreakdown(),
+    lastWeekSummary: null,
   },
   ticTacToe: {
     board: Array(9).fill(null),
@@ -599,17 +677,66 @@ function mergeSpecialPlaces(
   };
 }
 
+function mergeScoreItem(a?: GameScoreItem, b?: GameScoreItem): GameScoreItem {
+  const itemA = a || createDefaultGameScoreItem();
+  const itemB = b || createDefaultGameScoreItem();
+  return {
+    winsKarla: Math.max(itemA.winsKarla, itemB.winsKarla),
+    winsJavier: Math.max(itemA.winsJavier, itemB.winsJavier),
+    pointsKarla: Math.max(itemA.pointsKarla, itemB.pointsKarla),
+    pointsJavier: Math.max(itemA.pointsJavier, itemB.pointsJavier),
+    trophiesKarla: Math.max(itemA.trophiesKarla, itemB.trophiesKarla),
+    trophiesJavier: Math.max(itemA.trophiesJavier, itemB.trophiesJavier),
+  };
+}
+
 function mergeGamesStates(base: GamesState, incoming: GamesState): GamesState {
   const normBase = normalizeGamesState(base);
   const normIncoming = normalizeGamesState(incoming);
 
+  // Si una de las dos tiene una semana más reciente, esa toma precedencia
+  if (normIncoming.leaderboard.weekKey > normBase.leaderboard.weekKey) {
+    return normIncoming;
+  }
+  if (normBase.leaderboard.weekKey > normIncoming.leaderboard.weekKey) {
+    return normBase;
+  }
+
+  // Misma semana: combinamos puntuaciones de manera consistente
+  const mergedBreakdown: GameScoreBreakdown = {
+    tictactoe: mergeScoreItem(normBase.leaderboard.breakdown.tictactoe, normIncoming.leaderboard.breakdown.tictactoe),
+    sudoku: mergeScoreItem(normBase.leaderboard.breakdown.sudoku, normIncoming.leaderboard.breakdown.sudoku),
+    chess: mergeScoreItem(normBase.leaderboard.breakdown.chess, normIncoming.leaderboard.breakdown.chess),
+    hangman: mergeScoreItem(normBase.leaderboard.breakdown.hangman, normIncoming.leaderboard.breakdown.hangman),
+    battleship: mergeScoreItem(normBase.leaderboard.breakdown.battleship, normIncoming.leaderboard.breakdown.battleship),
+  };
+
   return {
     ...normBase,
     ...normIncoming,
+    leaderboard: {
+      pointsKarla: Math.max(normBase.leaderboard.pointsKarla || 0, normIncoming.leaderboard.pointsKarla || 0),
+      pointsJavier: Math.max(normBase.leaderboard.pointsJavier || 0, normIncoming.leaderboard.pointsJavier || 0),
+      trophiesKarla: Math.max(normBase.leaderboard.trophiesKarla || 0, normIncoming.leaderboard.trophiesKarla || 0),
+      trophiesJavier: Math.max(normBase.leaderboard.trophiesJavier || 0, normIncoming.leaderboard.trophiesJavier || 0),
+      weekKey: normIncoming.leaderboard.weekKey,
+      breakdown: mergedBreakdown,
+      lastWeekSummary: normIncoming.leaderboard.lastWeekSummary || normBase.leaderboard.lastWeekSummary || null,
+    },
     ticTacToe: {
       ...normIncoming.ticTacToe,
       scoreKarla: Math.max(normBase.ticTacToe.scoreKarla || 0, normIncoming.ticTacToe.scoreKarla || 0),
       scoreJavier: Math.max(normBase.ticTacToe.scoreJavier || 0, normIncoming.ticTacToe.scoreJavier || 0),
+    },
+    chess: {
+      ...normIncoming.chess,
+      winsKarla: Math.max(normBase.chess.winsKarla || 0, normIncoming.chess.winsKarla || 0),
+      winsJavier: Math.max(normBase.chess.winsJavier || 0, normIncoming.chess.winsJavier || 0),
+    },
+    hangman: {
+      ...normIncoming.hangman,
+      scoreKarla: Math.max(normBase.hangman.scoreKarla || 0, normIncoming.hangman.scoreKarla || 0),
+      scoreJavier: Math.max(normBase.hangman.scoreJavier || 0, normIncoming.hangman.scoreJavier || 0),
     },
     battleship: {
       ...normIncoming.battleship,
@@ -648,51 +775,164 @@ function normalizeMoviesState(state: MoviesAndPlansState): MoviesAndPlansState {
 }
 
 function normalizeGamesState(state: GamesState): GamesState {
+  const currentWeek = getWeeklyResetKey();
+  const rawLb = (state && state.leaderboard) || DEFAULT_GAMES_STATE.leaderboard;
+  const isExpiredWeek = Boolean(rawLb.weekKey && rawLb.weekKey !== currentWeek);
+
+  let normalizedLb: GamesLeaderboard;
+  let resetGamesForNewWeek = false;
+
+  if (isExpiredWeek) {
+    // La semana terminó -> Archivar resumen del ganador semanal y reiniciar para el nuevo torneo semanal
+    resetGamesForNewWeek = true;
+    const prevWinner: UserProfile | 'Empate' =
+      (rawLb.pointsKarla || 0) > (rawLb.pointsJavier || 0)
+        ? 'Karla'
+        : (rawLb.pointsJavier || 0) > (rawLb.pointsKarla || 0)
+        ? 'Javier'
+        : 'Empate';
+
+    normalizedLb = {
+      pointsKarla: 0,
+      pointsJavier: 0,
+      trophiesKarla: 0,
+      trophiesJavier: 0,
+      weekKey: currentWeek,
+      breakdown: createDefaultBreakdown(),
+      lastWeekSummary: {
+        weekKey: rawLb.weekKey,
+        winner: prevWinner,
+        pointsKarla: rawLb.pointsKarla || 0,
+        pointsJavier: rawLb.pointsJavier || 0,
+        trophiesKarla: rawLb.trophiesKarla || 0,
+        trophiesJavier: rawLb.trophiesJavier || 0,
+      },
+    };
+  } else {
+    // Misma semana o primera inicialización
+    const rawBreakdown = rawLb.breakdown || ({} as Partial<GameScoreBreakdown>);
+
+    const tttWinsK = state?.ticTacToe?.scoreKarla || 0;
+    const tttWinsJ = state?.ticTacToe?.scoreJavier || 0;
+    const sudokuDone = state?.sudoku?.completedCount || 0;
+    const chessWinsK = state?.chess?.winsKarla || 0;
+    const chessWinsJ = state?.chess?.winsJavier || 0;
+    const hangmanWinsK = state?.hangman?.scoreKarla || 0;
+    const hangmanWinsJ = state?.hangman?.scoreJavier || 0;
+    const bsWinsK = state?.battleship?.winsKarla || 0;
+    const bsWinsJ = state?.battleship?.winsJavier || 0;
+
+    const breakdown: GameScoreBreakdown = {
+      tictactoe: rawBreakdown.tictactoe || {
+        winsKarla: tttWinsK,
+        winsJavier: tttWinsJ,
+        pointsKarla: tttWinsK * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: tttWinsJ * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: tttWinsK * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: tttWinsJ * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
+      sudoku: rawBreakdown.sudoku || {
+        winsKarla: sudokuDone,
+        winsJavier: sudokuDone,
+        pointsKarla: sudokuDone * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: sudokuDone * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: sudokuDone * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: sudokuDone * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
+      chess: rawBreakdown.chess || {
+        winsKarla: chessWinsK,
+        winsJavier: chessWinsJ,
+        pointsKarla: chessWinsK * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: chessWinsJ * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: chessWinsK * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: chessWinsJ * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
+      hangman: rawBreakdown.hangman || {
+        winsKarla: hangmanWinsK,
+        winsJavier: hangmanWinsJ,
+        pointsKarla: hangmanWinsK * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: hangmanWinsJ * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: hangmanWinsK * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: hangmanWinsJ * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
+      battleship: rawBreakdown.battleship || {
+        winsKarla: bsWinsK,
+        winsJavier: bsWinsJ,
+        pointsKarla: bsWinsK * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: bsWinsJ * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: bsWinsK * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: bsWinsJ * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
+    };
+
+    normalizedLb = {
+      pointsKarla: typeof rawLb.pointsKarla === 'number' ? rawLb.pointsKarla : 0,
+      pointsJavier: typeof rawLb.pointsJavier === 'number' ? rawLb.pointsJavier : 0,
+      trophiesKarla: typeof rawLb.trophiesKarla === 'number' ? rawLb.trophiesKarla : 0,
+      trophiesJavier: typeof rawLb.trophiesJavier === 'number' ? rawLb.trophiesJavier : 0,
+      weekKey: currentWeek,
+      breakdown,
+      lastWeekSummary: rawLb.lastWeekSummary || null,
+    };
+  }
+
+  const baseTtt = state?.ticTacToe || DEFAULT_GAMES_STATE.ticTacToe;
+  const baseSudoku = state?.sudoku || DEFAULT_GAMES_STATE.sudoku;
+  const baseHangman = state?.hangman || DEFAULT_GAMES_STATE.hangman;
+  const baseChess = state?.chess || DEFAULT_GAMES_STATE.chess;
+  const baseBs = state?.battleship || DEFAULT_GAMES_STATE.battleship;
+
   return {
-    leaderboard: {
-      ...DEFAULT_GAMES_STATE.leaderboard,
-      ...(state.leaderboard || {}),
-    },
+    leaderboard: normalizedLb,
     ticTacToe: {
       ...DEFAULT_GAMES_STATE.ticTacToe,
-      ...(state.ticTacToe || {}),
+      ...baseTtt,
+      scoreKarla: resetGamesForNewWeek ? 0 : baseTtt.scoreKarla || 0,
+      scoreJavier: resetGamesForNewWeek ? 0 : baseTtt.scoreJavier || 0,
+      round: resetGamesForNewWeek ? 1 : baseTtt.round || 1,
     },
     sudoku: {
       ...DEFAULT_GAMES_STATE.sudoku,
-      ...(state.sudoku || {}),
+      ...baseSudoku,
+      completedCount: resetGamesForNewWeek ? 0 : baseSudoku.completedCount || 0,
+      bestScoreKarla: resetGamesForNewWeek ? 0 : baseSudoku.bestScoreKarla || 0,
+      bestScoreJavier: resetGamesForNewWeek ? 0 : baseSudoku.bestScoreJavier || 0,
     },
     hangman: {
       ...DEFAULT_GAMES_STATE.hangman,
-      ...(state.hangman || {}),
-      hint: stripLegacyEmoji(state.hangman?.hint || DEFAULT_GAMES_STATE.hangman.hint),
-      category: stripLegacyEmoji(state.hangman?.category || DEFAULT_GAMES_STATE.hangman.category),
+      ...baseHangman,
+      scoreKarla: resetGamesForNewWeek ? 0 : baseHangman.scoreKarla || 0,
+      scoreJavier: resetGamesForNewWeek ? 0 : baseHangman.scoreJavier || 0,
+      streak: resetGamesForNewWeek ? 0 : baseHangman.streak || 0,
+      hint: stripLegacyEmoji(baseHangman?.hint || DEFAULT_GAMES_STATE.hangman.hint),
+      category: stripLegacyEmoji(baseHangman?.category || DEFAULT_GAMES_STATE.hangman.category),
     },
     chess: {
       ...DEFAULT_GAMES_STATE.chess,
-      ...(state.chess || {}),
+      ...baseChess,
+      winsKarla: resetGamesForNewWeek ? 0 : baseChess.winsKarla || 0,
+      winsJavier: resetGamesForNewWeek ? 0 : baseChess.winsJavier || 0,
     },
     battleship: {
       ...DEFAULT_GAMES_STATE.battleship,
-      ...(state.battleship || {}),
-      phase: state.battleship?.phase || 'idle',
+      ...baseBs,
+      winsKarla: resetGamesForNewWeek ? 0 : baseBs.winsKarla || 0,
+      winsJavier: resetGamesForNewWeek ? 0 : baseBs.winsJavier || 0,
+      phase: baseBs?.phase || 'idle',
       fleetKarla:
-        Array.isArray(state.battleship?.fleetKarla) &&
-        state.battleship.fleetKarla.length === 5 &&
-        state.battleship.fleetKarla[0]?.size === 5
-          ? state.battleship.fleetKarla
+        Array.isArray(baseBs?.fleetKarla) &&
+        baseBs.fleetKarla.length === 5 &&
+        baseBs.fleetKarla[0]?.size === 5
+          ? baseBs.fleetKarla
           : DEFAULT_GAMES_STATE.battleship.fleetKarla,
       fleetJavier:
-        Array.isArray(state.battleship?.fleetJavier) &&
-        state.battleship.fleetJavier.length === 5 &&
-        state.battleship.fleetJavier[0]?.size === 5
-          ? state.battleship.fleetJavier
+        Array.isArray(baseBs?.fleetJavier) &&
+        baseBs.fleetJavier.length === 5 &&
+        baseBs.fleetJavier[0]?.size === 5
+          ? baseBs.fleetJavier
           : DEFAULT_GAMES_STATE.battleship.fleetJavier,
-      shotsByKarla: Array.isArray(state.battleship?.shotsByKarla)
-        ? state.battleship.shotsByKarla
-        : [],
-      shotsByJavier: Array.isArray(state.battleship?.shotsByJavier)
-        ? state.battleship.shotsByJavier
-        : [],
+      shotsByKarla: Array.isArray(baseBs?.shotsByKarla) ? baseBs.shotsByKarla : [],
+      shotsByJavier: Array.isArray(baseBs?.shotsByJavier) ? baseBs.shotsByJavier : [],
     },
   };
 }
