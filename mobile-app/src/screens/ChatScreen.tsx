@@ -66,6 +66,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation, onClose, vis
   const partnerAvatar = getAvatarUri(partnerRole);
 
   const [homeState, setHomeState] = useState<HomeState>(() => DEFAULT_HOME_STATE);
+  const petName = homeState.couplePet?.name || 'Pochito';
   const [inputText, setInputText] = useState('');
   const [showStickers, setShowStickers] = useState(false);
 
@@ -150,7 +151,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation, onClose, vis
       const preview =
         text ||
         (stickerToSend
-          ? `Sticker de Pochito ${stickerToSend.replace('pochito_', '')}`
+          ? `Sticker de ${petName} ${stickerToSend.replace('pochito_', '')}`
           : 'Nuevo mensaje');
       void sendPartnerPushNotification(
         recipientToken,
@@ -495,7 +496,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation, onClose, vis
                 Tu chat privado con {partnerName}
               </Text>
               <Text style={styles.emptySubtitle}>
-                Escríbanse cositas lindas, envíense notas de voz, fotos y stickers de Pochito.
+                Escríbanse cositas lindas, envíense notas de voz, fotos y stickers de ${petName}.
               </Text>
             </View>
           ) : (
@@ -542,7 +543,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation, onClose, vis
                             isMe ? { color: '#ffffff' } : { color: colors.textSecondary },
                           ]}
                         >
-                          Pochito {sticker.label}
+                          {petName} {sticker.label}
                         </Text>
                       </View>
                     ) : null}
@@ -636,7 +637,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ navigation, onClose, vis
         {/* Selector de Stickers de Pochito */}
         {showStickers && (
           <View style={[styles.stickersTray, { backgroundColor: colors.surfaceAlt }]}>
-            <Text style={styles.stickersTrayTitle}>Stickers Exclusivos de Pochito</Text>
+            <Text style={styles.stickersTrayTitle}>Stickers Exclusivos de {petName}</Text>
             <View style={styles.stickersGrid}>
               {POCHITO_STICKERS.map((stk) => (
                 <TouchableOpacity

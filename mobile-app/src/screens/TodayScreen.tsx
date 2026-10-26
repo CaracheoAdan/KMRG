@@ -28,13 +28,10 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { AppHeader } from '../components/AppHeader';
-import { ChatScreen } from './ChatScreen';
 import { TimeCapsuleModal } from '../components/TimeCapsuleModal';
 import { LoveBookModal } from '../components/LoveBookModal';
 import { TimeCapsuleItem, Milestone } from '../types';
-import { TodaySongWidget } from '../components/TodaySongWidget';
 import { HeartbeatHeatmap } from '../components/HeartbeatHeatmap';
-import { QuickNoteMessage, TodaySongData } from '../types';
 import {
   MoodMascot,
   PRESET_FEELINGS,
@@ -95,10 +92,8 @@ export const TodayScreen: React.FC = () => {
 
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCapsulesModalOpen, setIsCapsulesModalOpen] = useState(false);
   const [isLoveBookOpen, setIsLoveBookOpen] = useState(false);
-  const [isSongModalOpen, setIsSongModalOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
 
   const startAnniv = new Date(`${homeState.anniversaryDate || '2026-06-18'}T00:00:00`);
@@ -373,6 +368,7 @@ export const TodayScreen: React.FC = () => {
         name: clean,
       },
     };
+    setHomeState(nextHome);
     setIsEditingPetName(false);
     await updateAndSyncHome(nextHome);
   };
@@ -554,8 +550,9 @@ export const TodayScreen: React.FC = () => {
   const quickCards = [
     {
       key: 'pet',
-      title: petInfo.name,
+      title: petInfo.name || 'Pochito',
       subtitle: `${petInfo.effectiveHappiness}% · Nv. ${petInfo.level}`,
+      icon: 'sparkles' as const,
       onPress: () => {
         setPetNameDraft(petInfo.name || 'Pochito');
         setIsEditingPetName(false);
@@ -563,31 +560,17 @@ export const TodayScreen: React.FC = () => {
       },
     },
     {
-      key: 'chat',
-      title: 'Chat Íntimo',
-      subtitle: (homeState.quickNotes?.length || 0) > 0 ? `${homeState.quickNotes?.length} msgs` : 'Abrir chat',
-      icon: 'chatbubbles',
-      onPress: () => setIsChatOpen(true),
-    },
-    {
-      key: 'song',
-      title: 'Canción',
-      subtitle: homeState.todaySong?.title || 'Dedicar',
-      icon: 'musical-notes',
-      onPress: () => setIsSongModalOpen(true),
-    },
-    {
       key: 'capsules',
       title: 'Cápsulas',
       subtitle: plural(capsulesCount, 'sellada', 'selladas'),
-      icon: 'hourglass',
+      icon: 'time' as const,
       onPress: () => setIsCapsulesModalOpen(true),
     },
     {
       key: 'book',
-      title: 'Libro de Amor',
-      subtitle: `${daysTogether} días`,
-      icon: 'book',
+      title: 'Collage de Amor',
+      subtitle: `${daysTogether} días juntos`,
+      icon: 'images' as const,
       onPress: () => setIsLoveBookOpen(true),
     },
   ];
@@ -1206,12 +1189,6 @@ export const TodayScreen: React.FC = () => {
         </View>
       </Modal>
 
-{/* ================= MODAL: CHAT ÍNTIMO COMPLETO ================= */}
-      <ChatScreen
-        visible={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-      />
-
       {/* ================= MODAL: CÁPSULAS DEL TIEMPO UNIFICADAS ================= */}
       <TimeCapsuleModal
         visible={isCapsulesModalOpen}
@@ -1223,7 +1200,7 @@ export const TodayScreen: React.FC = () => {
         onOpenCapsule={handleOpenCapsule}
       />
 
-      {/* ================= MODAL: EL LIBRO DE NUESTRO AMOR ================= */}
+      {/* ================= MODAL: COLLAGE DE NUESTRO AMOR (BAJO DEMANDA) ================= */}
       <LoveBookModal
         visible={isLoveBookOpen}
         onClose={() => setIsLoveBookOpen(false)}
@@ -1233,57 +1210,8 @@ export const TodayScreen: React.FC = () => {
         streakCount={homeState.streakCount || 1}
         milestones={milestones}
         messages={message ? [message] : []}
-        todaySong={homeState.todaySong}
+        petName={petInfo.name || 'Pochito'}
       />
-
-      {/* ================= MODAL: NUESTRA CANCIÓN DE HOY ================= */}
-      <Modal
-        visible={isSongModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsSongModalOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nuestra Música</Text>
-              <TouchableOpacity
-                onPress={() => setIsSongModalOpen(false)}
-                style={styles.closeBtn}
-              >
-                <Ionicons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <TodaySongWidget
-              song={homeState.todaySong}
-              currentProfile={currentProfile}
-              primaryColor={primaryColor}
-              onSaveSong={(newSong: TodaySongData) => {
-                const updatedHome: HomeState = {
-                  ...homeState,
-                  todaySong: newSong,
-                };
-                void updateAndSyncHome(updatedHome);
-
-                const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
-                const recipientToken = homeState.pushTokens?.[recipientRole];
-                if (recipientToken) {
-                  void sendPartnerPushNotification(
-                    recipientToken,
-                    'KMRG 🎵 Canción dedicada',
-                    `¡${getDisplayName(currentProfile)} te dedicó "${newSong.title} - ${newSong.artist}"!`,
-                    { type: 'TODAY_SONG', sender: currentProfile }
-                  );
-                }
-              }}
-            />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Selector de Fecha de Aniversario */}
       <DatePickerModal

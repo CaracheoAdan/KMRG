@@ -1131,7 +1131,7 @@ export const MemoriesScreen: React.FC = () => {
         streakCount={homeState.streakCount || 1}
         milestones={milestones}
         messages={memories}
-        todaySong={homeState.todaySong}
+        petName={homeState.couplePet?.name || 'Pochito'}
       />
 
       {/* Modal Cápsulas del Tiempo Multimedia */}

@@ -27,9 +27,10 @@ interface Props {
   messages: Message[];
   todaySong?: TodaySongData;
   places?: SpecialPlace[];
+  petName?: string;
 }
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 
 const SERIF_FONT = Platform.select({
   ios: 'Georgia',
@@ -46,12 +47,9 @@ export const LoveBookModal: React.FC<Props> = ({
   streakCount,
   milestones,
   messages,
-  todaySong,
-  places = [],
+  petName = 'Pochito',
 }) => {
-  const [currentPage, setCurrentPage] = useState<number>(0);
   const [isStoryCardOpen, setIsStoryCardOpen] = useState<boolean>(false);
-  const totalPages = 4;
 
   const monthsTogether = Math.max(1, Math.floor(daysTogether / 30.4375));
   const remainingDays = Math.floor(daysTogether % 30.4375);
@@ -61,25 +59,11 @@ export const LoveBookModal: React.FC<Props> = ({
     try {
       if (Platform.OS !== 'web') Vibration.vibrate(30);
       await Share.share({
-        message: `💖 El Libro de Nuestro Amor (Karlita & Javier)\n\n✨ Llevamos ${daysTogether} días juntos con una racha de amor de ${streakCount} días.\n📸 ${milestones.length} recuerdos inolvidables guardados en nuestro corazón.\n\n"Te amo hoy más que ayer y menos que mañana."`,
-        title: 'El Libro de Nuestro Amor',
+        message: `💖 Collage Semanal de Nuestro Amor (Karlita & Javier)\n\n✨ Llevamos ${daysTogether} días juntos (${timeTogetherLabel}).\n🔥 Racha de conexión: ${streakCount} días.\n🐾 Mascota: ${petName}\n📸 ${milestones.length} momentos inolvidables en nuestro álbum.\n\n"Te amo hoy más que ayer y menos que mañana."`,
+        title: 'Collage de Nuestro Amor',
       });
     } catch (e) {
       console.warn(e);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages - 1) {
-      if (Platform.OS !== 'web') Vibration.vibrate(15);
-      setCurrentPage((p) => p + 1);
-    }
-  };
-
-  const handlePrevPage = () => {
-    if (currentPage > 0) {
-      if (Platform.OS !== 'web') Vibration.vibrate(15);
-      setCurrentPage((p) => p - 1);
     }
   };
 
@@ -87,7 +71,7 @@ export const LoveBookModal: React.FC<Props> = ({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.bookContainer}>
-          {/* Header del Libro */}
+          {/* Header del Collage */}
           <View style={styles.bookHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <TouchableOpacity
@@ -95,8 +79,8 @@ export const LoveBookModal: React.FC<Props> = ({
                 style={styles.storyHeaderBtn}
                 accessibilityLabel="Historia de Instagram"
               >
-                <Ionicons name="logo-instagram" size={18} color="#ffffff" />
-                <Text style={styles.storyHeaderBtnText}>Historia</Text>
+                <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+                <Text style={styles.storyHeaderBtnText}>Historia 9:16</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleShareSummary} style={styles.shareBtn}>
                 <Ionicons name="share-outline" size={20} color="#f59e0b" />
@@ -104,11 +88,7 @@ export const LoveBookModal: React.FC<Props> = ({
             </View>
 
             <View style={styles.pageIndicatorContainer}>
-              <Text style={styles.pageIndicatorText}>
-                {currentPage === 0
-                  ? 'Portada'
-                  : `Página ${currentPage} de ${totalPages - 1}`}
-              </Text>
+              <Text style={styles.pageIndicatorText}>Collage de Amor</Text>
             </View>
 
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -116,205 +96,126 @@ export const LoveBookModal: React.FC<Props> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Páginas del Libro */}
-          <View style={styles.pageViewport}>
-            {/* PÁGINA 0: PORTADA EDITORIAL */}
-            {currentPage === 0 && (
-              <ScrollView
-                style={styles.pageScroll}
-                contentContainerStyle={styles.coverPageContent}
-              >
-                <View style={styles.goldBorderOuter}>
-                  <View style={styles.goldBorderInner}>
-                    <Ionicons name="sparkles" size={28} color="#f59e0b" style={{ marginBottom: 8 }} />
-                    <Text style={styles.coverTitle}>EL LIBRO DE NUESTRO AMOR</Text>
-                    <View style={styles.titleDivider} />
-                    <Text style={styles.coverCouple}>Karlita & Javier</Text>
+          {/* Contenido: Collage Visual Continuo de Nuestro Amor */}
+          <ScrollView
+            style={styles.pageScroll}
+            contentContainerStyle={styles.collageScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* 1. PORTADA EDITORIAL DEL COLLAGE */}
+            <View style={styles.goldBorderOuter}>
+              <View style={styles.goldBorderInner}>
+                <Ionicons name="sparkles" size={26} color="#f59e0b" style={{ marginBottom: 6 }} />
+                <Text style={styles.coverTitle}>COLLAGE DE NUESTRO AMOR</Text>
+                <View style={styles.titleDivider} />
+                <Text style={styles.coverCouple}>Karlita & Javier</Text>
 
-                    <View style={styles.mascotHolder}>
-                      <MoodMascot feeling="enamorado" size="md" accentColor={primaryColor} accessory="crown" />
-                    </View>
+                <View style={styles.mascotHolder}>
+                  <MoodMascot feeling="enamorado" size="md" accentColor={primaryColor} accessory="crown" />
+                  <Text style={styles.mascotNameBadge}>🐾 {petName}</Text>
+                </View>
 
-                    <View style={styles.statsBadgeRow}>
-                      <View style={styles.statsBadge}>
-                        <Ionicons name="flame" size={16} color="#f59e0b" />
-                        <Text style={styles.statsBadgeNum}>{daysTogether}</Text>
-                        <Text style={styles.statsBadgeLabel}>Días Juntos</Text>
-                      </View>
-                      <View style={styles.statsBadge}>
-                        <Ionicons name="images" size={16} color="#38bdf8" />
-                        <Text style={styles.statsBadgeNum}>{milestones.length}</Text>
-                        <Text style={styles.statsBadgeLabel}>Recuerdos</Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.coverQuote}>
-                      "Una historia de amor escrita día con día, sonrisa con sonrisa."
-                    </Text>
-
-                    <TouchableOpacity
-                      onPress={() => setIsStoryCardOpen(true)}
-                      style={styles.storyCoverBtn}
-                    >
-                      <Ionicons name="logo-instagram" size={17} color="#ffffff" />
-                      <Text style={styles.storyCoverBtnText}>Tarjeta para Historia de Instagram</Text>
-                    </TouchableOpacity>
+                {/* Métricas destacadas */}
+                <View style={styles.statsBadgeRow}>
+                  <View style={styles.statsBadge}>
+                    <Ionicons name="flame" size={16} color="#f59e0b" />
+                    <Text style={styles.statsBadgeNum}>{daysTogether}</Text>
+                    <Text style={styles.statsBadgeLabel}>Días Juntos</Text>
+                  </View>
+                  <View style={styles.statsBadge}>
+                    <Ionicons name="calendar" size={16} color="#ec4899" />
+                    <Text style={styles.statsBadgeNum}>{monthsTogether}m {remainingDays}d</Text>
+                    <Text style={styles.statsBadgeLabel}>Mesiversario</Text>
+                  </View>
+                  <View style={styles.statsBadge}>
+                    <Ionicons name="images" size={16} color="#38bdf8" />
+                    <Text style={styles.statsBadgeNum}>{milestones.length}</Text>
+                    <Text style={styles.statsBadgeLabel}>Recuerdos</Text>
                   </View>
                 </View>
-              </ScrollView>
-            )}
 
-            {/* PÁGINA 1: NUESTRAS ESTADÍSTICAS & CRONOLOGÍA */}
-            {currentPage === 1 && (
-              <ScrollView style={styles.pageScroll} contentContainerStyle={styles.innerPageContent}>
-                <Text style={styles.pageHeaderLabel}>CAPÍTULO I</Text>
-                <Text style={styles.pageHeaderTitle}>Nuestra Historia en Números</Text>
-                <View style={styles.chapterDivider} />
+                <Text style={styles.coverQuote}>
+                  "Una historia de amor escrita día con día, sonrisa con sonrisa."
+                </Text>
 
-                <View style={styles.statGrid}>
-                  <View style={styles.statCard}>
-                    <Ionicons name="heart" size={24} color="#ec4899" />
-                    <Text style={styles.statBigNumber}>{daysTogether}</Text>
-                    <Text style={styles.statCardTitle}>Días Compartidos</Text>
-                    <Text style={styles.statCardDesc}>Llenos de risas y momentos inolvidables</Text>
-                  </View>
-
-                  <View style={styles.statCard}>
-                    <Ionicons name="flame" size={24} color="#f59e0b" />
-                    <Text style={styles.statBigNumber}>{streakCount}</Text>
-                    <Text style={styles.statCardTitle}>Días de Racha Activa</Text>
-                    <Text style={styles.statCardDesc}>Conexión diaria sin parar</Text>
-                  </View>
-
-                  <View style={styles.statCard}>
-                    <Ionicons name="mail" size={24} color="#8b5cf6" />
-                    <Text style={styles.statBigNumber}>{messages.length}</Text>
-                    <Text style={styles.statCardTitle}>Cartas de Amor</Text>
-                    <Text style={styles.statCardDesc}>Palabras sinceras selladas en el tiempo</Text>
-                  </View>
-
-                  <View style={styles.statCard}>
-                    <Ionicons name="location" size={24} color="#10b981" />
-                    <Text style={styles.statBigNumber}>{places.length}</Text>
-                    <Text style={styles.statCardTitle}>Lugares Especiales</Text>
-                    <Text style={styles.statCardDesc}>Rincones mágicos de nuestra historia</Text>
-                  </View>
-                </View>
-              </ScrollView>
-            )}
-
-            {/* PÁGINA 2: ÁLBUM FOTOGRÁFICO DE RECUERDOS */}
-            {currentPage === 2 && (
-              <ScrollView style={styles.pageScroll} contentContainerStyle={styles.innerPageContent}>
-                <Text style={styles.pageHeaderLabel}>CAPÍTULO II</Text>
-                <Text style={styles.pageHeaderTitle}>Momentos Inolvidables</Text>
-                <View style={styles.chapterDivider} />
-
-                {milestones.length === 0 ? (
-                  <View style={styles.emptyBookPage}>
-                    <Ionicons name="images-outline" size={48} color="#64748b" />
-                    <Text style={styles.emptyBookText}>Aún no hay fotos en su álbum</Text>
-                  </View>
-                ) : (
-                  milestones.slice(0, 6).map((item, idx) => (
-                    <View key={item.id || idx} style={styles.milestoneEditorialCard}>
-                      {item.image_url ? (
-                        <Image
-                          source={{ uri: item.image_url }}
-                          style={styles.milestoneEditorialImage}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-                      <View style={styles.milestoneEditorialMeta}>
-                        <Text style={styles.milestoneEditorialTitle}>{item.title}</Text>
-                        <Text style={styles.milestoneEditorialDate}>{item.date}</Text>
-                      </View>
-                    </View>
-                  ))
-                )}
-              </ScrollView>
-            )}
-
-            {/* PÁGINA 3: CARTAS DE AMOR & NUESTRA MÚSICA */}
-            {currentPage === 3 && (
-              <ScrollView style={styles.pageScroll} contentContainerStyle={styles.innerPageContent}>
-                <Text style={styles.pageHeaderLabel}>CAPÍTULO III</Text>
-                <Text style={styles.pageHeaderTitle}>Nuestras Cartas y Melodías</Text>
-                <View style={styles.chapterDivider} />
-
-                {todaySong && (
-                  <View style={styles.songFeatureBox}>
-                    <Ionicons name="musical-notes" size={24} color="#f59e0b" />
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.songFeatureTitle}>{todaySong.title}</Text>
-                      <Text style={styles.songFeatureArtist}>{todaySong.artist}</Text>
-                      <Text style={styles.songFeatureDedication}>
-                        "{todaySong.dedication || 'Nuestra melodía especial'}"
-                      </Text>
-                    </View>
-                  </View>
-                )}
-
-                <Text style={styles.subSectionTitle}>Cartas Guardadas en el Corazón</Text>
-                {messages.length === 0 ? (
-                  <Text style={styles.emptyBookText}>Aún no han redactado cartas selladas.</Text>
-                ) : (
-                  messages.slice(0, 3).map((m) => (
-                    <View key={m.id} style={styles.letterExcerptCard}>
-                      <Ionicons name="quote" size={16} color="#94a3b8" style={{ marginBottom: 4 }} />
-                      <Text style={styles.letterExcerptContent} numberOfLines={4}>
-                        {m.content}
-                      </Text>
-                      <Text style={styles.letterExcerptAuthor}>
-                        De: {m.sender || 'Karlita'} · {m.scheduled_date}
-                      </Text>
-                    </View>
-                  ))
-                )}
-              </ScrollView>
-            )}
-          </View>
-
-          {/* Footer del Libro con Navegación de Páginas */}
-          <View style={styles.bookFooter}>
-            <TouchableOpacity
-              onPress={handlePrevPage}
-              disabled={currentPage === 0}
-              style={[styles.navBtn, currentPage === 0 && styles.navBtnDisabled]}
-            >
-              <Ionicons name="arrow-back" size={18} color={currentPage === 0 ? '#475569' : '#ffffff'} />
-              <Text style={[styles.navBtnText, currentPage === 0 && { color: '#475569' }]}>
-                Anterior
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.dotsRow}>
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    currentPage === i && { backgroundColor: '#f59e0b', width: 16 },
-                  ]}
-                />
-              ))}
+                <TouchableOpacity
+                  onPress={() => setIsStoryCardOpen(true)}
+                  style={styles.storyCoverBtn}
+                >
+                  <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+                  <Text style={styles.storyCoverBtnText}>Crear Historia para Instagram</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
+            {/* 2. MOSAICO / COLLAGE DE FOTOGRAFÍAS */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderLabel}>NUESTROS MOMENTOS</Text>
+              <Text style={styles.sectionHeaderTitle}>Mosaico de Recuerdos</Text>
+              <View style={styles.chapterDivider} />
+            </View>
+
+            {milestones.length === 0 ? (
+              <View style={styles.emptyCollageBox}>
+                <Ionicons name="images-outline" size={44} color="#64748b" />
+                <Text style={styles.emptyCollageText}>Aún no han agregado fotos en Recuerdos</Text>
+              </View>
+            ) : (
+              <View style={styles.photoGrid}>
+                {milestones.map((item, idx) => (
+                  <View key={item.id || idx} style={styles.polaroidCard}>
+                    {item.image_url ? (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.polaroidImage}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                    <View style={styles.polaroidFooter}>
+                      <Text style={styles.polaroidTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={styles.polaroidDate}>{item.date}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* 3. EXTRACTOS DE CARTAS DE AMOR */}
+            {messages.length > 0 && (
+              <>
+                <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+                  <Text style={styles.sectionHeaderLabel}>PALABRAS DEL CORAZÓN</Text>
+                  <Text style={styles.sectionHeaderTitle}>Cartas que nos Dedicamos</Text>
+                  <View style={styles.chapterDivider} />
+                </View>
+
+                {messages.slice(0, 3).map((m) => (
+                  <View key={m.id} style={styles.letterExcerptCard}>
+                    <Ionicons name="quote" size={16} color="#f59e0b" style={{ marginBottom: 4 }} />
+                    <Text style={styles.letterExcerptContent} numberOfLines={4}>
+                      {m.content}
+                    </Text>
+                    <Text style={styles.letterExcerptAuthor}>
+                      De: {m.sender || 'Karlita'} · {m.scheduled_date}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+
+            {/* 4. BOTÓN DESCARGAR / COMPARTIR RESUMEN */}
             <TouchableOpacity
-              onPress={handleNextPage}
-              disabled={currentPage === totalPages - 1}
-              style={[styles.navBtn, currentPage === totalPages - 1 && styles.navBtnDisabled]}
+              onPress={handleShareSummary}
+              style={[styles.downloadCollageBtn, { backgroundColor: primaryColor }]}
             >
-              <Text style={[styles.navBtnText, currentPage === totalPages - 1 && { color: '#475569' }]}>
-                Siguiente
-              </Text>
-              <Ionicons
-                name="arrow-forward"
-                size={18}
-                color={currentPage === totalPages - 1 ? '#475569' : '#ffffff'}
-              />
+              <Ionicons name="share-social" size={18} color="#ffffff" />
+              <Text style={styles.downloadCollageText}>Descargar / Compartir Collage</Text>
             </TouchableOpacity>
-          </View>
+
+            <Text style={styles.onDemandDisclaimer}>
+              ✨ Este collage se genera en tiempo real cuando lo solicitas, sin ocupar espacio adicional en la base de datos.
+            </Text>
+          </ScrollView>
         </View>
       </View>
 
@@ -332,7 +233,7 @@ export const LoveBookModal: React.FC<Props> = ({
                 onPress={() => {
                   if (Platform.OS !== 'web') Vibration.vibrate(30);
                   void Share.share({
-                    message: `💖 ¡Celebrando nuestro Mesiversario! (${timeTogetherLabel})\n\n✨ Llevamos ${daysTogether} días juntos llenos de amor y momentos mágicos.\nKarlita & Javier 💕\n\n"Te amo hoy más que ayer y menos que mañana."`,
+                    message: `💖 ¡Celebrando nuestro Mesiversario! (${timeTogetherLabel})\n\n✨ Llevamos ${daysTogether} días juntos con ${petName}.\nKarlita & Javier 💕\n\n"Te amo hoy más que ayer y menos que mañana."`,
                     title: 'Historia de Nuestro Mesiversario',
                   });
                 }}
@@ -354,9 +255,10 @@ export const LoveBookModal: React.FC<Props> = ({
                 <Text style={styles.storyCoupleName}>Karlita & Javier</Text>
                 <Text style={styles.storyDaysCount}>{daysTogether} Días de Puro Amor</Text>
 
-                {/* Pochito con Corona */}
+                {/* Mascota personalizada */}
                 <View style={styles.storyMascotHolder}>
                   <MoodMascot feeling="enamorado" size="lg" accentColor={primaryColor} accessory="crown" />
+                  <Text style={styles.storyMascotName}>🐾 {petName}</Text>
                 </View>
 
                 {/* Foto destacada si existe */}
@@ -404,33 +306,260 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 30,
-    paddingHorizontal: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 14,
   },
   bookContainer: {
     width: '100%',
-    height: '95%',
+    height: '96%',
     backgroundColor: '#0f172a',
     borderRadius: 24,
     borderWidth: 2,
     borderColor: '#334155',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 8,
   },
   bookHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#1e293b',
   },
   shareBtn: {
     padding: 6,
+  },
+  pageIndicatorContainer: {
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pageIndicatorText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#f59e0b',
+  },
+  closeBtn: {
+    padding: 6,
+  },
+  pageScroll: {
+    flex: 1,
+    backgroundColor: '#130c24',
+  },
+  collageScrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  goldBorderOuter: {
+    width: '100%',
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    borderRadius: 16,
+    padding: 6,
+  },
+  goldBorderInner: {
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderRadius: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  coverTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: '#f59e0b',
+    textAlign: 'center',
+  },
+  titleDivider: {
+    width: 60,
+    height: 2,
+    backgroundColor: '#f59e0b',
+    marginVertical: 8,
+  },
+  coverCouple: {
+    fontSize: 24,
+    fontFamily: SERIF_FONT,
+    color: '#ffffff',
+    fontStyle: 'italic',
+    marginBottom: 10,
+  },
+  mascotHolder: {
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  mascotNameBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  statsBadgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 14,
+  },
+  statsBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    flex: 1,
+  },
+  statsBadgeNum: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  statsBadgeLabel: {
+    fontSize: 9,
+    color: '#cbd5e1',
+    fontWeight: '600',
+  },
+  coverQuote: {
+    fontSize: 12,
+    fontFamily: SERIF_FONT,
+    fontStyle: 'italic',
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  storyCoverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e1306c',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    gap: 8,
+    marginTop: 14,
+  },
+  storyCoverBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  sectionHeaderLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    color: '#f59e0b',
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontFamily: SERIF_FONT,
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  chapterDivider: {
+    width: 36,
+    height: 2,
+    backgroundColor: '#f59e0b',
+    marginTop: 6,
+  },
+  emptyCollageBox: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  emptyCollageText: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 6,
+  },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  polaroidCard: {
+    width: (SCREEN_W - 56) / 2,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 6,
+    paddingBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  polaroidImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 6,
+  },
+  polaroidFooter: {
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  polaroidTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  polaroidDate: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  letterExcerptCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  letterExcerptContent: {
+    fontSize: 13,
+    fontFamily: SERIF_FONT,
+    fontStyle: 'italic',
+    color: '#f1f5f9',
+    lineHeight: 18,
+  },
+  letterExcerptAuthor: {
+    fontSize: 11,
+    color: '#f59e0b',
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  downloadCollageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 8,
+    marginTop: 24,
+  },
+  downloadCollageText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  onDemandDisclaimer: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
   },
   storyHeaderBtn: {
     flexDirection: 'row',
@@ -443,25 +572,6 @@ const styles = StyleSheet.create({
   },
   storyHeaderBtnText: {
     fontSize: 11,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  storyCoverBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e1306c',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    gap: 8,
-    marginTop: 18,
-    shadowColor: '#e1306c',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  storyCoverBtnText: {
-    fontSize: 13,
     fontWeight: '800',
     color: '#ffffff',
   },
@@ -558,6 +668,13 @@ const styles = StyleSheet.create({
   },
   storyMascotHolder: {
     marginVertical: 4,
+    alignItems: 'center',
+  },
+  storyMascotName: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#f59e0b',
+    marginTop: 2,
   },
   storyPhotoFrame: {
     width: '85%',
@@ -622,283 +739,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '800',
-  },
-  pageIndicatorContainer: {
-    backgroundColor: '#1e293b',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  pageIndicatorText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#f59e0b',
-  },
-  closeBtn: {
-    padding: 6,
-  },
-  pageViewport: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  pageScroll: {
-    flex: 1,
-  },
-  coverPageContent: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100%',
-    backgroundColor: '#1a102f', // Morado noche profundo editorial
-  },
-  goldBorderOuter: {
-    width: '100%',
-    borderWidth: 2,
-    borderColor: '#f59e0b',
-    borderRadius: 16,
-    padding: 6,
-  },
-  goldBorderInner: {
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.4)',
-    borderRadius: 10,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  coverTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 2,
-    color: '#f59e0b',
-    textAlign: 'center',
-  },
-  titleDivider: {
-    width: 60,
-    height: 2,
-    backgroundColor: '#f59e0b',
-    marginVertical: 10,
-  },
-  coverCouple: {
-    fontSize: 26,
-    fontFamily: SERIF_FONT,
-    color: '#ffffff',
-    fontStyle: 'italic',
-    marginBottom: 16,
-  },
-  mascotHolder: {
-    marginVertical: 12,
-  },
-  statsBadgeRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginVertical: 16,
-  },
-  statsBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  statsBadgeNum: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginTop: 2,
-  },
-  statsBadgeLabel: {
-    fontSize: 10,
-    color: '#cbd5e1',
-    fontWeight: '600',
-  },
-  coverQuote: {
-    fontSize: 13,
-    fontFamily: SERIF_FONT,
-    fontStyle: 'italic',
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: 8,
-  },
-  innerPageContent: {
-    padding: 24,
-    backgroundColor: '#fdfbf7', // Textura de papel fino marfil
-    minHeight: '100%',
-  },
-  pageHeaderLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 2,
-    color: '#b45309',
-    textAlign: 'center',
-  },
-  pageHeaderTitle: {
-    fontSize: 20,
-    fontFamily: SERIF_FONT,
-    color: '#0f172a',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  chapterDivider: {
-    width: 40,
-    height: 2,
-    backgroundColor: '#f59e0b',
-    alignSelf: 'center',
-    marginVertical: 14,
-  },
-  statGrid: {
-    gap: 12,
-  },
-  statCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  statBigNumber: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#0f172a',
-    marginTop: 4,
-  },
-  statCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
-    marginTop: 2,
-  },
-  statCardDesc: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  emptyBookPage: {
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  emptyBookText: {
-    fontSize: 14,
-    color: '#64748b',
-    fontStyle: 'italic',
-    marginTop: 10,
-  },
-  milestoneEditorialCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  milestoneEditorialImage: {
-    width: '100%',
-    height: 180,
-  },
-  milestoneEditorialMeta: {
-    padding: 14,
-  },
-  milestoneEditorialTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  milestoneEditorialDate: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  songFeatureBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fffbeb',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#fef3c7',
-    marginBottom: 20,
-  },
-  songFeatureTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  songFeatureArtist: {
-    fontSize: 13,
-    color: '#64748b',
-  },
-  songFeatureDedication: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#b45309',
-    marginTop: 2,
-  },
-  subSectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#334155',
-    marginBottom: 10,
-  },
-  letterExcerptCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  letterExcerptContent: {
-    fontSize: 13,
-    fontFamily: SERIF_FONT,
-    fontStyle: 'italic',
-    color: '#334155',
-    lineHeight: 18,
-  },
-  letterExcerptAuthor: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginTop: 8,
-    textAlign: 'right',
-  },
-  bookFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    backgroundColor: '#0f172a',
-  },
-  navBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  navBtnDisabled: {
-    opacity: 0.5,
-  },
-  navBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#475569',
   },
 });

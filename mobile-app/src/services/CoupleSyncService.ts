@@ -426,7 +426,7 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   );
 
   const couplePet = {
-    name: incPet.name && incPet.name !== 'Pochito' ? incPet.name : (basePet.name || 'Pochito'),
+    name: incPet.name || basePet.name || 'Pochito',
     level: Math.max(basePet.level || 1, incPet.level || 1),
     xp: Math.max(basePet.xp || 0, incPet.xp || 0),
     happiness: Math.max(basePet.happiness || 50, incPet.happiness || 50),
