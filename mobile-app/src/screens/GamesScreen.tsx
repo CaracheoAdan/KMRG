@@ -16,6 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../components/ui/Icon';
 import { PressableScale } from '../components/ui/Kit';
 import { useProfile } from '../contexts/ProfileContext';
@@ -2052,9 +2053,15 @@ export const GamesScreen: React.FC = () => {
 
             return (
               <View style={[styles.launchModalCard, { backgroundColor: colors.surface, borderColor: `${gameInfo.iconColor}40` }]}>
-                <View style={[styles.launchModalIconBox, { backgroundColor: gameInfo.bgTint }]}>
-                  <Ionicons name={gameInfo.icon as any} size={40} color={gameInfo.iconColor} />
-                </View>
+                {/* Ícono Grande con Degradado Temático */}
+                <LinearGradient
+                  colors={[gameInfo.iconColor, `${gameInfo.iconColor}b3`]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.launchModalIconBox}
+                >
+                  <Ionicons name={gameInfo.icon as any} size={40} color="#ffffff" />
+                </LinearGradient>
 
                 <Text style={[styles.launchModalTitle, { color: colors.text }]}>
                   {gameInfo.label}
@@ -2062,6 +2069,49 @@ export const GamesScreen: React.FC = () => {
                 <Text style={[styles.launchModalSubtitle, { color: colors.textSecondary }]}>
                   {gameInfo.description}
                 </Text>
+
+                {/* Resumen del Marcador de la Pareja en este Juego */}
+                {(() => {
+                  const bdKey = pendingGameToLaunch as keyof GameScoreBreakdown;
+                  const item = gamesState.leaderboard?.breakdown?.[bdKey];
+                  const winsK = item?.winsKarla ?? 0;
+                  const winsJ = item?.winsJavier ?? 0;
+                  const ptsK = item?.pointsKarla ?? 0;
+                  const ptsJ = item?.pointsJavier ?? 0;
+
+                  return (
+                    <View style={[styles.launchModalScoreBox, { backgroundColor: isDark ? colors.surfaceAlt : '#f8fafc', borderColor: colors.border }]}>
+                      <View style={styles.launchModalPlayerScore}>
+                        <View style={[styles.launchMiniAvatar, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
+                          <Text style={[styles.launchMiniAvatarText, { color: '#be185d' }]}>K</Text>
+                        </View>
+                        <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
+                          {getDisplayName('Karla')}
+                        </Text>
+                        <Text style={styles.launchModalPlayerWins}>{winsK} vict.</Text>
+                        <Text style={styles.launchModalPlayerPts}>{ptsK} pts</Text>
+                      </View>
+
+                      <View style={styles.launchModalVsDivider}>
+                        <View style={styles.launchModalVsCircle}>
+                          <Text style={styles.launchModalVsText}>VS</Text>
+                        </View>
+                        <Ionicons name="trophy" size={12} color="#f59e0b" style={{ marginTop: 2 }} />
+                      </View>
+
+                      <View style={[styles.launchModalPlayerScore, { alignItems: 'flex-end' }]}>
+                        <View style={[styles.launchMiniAvatar, { backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }]}>
+                          <Text style={[styles.launchMiniAvatarText, { color: '#0369a1' }]}>J</Text>
+                        </View>
+                        <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
+                          {getDisplayName('Javier')}
+                        </Text>
+                        <Text style={styles.launchModalPlayerWins}>{winsJ} vict.</Text>
+                        <Text style={styles.launchModalPlayerPts}>{ptsJ} pts</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
 
                 <View
                   style={[
@@ -2088,21 +2138,33 @@ export const GamesScreen: React.FC = () => {
                   </Text>
                 </View>
 
+                {/* Botón Primario Unificado con Haptic Feedback */}
                 <TouchableOpacity
                   onPress={() => {
+                    void triggerGameHaptic('medium');
                     const toLaunch = pendingGameToLaunch;
                     setPendingGameToLaunch(null);
                     setActiveGame(toLaunch);
                   }}
-                  style={[styles.launchPrimaryBtn, { backgroundColor: gameInfo.iconColor }]}
+                  style={{ width: '100%' }}
                   activeOpacity={0.88}
                 >
-                  <Ionicons name="play" size={18} color="#ffffff" />
-                  <Text style={styles.launchPrimaryBtnText}>Iniciar Partida</Text>
+                  <LinearGradient
+                    colors={[gameInfo.iconColor, `${gameInfo.iconColor}dd`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.launchPrimaryBtn}
+                  >
+                    <Ionicons name="play" size={18} color="#ffffff" />
+                    <Text style={styles.launchPrimaryBtnText}>Iniciar Partida</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  onPress={() => setPendingGameToLaunch(null)}
+                  onPress={() => {
+                    void triggerGameHaptic('light');
+                    setPendingGameToLaunch(null);
+                  }}
                   style={styles.launchCancelBtn}
                   activeOpacity={0.7}
                 >
@@ -2402,15 +2464,20 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     elevation: 6,
   },
   launchModalIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 72,
+    height: 72,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   launchModalTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700',
     fontFamily: SERIF_FONT,
     marginBottom: 4,
@@ -2419,24 +2486,84 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   launchModalSubtitle: {
     fontSize: 12.5,
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
+  },
+  launchModalScoreBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  launchModalPlayerScore: {
+    flex: 1,
+    gap: 1,
+  },
+  launchMiniAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  launchMiniAvatarText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  launchModalPlayerName: {
+    fontSize: 11.5,
+    fontWeight: '800',
+  },
+  launchModalPlayerWins: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  launchModalPlayerPts: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  launchModalVsDivider: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  launchModalVsCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  launchModalVsText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#64748b',
   },
   launchModalStatusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   launchModalStatusText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   launchPrimaryBtn: {
-    width: '100%',
+    width: '100%' as const,
     height: 48,
     borderRadius: 14,
     flexDirection: 'row',
@@ -2444,10 +2571,10 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 3,
   },
   launchPrimaryBtnText: {
     fontSize: 15,
@@ -2455,12 +2582,12 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     color: '#ffffff',
   },
   launchCancelBtn: {
-    marginTop: 12,
-    paddingVertical: 8,
+    marginTop: 10,
+    paddingVertical: 6,
     paddingHorizontal: 16,
   },
   launchCancelBtnText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
   },
   lobbyScoreboard: {

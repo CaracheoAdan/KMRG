@@ -60,8 +60,14 @@ export const GAMES_THEME = {
     oceanDeep: ['#082f49', '#0c4a6e', '#075985'] as const,
     woodDark: ['#451a03', '#78350f', '#92400e'] as const,
     woodLightSquare: '#fef3c7',
-    woodDarkSquare: '#b45309',
+    woodDarkSquare: '#92400e',
+    woodMaple: ['#fef3c7', '#fde68a'] as const,
+    woodWalnut: ['#92400e', '#78350f'] as const,
+    woodBevelBorder: '#451a03',
+    woodGoldRim: '#d97706',
     neonCard: ['#1e1b4b', '#312e81', '#1e1b4b'] as const,
+    tictactoeGlass: 'rgba(255, 255, 255, 0.09)',
+    tictactoeBorder: 'rgba(168, 85, 247, 0.28)',
   },
 
   // Escala Estricta de Espaciado (4, 8, 12, 16, 24, 32)

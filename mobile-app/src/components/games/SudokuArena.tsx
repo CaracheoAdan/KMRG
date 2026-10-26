@@ -144,49 +144,6 @@ export const SudokuArena: React.FC<Props> = ({
             );
           })}
         </View>
-
-        {/* Herramientas: Lápiz, Borrar, Pista */}
-        <View style={styles.toolsRow}>
-          <TouchableOpacity
-            onPress={() => {
-              void triggerGameHaptic('selection');
-              setIsNoteMode((prev) => !prev);
-            }}
-            style={[
-              styles.toolBtn,
-              isNoteMode && styles.toolBtnActive,
-            ]}
-            accessibilityLabel="Activar notas"
-          >
-            <Ionicons
-              name="pencil"
-              size={17}
-              color={isNoteMode ? '#ffffff' : '#475569'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              void triggerGameHaptic('light');
-              onNumberPress(0);
-            }}
-            style={styles.toolBtn}
-            accessibilityLabel="Borrar celda"
-          >
-            <Ionicons name="trash-outline" size={17} color="#475569" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              void triggerGameHaptic('medium');
-              onHint();
-            }}
-            style={[styles.toolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}
-            accessibilityLabel="Obtener pista mágica"
-          >
-            <Ionicons name="bulb" size={17} color="#d97706" />
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* 2. Cuadrícula 9x9 con Números Grandes y Nítidos */}
@@ -280,23 +237,57 @@ export const SudokuArena: React.FC<Props> = ({
         ))}
       </Animated.View>
 
-      {/* 3. Leyenda de Colores */}
-      <View style={styles.colorLegendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#0f172a' }]} />
-          <Text style={styles.legendText}>Original</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#9333ea' }]} />
-          <Text style={[styles.legendText, { color: '#9333ea' }]}>Karlita</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#0284c7' }]} />
-          <Text style={[styles.legendText, { color: '#0284c7' }]}>Javier</Text>
-        </View>
-      </View>
+      {/* 3. Dock Inferior: Herramientas, Teclado 1–9 y Leyenda */}
+      <View style={[styles.bottomDock, { width: availableWidth }]}>
+        {/* Fila de Herramientas */}
+        <View style={styles.dockToolsRow}>
+          <TouchableOpacity
+            onPress={() => {
+              void triggerGameHaptic('selection');
+              setIsNoteMode((prev) => !prev);
+            }}
+            style={[
+              styles.dockToolBtn,
+              isNoteMode && styles.dockToolBtnActive,
+            ]}
+            accessibilityLabel="Activar notas"
+          >
+            <Ionicons
+              name="pencil"
+              size={15}
+              color={isNoteMode ? '#ffffff' : '#6366f1'}
+            />
+            <Text style={[styles.dockToolBtnText, isNoteMode && { color: '#ffffff' }]}>
+              {isNoteMode ? 'Notas: ON' : 'Notas'}
+            </Text>
+          </TouchableOpacity>
 
-      {/* 4. Teclado Numérico 1–9 Fijo con Botones Robustos (Ancho Explícito, Nunca se Colapsan) */}
+          <TouchableOpacity
+            onPress={() => {
+              void triggerGameHaptic('light');
+              onNumberPress(0);
+            }}
+            style={styles.dockToolBtn}
+            accessibilityLabel="Borrar celda"
+          >
+            <Ionicons name="trash-outline" size={15} color="#475569" />
+            <Text style={styles.dockToolBtnText}>Borrar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              void triggerGameHaptic('medium');
+              onHint();
+            }}
+            style={[styles.dockToolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}
+            accessibilityLabel="Obtener pista mágica"
+          >
+            <Ionicons name="bulb" size={15} color="#d97706" />
+            <Text style={[styles.dockToolBtnText, { color: '#b45309' }]}>Pista</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Teclado Numérico 1–9 Fijo */}
       {isSudokuGameOver ? (
         <TouchableOpacity
           onPress={() => onNewGame(sudoku.difficulty)}
@@ -339,6 +330,23 @@ export const SudokuArena: React.FC<Props> = ({
           </View>
         </View>
       )}
+
+        {/* Leyenda Explicativa de Colores */}
+        <View style={styles.colorLegendRow}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#0f172a' }]} />
+            <Text style={styles.legendText}>Original</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#9333ea' }]} />
+            <Text style={[styles.legendText, { color: '#9333ea' }]}>Karlita</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#0284c7' }]} />
+            <Text style={[styles.legendText, { color: '#0284c7' }]}>Javier</Text>
+          </View>
+        </View>
+      </View>
     </View>
   );
 };
@@ -389,6 +397,45 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: GAMES_THEME.radius.pill,
     backgroundColor: 'rgba(244, 63, 94, 0.08)',
+  },
+  bottomDock: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 8,
+    alignItems: 'center',
+    ...GAMES_THEME.shadows.soft,
+  },
+  dockToolsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  dockToolBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  dockToolBtnActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  dockToolBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
   },
   toolsRow: {
     flexDirection: 'row',

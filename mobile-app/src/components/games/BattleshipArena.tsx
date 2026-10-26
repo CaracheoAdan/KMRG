@@ -199,13 +199,28 @@ export const BattleshipArena: React.FC<Props> = ({
     const shipMeta = SHIP_CONFIG[ship.id] || { bg: '#0284c7' };
     const hullBg = isSunk ? '#ef4444' : isSelected ? '#38bdf8' : shipMeta.bg;
 
-    // Proa puntiaguda naval, popa recortada
+    // Proa puntiaguda naval, popa recortada continua
     const bowRadius = isHoriz
-      ? { borderTopLeftRadius: 10, borderBottomLeftRadius: 10 }
-      : { borderTopLeftRadius: 10, borderTopRightRadius: 10 };
+      ? { borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }
+      : { borderTopLeftRadius: 14, borderTopRightRadius: 14 };
     const sternRadius = isHoriz
-      ? { borderTopRightRadius: 3, borderBottomRightRadius: 3 }
-      : { borderBottomLeftRadius: 3, borderBottomRightRadius: 3 };
+      ? { borderTopRightRadius: 4, borderBottomRightRadius: 4 }
+      : { borderBottomLeftRadius: 4, borderBottomRightRadius: 4 };
+
+    // Bordes continuos sin divisiones de dominó entre celdas del mismo barco
+    const seamlessBorder = isHoriz
+      ? {
+          borderTopWidth: isSelected ? 2 : 1.5,
+          borderBottomWidth: isSelected ? 2 : 1.5,
+          borderLeftWidth: isBow ? (isSelected ? 2.5 : 1.5) : 0,
+          borderRightWidth: isStern ? (isSelected ? 2.5 : 1.5) : 0,
+        }
+      : {
+          borderLeftWidth: isSelected ? 2 : 1.5,
+          borderRightWidth: isSelected ? 2 : 1.5,
+          borderTopWidth: isBow ? (isSelected ? 2.5 : 1.5) : 0,
+          borderBottomWidth: isStern ? (isSelected ? 2.5 : 1.5) : 0,
+        };
 
     return (
       <View
@@ -214,10 +229,10 @@ export const BattleshipArena: React.FC<Props> = ({
           styles.navalHull,
           {
             backgroundColor: hullBg,
-            width: isHoriz ? '96%' : '80%',
-            height: isHoriz ? '80%' : '96%',
-            borderColor: isSelected ? '#fef08a' : 'rgba(255, 255, 255, 0.45)',
-            borderWidth: isSelected ? 2 : 1,
+            width: isHoriz ? '100%' : '84%',
+            height: isHoriz ? '84%' : '100%',
+            borderColor: isSelected ? '#fef08a' : 'rgba(255, 255, 255, 0.65)',
+            ...seamlessBorder,
           },
           isBow && bowRadius,
           isStern && sternRadius,

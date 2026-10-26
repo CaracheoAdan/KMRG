@@ -118,7 +118,7 @@ export const HangmanArena: React.FC<Props> = ({
           </Animated.View>
         </View>
 
-        {/* Cadalso Ilustrado */}
+        {/* Cadalso Ilustrado Centrado */}
         <View style={styles.gallowsContainer}>
           <View style={styles.gallowsBox}>
             {/* Horca de Madera */}
@@ -146,25 +146,29 @@ export const HangmanArena: React.FC<Props> = ({
             {wrongGuessesCount >= 5 && <View style={styles.hmLegLeft} />}
             {wrongGuessesCount >= 6 && <View style={styles.hmLegRight} />}
           </View>
+        </View>
 
-          {/* Pista y Estado */}
-          <View style={styles.hintWrap}>
+        {/* Pista y Estado debajo de la ilustración (no a un lado) */}
+        <View style={styles.hintWrapUnderGallows}>
+          <View style={styles.hintQuoteRow}>
+            <Ionicons name="chatbubble-ellipses-outline" size={15} color="#9333ea" />
             <Text style={styles.hintQuoteText} numberOfLines={3}>
               “{hangman.hint}”
             </Text>
-            {isWon && (
-              <View style={styles.statusPillWon}>
-                <Ionicons name="sparkles" size={13} color="#059669" />
-                <Text style={styles.statusTextWon}>¡Adivinaron la palabra!</Text>
-              </View>
-            )}
-            {isLost && (
-              <View style={styles.statusPillLost}>
-                <Ionicons name="skull" size={13} color="#dc2626" />
-                <Text style={styles.statusTextLost}>Era: {hangman.word}</Text>
-              </View>
-            )}
           </View>
+
+          {isWon && (
+            <View style={styles.statusPillWon}>
+              <Ionicons name="sparkles" size={13} color="#059669" />
+              <Text style={styles.statusTextWon}>¡Adivinaron la palabra! (+400)</Text>
+            </View>
+          )}
+          {isLost && (
+            <View style={styles.statusPillLost}>
+              <Ionicons name="skull" size={13} color="#dc2626" />
+              <Text style={styles.statusTextLost}>Palabra secreta: {hangman.word}</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -283,7 +287,7 @@ export const HangmanArena: React.FC<Props> = ({
           accessibilityLabel="Retar a mi pareja con palabra secreta"
         >
           <Ionicons name="sparkles" size={16} color="#ffffff" />
-          <Text style={styles.challengePartnerBtnText}>Retar Pareja</Text>
+          <Text style={styles.challengePartnerBtnText}>+400 Retar Pareja</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -490,6 +494,24 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     transform: [{ rotate: '45deg' }],
   },
+  hintWrapUnderGallows: {
+    width: '100%',
+    backgroundColor: '#fdf4ff',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 180, 254, 0.4)',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  hintQuoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
   hintWrap: {
     flex: 1,
     gap: 6,
@@ -623,16 +645,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#cbd5e1',
+    borderBottomWidth: 3,
+    borderBottomColor: '#94a3b8',
     ...GAMES_THEME.shadows.soft,
   },
   keyHit: {
     backgroundColor: '#10b981',
     borderColor: '#059669',
+    borderBottomWidth: 3,
+    borderBottomColor: '#047857',
   },
   keyMiss: {
-    backgroundColor: '#f1f5f9',
-    borderColor: '#e2e8f0',
-    opacity: 0.45,
+    backgroundColor: '#f8fafc',
+    borderColor: '#fca5a5',
+    borderBottomWidth: 2,
+    borderBottomColor: '#f87171',
   },
   keyText: {
     fontSize: 16,
@@ -645,7 +672,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   keyTextMiss: {
-    color: '#94a3b8',
+    color: '#dc2626',
     textDecorationLine: 'line-through',
   },
   actionsRow: {
