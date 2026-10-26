@@ -43,8 +43,6 @@ const MAX_SUDOKU_MISTAKES = 3;
 
 export const SudokuArena: React.FC<Props> = ({
   sudoku,
-  isFull,
-  primaryColor,
   currentProfile,
   isNoteMode,
   setIsNoteMode,
@@ -57,9 +55,10 @@ export const SudokuArena: React.FC<Props> = ({
 }) => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Tablero grande aprovechando el ancho útil con 16px a cada lado
-  const boardSize = Math.min(SCREEN_W - 32, 360);
-  const cellPx = Math.floor((boardSize - 12) / 9);
+  // Tablero grande aprovechando el ancho útil
+  const boardSize = Math.min(SCREEN_W - 20, 380);
+  const cellPx = Math.floor((boardSize - 10) / 9);
+  const digitFontSize = Math.floor(cellPx * 0.72); // Números grandes y legibles (~28px)
 
   // Contador de dígitos restantes
   const digitCounts: Record<number, number> = {
@@ -158,7 +157,7 @@ export const SudokuArena: React.FC<Props> = ({
           >
             <Ionicons
               name="pencil"
-              size={16}
+              size={17}
               color={isNoteMode ? '#ffffff' : '#475569'}
             />
           </TouchableOpacity>
@@ -171,7 +170,7 @@ export const SudokuArena: React.FC<Props> = ({
             style={styles.toolBtn}
             accessibilityLabel="Borrar celda"
           >
-            <Ionicons name="trash-outline" size={16} color="#475569" />
+            <Ionicons name="trash-outline" size={17} color="#475569" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -182,12 +181,12 @@ export const SudokuArena: React.FC<Props> = ({
             style={[styles.toolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}
             accessibilityLabel="Obtener pista mágica"
           >
-            <Ionicons name="bulb" size={16} color="#d97706" />
+            <Ionicons name="bulb" size={17} color="#d97706" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 2. Cuadrícula 9x9 con Marco de Porcelana Fina */}
+      {/* 2. Cuadrícula 9x9 con Números Grandes y Nítidos */}
       <Animated.View
         style={[
           styles.gridContainer,
@@ -255,7 +254,7 @@ export const SudokuArena: React.FC<Props> = ({
                     <Text
                       style={[
                         styles.valText,
-                        { fontSize: cellPx * 0.54 },
+                        { fontSize: digitFontSize },
                         isFixed
                           ? styles.fixedDigit
                           : currentProfile === 'Karla'
@@ -278,10 +277,10 @@ export const SudokuArena: React.FC<Props> = ({
         ))}
       </Animated.View>
 
-      {/* 3. Leyenda Pequeña Explicativa de Colores */}
+      {/* 3. Leyenda de Colores */}
       <View style={styles.colorLegendRow}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#1e293b' }]} />
+          <View style={[styles.legendDot, { backgroundColor: '#0f172a' }]} />
           <Text style={styles.legendText}>Original</Text>
         </View>
         <View style={styles.legendItem}>
@@ -294,7 +293,7 @@ export const SudokuArena: React.FC<Props> = ({
         </View>
       </View>
 
-      {/* 4. Teclado Numérico 1–9 Fijo (Botones Grandes 46px de alto con espacio y badge) */}
+      {/* 4. Teclado Numérico 1–9 Fijo con Dígitos Grandes (22px) y 52px de alto */}
       {isSudokuGameOver ? (
         <TouchableOpacity
           onPress={() => onNewGame(sudoku.difficulty)}
@@ -337,7 +336,7 @@ export const SudokuArena: React.FC<Props> = ({
         </View>
       )}
 
-      {/* 5. Footer con Racha y Tips de Pareja */}
+      {/* 5. Footer con Racha y Tips */}
       <MatchInfoFooter
         gameTip="El Sudoku es colaborativo: las celdas moradas son de Karla y las azules de Javier."
         streakCount={4}
@@ -351,7 +350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: GAMES_THEME.spacing.sm,
     width: '100%',
-    paddingHorizontal: GAMES_THEME.spacing.lg,
+    paddingHorizontal: 10,
   },
   topBar: {
     flexDirection: 'row',
@@ -399,14 +398,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   toolBtn: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
     ...GAMES_THEME.shadows.soft,
   },
   toolBtnActive: {
@@ -429,22 +428,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cellSelectedBorder: {
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#0284c7',
   },
   valText: {
-    fontWeight: '800',
+    fontWeight: '900',
+    textAlign: 'center',
   },
   fixedDigit: {
-    color: '#1e293b', // Negro / gris oscuro semibold original
-    fontWeight: '800',
+    color: '#0f172a', // Negro carbón profundo y ultra nítido
+    fontWeight: '900',
   },
   karlaDigit: {
-    color: '#9333ea', // Morado para Karla
+    color: '#9333ea', // Morado intenso para Karla
     fontWeight: '900',
   },
   javierDigit: {
-    color: '#0284c7', // Azul para Javier
+    color: '#0284c7', // Azul brillante para Javier
     fontWeight: '900',
   },
   wrongDigit: {
@@ -452,10 +452,11 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   notesText: {
-    fontSize: 8,
+    fontSize: 9.5,
+    fontWeight: '700',
     color: '#64748b',
     textAlign: 'center',
-    lineHeight: 9,
+    lineHeight: 11,
   },
   colorLegendRow: {
     flexDirection: 'row',
@@ -470,14 +471,14 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
   legendText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#334155',
   },
   numpadContainer: {
     width: '100%',
@@ -490,13 +491,13 @@ const styles = StyleSheet.create({
   },
   numKey: {
     flex: 1,
-    height: 48, // Mínimo 44px garantizado
+    height: 52, // 52px de altura táctil
     backgroundColor: '#ffffff',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
     ...GAMES_THEME.shadows.soft,
   },
   numKeyDone: {
@@ -505,7 +506,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   numKeyDigit: {
-    fontSize: 18,
+    fontSize: 22, // Dígito grande y claro
     fontWeight: '900',
     color: '#0f172a',
   },
@@ -513,7 +514,7 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   remainingCountText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '800',
     color: '#0284c7',
     marginTop: 1,

@@ -10,7 +10,6 @@ import {
 import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
-import { GameButton } from './common/GameButton';
 import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 interface Props {
@@ -72,25 +71,25 @@ export const HangmanArena: React.FC<Props> = ({
     (l) => !hangman.word.toUpperCase().includes(l)
   );
 
-  // Cálculo dinámico del ancho de casilla para que NUNCA queden letras huérfanas
+  // Palabras y casillas GRANDES y legibles
   const wordChars = hangman.word.split('');
-  const letterCount = wordChars.filter((c) => c !== ' ').length;
-  const availableWidth = SCREEN_W - 48;
-  const calcSlotWidth = Math.min(
-    38,
-    Math.max(22, Math.floor((availableWidth - letterCount * 6) / letterCount))
-  );
-  const slotHeight = Math.floor(calcSlotWidth * 1.25);
+  const isLongWord = wordChars.length > 7;
+
+  // Dimensiones amplias para que las letras se vean GRANDES (26px a 32px)
+  const slotWidth = isLongWord
+    ? Math.max(34, Math.floor((SCREEN_W - 64) / Math.min(wordChars.length, 6)))
+    : Math.min(48, Math.max(38, Math.floor((SCREEN_W - 56) / wordChars.length)));
+  const slotHeight = Math.floor(slotWidth * 1.25);
+  const letterFontSize = Math.floor(slotWidth * 0.72);
 
   return (
     <View style={styles.container}>
-      {/* 1. Tarjeta Principal: Cadalso Ilustrado Grande + Pista y Vidas */}
+      {/* 1. Tarjeta de Cadalso Expresivo + Vidas y Pista */}
       <View style={[styles.stageCard, GAMES_THEME.shadows.card]}>
         {/* Barra superior de la tarjeta: Vidas y Categoría */}
         <View style={styles.stageHeader}>
-          {/* Badge de Categoría */}
           <View style={styles.categoryBadge}>
-            <Ionicons name="bulb" size={13} color="#9333ea" />
+            <Ionicons name="bulb" size={14} color="#9333ea" />
             <Text style={styles.categoryText}>{hangman.category || 'Palabra Oculta'}</Text>
           </View>
 
@@ -102,7 +101,7 @@ export const HangmanArena: React.FC<Props> = ({
                 <Ionicons
                   key={i}
                   name={isAlive ? 'heart' : 'heart-dislike'}
-                  size={17}
+                  size={18}
                   color={isAlive ? '#f43f5e' : '#cbd5e1'}
                 />
               );
@@ -110,7 +109,7 @@ export const HangmanArena: React.FC<Props> = ({
           </Animated.View>
         </View>
 
-        {/* Cadalso Ilustrado Espacioso (150px de alto, bien proporcionado) */}
+        {/* Cadalso Ilustrado */}
         <View style={styles.gallowsContainer}>
           <View style={styles.gallowsBox}>
             {/* Horca de Madera */}
@@ -123,7 +122,6 @@ export const HangmanArena: React.FC<Props> = ({
             {/* Muñequito de Pareja Construido Trazo a Trazo */}
             {wrongGuessesCount >= 1 && (
               <View style={[styles.hmHead, isLost && styles.hmHeadLost]}>
-                {/* Lazo / Moño romántico o gorra */}
                 <View style={styles.hmAccessory} />
                 <View style={styles.hmEyesRow}>
                   <Text style={styles.hmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
@@ -140,32 +138,32 @@ export const HangmanArena: React.FC<Props> = ({
             {wrongGuessesCount >= 6 && <View style={styles.hmLegRight} />}
           </View>
 
-          {/* Pista o Estado de Partida */}
+          {/* Pista y Estado */}
           <View style={styles.hintWrap}>
             <Text style={styles.hintQuoteText} numberOfLines={3}>
               “{hangman.hint}”
             </Text>
             {isWon && (
               <View style={styles.statusPillWon}>
-                <Ionicons name="sparkles" size={12} color="#059669" />
+                <Ionicons name="sparkles" size={13} color="#059669" />
                 <Text style={styles.statusTextWon}>¡Adivinaron la palabra!</Text>
               </View>
             )}
             {isLost && (
               <View style={styles.statusPillLost}>
-                <Ionicons name="skull" size={12} color="#dc2626" />
-                <Text style={styles.statusTextLost}>¡Oh no! Era: {hangman.word}</Text>
+                <Ionicons name="skull" size={13} color="#dc2626" />
+                <Text style={styles.statusTextLost}>Era: {hangman.word}</Text>
               </View>
             )}
           </View>
         </View>
       </View>
 
-      {/* 2. Casillas de Letras: Escaladas para caber SIEMPRE en 1 sola fila balanceada */}
-      <View style={styles.wordSlotsRow}>
+      {/* 2. Casillas de Letras: GRANDES Y ULTRA LEGIBLES (26-34px) */}
+      <View style={[styles.wordSlotsContainer, isLongWord && styles.wordSlotsWrapped]}>
         {wordChars.map((ch, idx) => {
           if (ch === ' ') {
-            return <View key={idx} style={{ width: 8 }} />;
+            return <View key={idx} style={{ width: 12 }} />;
           }
           const revealed = hangman.guessed.includes(ch) || hangman.status !== 'playing';
 
@@ -175,7 +173,7 @@ export const HangmanArena: React.FC<Props> = ({
               style={[
                 styles.letterSlot,
                 {
-                  width: calcSlotWidth,
+                  width: slotWidth,
                   height: slotHeight,
                 },
                 revealed && styles.letterSlotRevealed,
@@ -185,7 +183,7 @@ export const HangmanArena: React.FC<Props> = ({
               <Text
                 style={[
                   styles.slotLetterText,
-                  { fontSize: Math.floor(calcSlotWidth * 0.6) },
+                  { fontSize: letterFontSize },
                   revealed && styles.slotLetterTextRevealed,
                   isLost && !hangman.guessed.includes(ch) && { color: '#ef4444' },
                 ]}
@@ -213,7 +211,7 @@ export const HangmanArena: React.FC<Props> = ({
         )}
       </View>
 
-      {/* 4. Teclado QWERTY 3D Táctil */}
+      {/* 4. Teclado QWERTY Táctil con Letras Grandes (18px) */}
       <View style={styles.keyboardContainer}>
         {QWERTY_ROWS.map((row, rIdx) => (
           <View key={rIdx} style={styles.keyboardRow}>
@@ -262,7 +260,7 @@ export const HangmanArena: React.FC<Props> = ({
           style={styles.randomWordBtn}
           accessibilityLabel="Generar otra palabra aleatoria"
         >
-          <Ionicons name="shuffle" size={15} color="#475569" />
+          <Ionicons name="shuffle" size={16} color="#475569" />
           <Text style={styles.randomWordBtnText}>Otra Palabra</Text>
         </TouchableOpacity>
 
@@ -274,7 +272,7 @@ export const HangmanArena: React.FC<Props> = ({
           style={styles.challengePartnerBtn}
           accessibilityLabel="Retar a mi pareja con palabra secreta"
         >
-          <Ionicons name="sparkles" size={15} color="#ffffff" />
+          <Ionicons name="sparkles" size={16} color="#ffffff" />
           <Text style={styles.challengePartnerBtnText}>+400 Retar Pareja</Text>
         </TouchableOpacity>
       </View>
@@ -293,7 +291,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: GAMES_THEME.spacing.sm + 2,
     width: '100%',
-    paddingHorizontal: GAMES_THEME.spacing.lg,
+    paddingHorizontal: 12,
   },
   stageCard: {
     width: '100%',
@@ -315,14 +313,14 @@ const styles = StyleSheet.create({
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 3.5,
+    paddingVertical: 4,
     borderRadius: 10,
-    backgroundColor: 'rgba(147, 51, 234, 0.1)',
+    backgroundColor: 'rgba(147, 51, 234, 0.12)',
   },
   categoryText: {
-    fontSize: 11.5,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#9333ea',
   },
@@ -337,15 +335,15 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gallowsBox: {
-    width: 110,
-    height: 120,
+    width: 100,
+    height: 115,
     position: 'relative',
   },
   gallowsBase: {
     position: 'absolute',
     bottom: 4,
     left: 4,
-    width: 50,
+    width: 48,
     height: 6,
     backgroundColor: '#78350f',
     borderRadius: 3,
@@ -353,43 +351,43 @@ const styles = StyleSheet.create({
   gallowsPole: {
     position: 'absolute',
     bottom: 8,
-    left: 18,
+    left: 16,
     width: 6,
-    height: 104,
+    height: 100,
     backgroundColor: '#78350f',
     borderRadius: 3,
   },
   gallowsTop: {
     position: 'absolute',
-    top: 8,
-    left: 18,
-    width: 68,
+    top: 6,
+    left: 16,
+    width: 64,
     height: 6,
     backgroundColor: '#78350f',
     borderRadius: 3,
   },
   gallowsBrace: {
     position: 'absolute',
-    top: 14,
-    left: 28,
-    width: 20,
+    top: 12,
+    left: 24,
+    width: 18,
     height: 4,
     backgroundColor: '#92400e',
     transform: [{ rotate: '-45deg' }],
   },
   gallowsRope: {
     position: 'absolute',
-    top: 14,
-    left: 78,
+    top: 12,
+    left: 72,
     width: 3,
-    height: 20,
+    height: 18,
     backgroundColor: '#d97706',
     borderRadius: 1.5,
   },
   hmHead: {
     position: 'absolute',
-    top: 32,
-    left: 65,
+    top: 28,
+    left: 59.5,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -441,18 +439,18 @@ const styles = StyleSheet.create({
   },
   hmBody: {
     position: 'absolute',
-    top: 60,
-    left: 77.5,
+    top: 54,
+    left: 72,
     width: 3.5,
-    height: 30,
+    height: 28,
     backgroundColor: '#db2777',
     borderRadius: 2,
   },
   hmArmLeft: {
     position: 'absolute',
-    top: 66,
-    left: 63,
-    width: 18,
+    top: 60,
+    left: 58,
+    width: 17,
     height: 3,
     backgroundColor: '#db2777',
     borderRadius: 2,
@@ -460,9 +458,9 @@ const styles = StyleSheet.create({
   },
   hmArmRight: {
     position: 'absolute',
-    top: 66,
-    left: 77,
-    width: 18,
+    top: 60,
+    left: 71,
+    width: 17,
     height: 3,
     backgroundColor: '#db2777',
     borderRadius: 2,
@@ -470,9 +468,9 @@ const styles = StyleSheet.create({
   },
   hmLegLeft: {
     position: 'absolute',
-    top: 88,
-    left: 67,
-    width: 16,
+    top: 80,
+    left: 62,
+    width: 15,
     height: 3,
     backgroundColor: '#db2777',
     borderRadius: 2,
@@ -480,9 +478,9 @@ const styles = StyleSheet.create({
   },
   hmLegRight: {
     position: 'absolute',
-    top: 88,
-    left: 75,
-    width: 16,
+    top: 80,
+    left: 69,
+    width: 15,
     height: 3,
     backgroundColor: '#db2777',
     borderRadius: 2,
@@ -493,10 +491,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   hintQuoteText: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontStyle: 'italic',
     color: '#334155',
-    lineHeight: 17,
+    lineHeight: 18,
   },
   statusPillWon: {
     flexDirection: 'row',
@@ -509,7 +507,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   statusTextWon: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '800',
     color: '#059669',
   },
@@ -524,22 +522,26 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   statusTextLost: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '800',
     color: '#dc2626',
   },
-  wordSlotsRow: {
+  wordSlotsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 6,
     width: '100%',
     paddingVertical: 4,
   },
+  wordSlotsWrapped: {
+    flexWrap: 'wrap',
+    rowGap: 8,
+  },
   letterSlot: {
     backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: 1.5,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#cbd5e1',
     alignItems: 'center',
     justifyContent: 'center',
@@ -555,7 +557,8 @@ const styles = StyleSheet.create({
   },
   slotLetterText: {
     fontWeight: '900',
-    color: '#1e293b',
+    color: '#0f172a',
+    textAlign: 'center',
   },
   slotLetterTextRevealed: {
     color: '#7c3aed',
@@ -563,17 +566,17 @@ const styles = StyleSheet.create({
   failedLettersBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     width: '100%',
     paddingHorizontal: 4,
   },
   failedLettersLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#64748b',
   },
   noFailsText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#10b981',
     fontWeight: '600',
   },
@@ -583,16 +586,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   failedChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 6,
     backgroundColor: '#fee2e2',
     borderWidth: 1,
     borderColor: '#fca5a5',
   },
   failedChipText: {
-    fontSize: 10.5,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
     color: '#ef4444',
     textDecorationLine: 'line-through',
   },
@@ -608,13 +611,13 @@ const styles = StyleSheet.create({
   },
   keyButton: {
     flex: 1,
-    maxWidth: 34,
-    height: 42,
-    borderRadius: 8,
+    maxWidth: 36,
+    height: 48, // 48px de alto táctil
+    borderRadius: 10,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#cbd5e1',
     ...GAMES_THEME.shadows.soft,
   },
@@ -628,9 +631,9 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   keyText: {
-    fontSize: 14.5,
-    fontWeight: '800',
-    color: '#1e293b',
+    fontSize: 18, // 18px grande y claro
+    fontWeight: '900',
+    color: '#0f172a',
   },
   keyTextHit: {
     color: '#ffffff',
@@ -652,7 +655,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    height: 44,
+    height: 46,
     borderRadius: 14,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
@@ -660,7 +663,7 @@ const styles = StyleSheet.create({
     ...GAMES_THEME.shadows.soft,
   },
   randomWordBtnText: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '700',
     color: '#334155',
   },
@@ -670,13 +673,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    height: 44,
+    height: 46,
     borderRadius: 14,
     backgroundColor: '#9333ea',
     ...GAMES_THEME.shadows.glowPurple,
   },
   challengePartnerBtnText: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '800',
     color: '#ffffff',
   },
