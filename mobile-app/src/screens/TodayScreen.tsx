@@ -29,7 +29,6 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { AppHeader } from '../components/AppHeader';
-import { LoveBookModal } from '../components/LoveBookModal';
 import { Milestone } from '../types';
 import { HeartbeatHeatmap } from '../components/HeartbeatHeatmap';
 import {
@@ -92,7 +91,6 @@ export const TodayScreen: React.FC = () => {
 
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
-  const [isLoveBookOpen, setIsLoveBookOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
 
   const startAnniv = new Date(`${homeState.anniversaryDate || '2026-06-18'}T00:00:00`);
@@ -532,27 +530,6 @@ export const TodayScreen: React.FC = () => {
   };
 
   const partnerRoleForLabel = currentProfile === 'Karla' ? 'Javier' : 'Karla';
-  const quickCards = [
-    {
-      key: 'pet',
-      title: petInfo.name || 'Pochito',
-      subtitle: `${petInfo.effectiveHappiness}% · Nv. ${petInfo.level}`,
-      icon: 'sparkles' as const,
-      onPress: () => {
-        setPetNameDraft(petInfo.name || 'Pochito');
-        setIsEditingPetName(false);
-        setIsPetModalOpen(true);
-      },
-    },
-    {
-      key: 'book',
-      title: 'Collage de Amor',
-      subtitle: `${daysTogether} días juntos`,
-      icon: 'images' as const,
-      onPress: () => setIsLoveBookOpen(true),
-    },
-  ];
-
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -850,46 +827,41 @@ export const TodayScreen: React.FC = () => {
           </View>
         </FadeSection>
 
-        {/* 4. ACCESOS RÁPIDOS (flex 1) */}
+        {/* 4. NUESTRA MASCOTA (ACCESO PRINCIPAL) */}
         <FadeSection index={3} style={styles.sectionQuickRow}>
-          {quickCards.map((card) => (
-            <PressableScale
-              key={card.key}
-              onPress={card.onPress}
-              style={styles.dsQuickCard}
-              accessibilityLabel={card.title}
-            >
-              {card.key === 'pet' ? (
-                <View style={[styles.dsQuickIcon, { backgroundColor: '#fde68a' }]}>
-                  <View style={styles.pouMiniAvatarUnified}>
-                    <View style={styles.pouMiniEyesRow}>
-                      <View style={styles.pouMiniEye} />
-                      <View style={styles.pouMiniEye} />
-                    </View>
-                    <View style={styles.pouMiniSmile} />
-                  </View>
+          <PressableScale
+            onPress={() => {
+              setPetNameDraft(petInfo.name || 'Pochito');
+              setIsEditingPetName(false);
+              setIsPetModalOpen(true);
+            }}
+            style={styles.dsPetCardHorizontal}
+            accessibilityLabel={petInfo.name || 'Pochito'}
+          >
+            <View style={[styles.dsQuickIcon, { backgroundColor: '#fde68a', marginRight: 12, marginBottom: 0 }]}>
+              <View style={styles.pouMiniAvatarUnified}>
+                <View style={styles.pouMiniEyesRow}>
+                  <View style={styles.pouMiniEye} />
+                  <View style={styles.pouMiniEye} />
                 </View>
-              ) : (
-                <View style={[styles.dsQuickIcon, { backgroundColor: colors.primaryLight }]}>
-                  <Ionicons name={card.icon as string} size={18} color={colors.primary} />
+                <View style={styles.pouMiniSmile} />
+              </View>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.dsQuickTitle} numberOfLines={1}>
+                  {petInfo.name || 'Pochito'}
+                </Text>
+                <View style={[styles.petLevelTag, { backgroundColor: `${colors.primary}18` }]}>
+                  <Text style={[styles.petLevelTagText, { color: colors.primary }]}>Nv. {petInfo.level}</Text>
                 </View>
-              )}
-              <Text
-                style={styles.dsQuickTitle}
-                numberOfLines={1}
-                maxFontSizeMultiplier={1.2}
-              >
-                {card.title}
+              </View>
+              <Text style={styles.dsQuickSub} numberOfLines={1}>
+                Felicidad: {petInfo.effectiveHappiness}% · Toca para cuidarlo
               </Text>
-              <Text
-                style={styles.dsQuickSub}
-                numberOfLines={1}
-                maxFontSizeMultiplier={1.2}
-              >
-                {card.subtitle}
-              </Text>
-            </PressableScale>
-          ))}
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </PressableScale>
         </FadeSection>
       </View>
 
@@ -1166,19 +1138,6 @@ export const TodayScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-
-      {/* ================= MODAL: COLLAGE DE NUESTRO AMOR (BAJO DEMANDA) ================= */}
-      <LoveBookModal
-        visible={isLoveBookOpen}
-        onClose={() => setIsLoveBookOpen(false)}
-        primaryColor={primaryColor}
-        currentProfile={currentProfile}
-        daysTogether={daysTogether}
-        streakCount={homeState.streakCount || 1}
-        milestones={milestones}
-        messages={message ? [message] : []}
-        petName={petInfo.name || 'Pochito'}
-      />
 
       {/* Selector de Fecha de Aniversario */}
       <DatePickerModal
@@ -1640,6 +1599,31 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '600',
     flex: 1,
+  },
+  dsPetCardHorizontal: {
+    flex: 1,
+    backgroundColor: c.surface,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  petLevelTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  petLevelTagText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   dsQuickCard: {
     flex: 1,

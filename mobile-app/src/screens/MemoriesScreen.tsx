@@ -610,9 +610,9 @@ export const MemoriesScreen: React.FC = () => {
               onPress={() => setIsLoveBookOpen(true)}
               style={[styles.headerActionBtn, { backgroundColor: '#f59e0b' }]}
               scaleTo={0.92}
-              accessibilityLabel="El Libro de Nuestro Amor"
+              accessibilityLabel="Collage de Nuestro Amor"
             >
-              <Ionicons name="book" size={19} color="#ffffff" />
+              <Ionicons name="images" size={19} color="#ffffff" />
             </PressableScale>
 
             <PressableScale

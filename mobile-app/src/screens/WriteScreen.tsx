@@ -94,12 +94,12 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const recipientDisplay = profile === 'Javier' ? 'Karlita' : 'Javier';
 
   const isTodaySelected = scheduledDate === getTodayString();
-
-  // Buscar si ya existe una carta para la fecha seleccionada
-  const existingLetterForDate = sentLetters.find(
-    (l) => toLocalDateString(l.scheduled_date) === scheduledDate
+  const todayLetter = sentLetters.find(
+    (l) => toLocalDateString(l.scheduled_date) === getTodayString()
   );
+  const hasSentToday = Boolean(todayLetter);
 
+  // Iniciar edición únicamente cuando se llama desde la tarjeta del día en Enviadas
   const handleStartEditLetter = (letter: Message) => {
     setEditingMessageId(letter.id);
     setContent(letter.content);
@@ -112,6 +112,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     setEditingMessageId(null);
     setContent('');
     setScheduledDate(getTodayString());
+    setActiveTab('sent');
   };
 
   const handleSubmit = async () => {
@@ -126,7 +127,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       const isToday = scheduledDate <= todayStr;
 
       if (editingMessageId) {
-        // Modo: Actualizar carta existente
+        // Guardar corrección de la carta de hoy
         const result = await updateSupabaseMessage(editingMessageId, {
           content: content.trim(),
           scheduled_date: scheduledDate,
@@ -154,96 +155,57 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           Alert.alert('Aviso', result.error || 'No se pudo actualizar la carta.');
         }
       } else {
-        // Modo: Si ya había una carta para este día, actualizarla para no duplicar
-        if (existingLetterForDate) {
-          const result = await updateSupabaseMessage(existingLetterForDate.id, {
-            content: content.trim(),
-            scheduled_date: scheduledDate,
-            theme_color: themeColor,
+        // Enviar nueva carta (hoy si aún no hay, o programada a futuro)
+        const result = await createSupabaseMessage({
+          sender: profile,
+          recipient,
+          content: content.trim(),
+          scheduled_date: scheduledDate,
+          theme_color: themeColor,
+        });
+
+        if (result.success) {
+          if (isToday) {
+            void syncWidgetData({
+              noteText: content.trim(),
+              noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
+            });
+          }
+
+          void getHomeState().then((home) => {
+            const token = home?.pushTokens?.[recipient];
+            if (token) {
+              void sendPartnerPushNotification(
+                token,
+                `KMRG 💌 Carta de ${profile === 'Karla' ? 'Karlita' : 'Javier'}`,
+                isToday
+                  ? `¡Te ha dejado una carta especial para hoy!`
+                  : `Te ha escrito una carta especial para el ${scheduledDate}.`,
+                { type: 'SEALED_LETTER', sender: profile }
+              );
+            }
           });
 
-          if (result.success) {
-            if (isToday) {
-              void syncWidgetData({
-                noteText: content.trim(),
-                noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
-              });
-            }
-
-            setIsSealingEnvelope(true);
-            Animated.sequence([
-              Animated.timing(sealAnim, {
-                toValue: 1,
-                duration: 650,
-                useNativeDriver: true,
-              }),
-              Animated.delay(200),
-            ]).start(() => {
-              setIsSealingEnvelope(false);
-              sealAnim.setValue(0);
-              setSealedModalData({
-                scheduledDate,
-                recipientDisplay,
-                isUpdate: true,
-              });
+          setIsSealingEnvelope(true);
+          Animated.sequence([
+            Animated.timing(sealAnim, {
+              toValue: 1,
+              duration: 650,
+              useNativeDriver: true,
+            }),
+            Animated.delay(200),
+          ]).start(() => {
+            setIsSealingEnvelope(false);
+            sealAnim.setValue(0);
+            setSealedModalData({
+              scheduledDate,
+              recipientDisplay,
+              isUpdate: false,
             });
-            await loadSentLetters(profile);
-          } else {
-            Alert.alert('Aviso', result.error || 'No se pudo actualizar la carta.');
-          }
+          });
+          await loadSentLetters(profile);
         } else {
-          // Crear nueva carta
-          const result = await createSupabaseMessage({
-            sender: profile,
-            recipient,
-            content: content.trim(),
-            scheduled_date: scheduledDate,
-            theme_color: themeColor,
-          });
-
-          if (result.success) {
-            if (isToday) {
-              void syncWidgetData({
-                noteText: content.trim(),
-                noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
-              });
-            }
-
-            void getHomeState().then((home) => {
-              const token = home?.pushTokens?.[recipient];
-              if (token) {
-                void sendPartnerPushNotification(
-                  token,
-                  `KMRG 💌 Carta de ${profile === 'Karla' ? 'Karlita' : 'Javier'}`,
-                  isToday
-                    ? `¡Te ha dejado una carta especial para hoy!`
-                    : `Te ha escrito una carta especial para el ${scheduledDate}.`,
-                  { type: 'SEALED_LETTER', sender: profile }
-                );
-              }
-            });
-
-            setIsSealingEnvelope(true);
-            Animated.sequence([
-              Animated.timing(sealAnim, {
-                toValue: 1,
-                duration: 650,
-                useNativeDriver: true,
-              }),
-              Animated.delay(200),
-            ]).start(() => {
-              setIsSealingEnvelope(false);
-              sealAnim.setValue(0);
-              setSealedModalData({
-                scheduledDate,
-                recipientDisplay,
-                isUpdate: false,
-              });
-            });
-            await loadSentLetters(profile);
-          } else {
-            Alert.alert('Aviso', result.error || 'No se pudo enviar la carta.');
-          }
+          Alert.alert('Aviso', result.error || 'No se pudo enviar la carta.');
         }
       }
     } catch {
@@ -271,13 +233,16 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.title}>Para {recipientDisplay}</Text>
             <Text style={styles.subtitle} numberOfLines={1}>
-              {editingMessageId ? 'Editando tu carta' : 'Cartas del día y sorpresas programadas'}
+              {editingMessageId ? 'Editando tu carta de hoy' : 'Cartas del día y sorpresas programadas'}
             </Text>
           </View>
 
           <View style={[styles.tabSwitch, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderWidth: 1 }]}>
             <PressableScale
-              onPress={() => setActiveTab('write')}
+              onPress={() => {
+                if (editingMessageId) setEditingMessageId(null);
+                setActiveTab('write');
+              }}
               style={[
                 styles.tabBtn,
                 activeTab === 'write' && { backgroundColor: primaryColor },
@@ -318,32 +283,20 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
         {activeTab === 'write' ? (
           <View style={styles.writeViewport}>
-            {/* Banner de Edición Activa */}
-            {editingMessageId ? (
+            {/* Banner cuando se está editando la carta desde Enviadas */}
+            {editingMessageId && (
               <View style={[styles.editingBanner, { backgroundColor: `${primaryColor}18`, borderColor: `${primaryColor}40` }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                   <Ionicons name="create" size={16} color={primaryColor} />
                   <Text style={[styles.editingBannerText, { color: primaryColor }]} numberOfLines={1}>
-                    Editando carta del {formatDisplayDate(scheduledDate)}
+                    Editando carta de hoy ({formatDisplayDate(scheduledDate)})
                   </Text>
                 </View>
                 <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelEditBtn}>
                   <Text style={[styles.cancelEditBtnText, { color: primaryColor }]}>Cancelar</Text>
                 </TouchableOpacity>
               </View>
-            ) : existingLetterForDate ? (
-              <TouchableOpacity
-                onPress={() => handleStartEditLetter(existingLetterForDate)}
-                style={[styles.existingLetterBanner, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="information-circle" size={16} color="#d97706" />
-                <Text style={styles.existingLetterBannerText} numberOfLines={1}>
-                  Ya tienes una carta para hoy/esta fecha. Toca para editarla.
-                </Text>
-                <Ionicons name="pencil" size={14} color="#d97706" />
-              </TouchableOpacity>
-            ) : null}
+            )}
 
             {/* Hoja de Carta / Papel con Previsualización del Sobre */}
             <View
@@ -396,7 +349,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Opciones: Fecha de apertura y selector de color con etiqueta clara */}
+            {/* Opciones: Fecha de apertura y selector de color */}
             <View style={[styles.envelopeConfigCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {/* Selector de Fecha Prominente */}
               <PressableScale
@@ -456,37 +409,80 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               title="Fecha de Entrega o Apertura"
             />
 
-            <PressableScale
-              onPress={() => void handleSubmit()}
-              disabled={isSubmitting}
-              style={[
-                styles.submitButton,
-                { backgroundColor: colors.primary },
-                isSubmitting && { opacity: 0.7 },
-              ]}
-              scaleTo={0.97}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color={colors.primaryOn} />
-              ) : (
-                <>
-                  <Ionicons
-                    name={editingMessageId ? 'checkmark-circle' : isTodaySelected ? 'paper-plane' : 'lock-closed'}
-                    size={17}
-                    color={colors.primaryOn}
-                  />
-                  <Text style={styles.submitButtonText}>
-                    {editingMessageId
-                      ? 'Guardar Cambios de la Carta'
-                      : existingLetterForDate
-                      ? 'Actualizar Carta del Día'
-                      : isTodaySelected
-                      ? 'Enviar Carta para Hoy'
-                      : 'Sellar Carta con Candado'}
+            {/* CONTROL DEL BOTÓN DE ACCIÓN:
+                1. Si estamos editando desde Enviadas: muestra 'Guardar Cambios de la Carta'.
+                2. Si es para hoy y YA fue enviada: NO muestra el botón de enviar directamente en Escribir;
+                   muestra la tarjeta informativa invitando a ir a Enviadas para editar en la tarjeta del día.
+                3. Si aún no se envía hoy o es una fecha futura: muestra el botón para enviar/sellar.
+            */}
+            {editingMessageId ? (
+              <PressableScale
+                onPress={() => void handleSubmit()}
+                disabled={isSubmitting}
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: colors.primary },
+                  isSubmitting && { opacity: 0.7 },
+                ]}
+                scaleTo={0.97}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color={colors.primaryOn} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={17} color={colors.primaryOn} />
+                    <Text style={styles.submitButtonText}>Guardar Cambios de la Carta</Text>
+                  </>
+                )}
+              </PressableScale>
+            ) : isTodaySelected && hasSentToday ? (
+              <View style={[styles.alreadySentTodayCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                <View style={[styles.alreadySentTodayIcon, { backgroundColor: '#2a9d8f18' }]}>
+                  <Ionicons name="checkmark-done-circle" size={22} color="#2a9d8f" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.alreadySentTodayTitle, { color: colors.text }]}>
+                    Carta de hoy ya enviada
                   </Text>
-                </>
-              )}
-            </PressableScale>
+                  <Text style={[styles.alreadySentTodaySub, { color: colors.textMuted }]}>
+                    Para editarla, ve a la pestaña "Enviadas" y toca el botón de la tarjeta del día.
+                  </Text>
+                </View>
+                <PressableScale
+                  onPress={() => setActiveTab('sent')}
+                  style={[styles.goToSentBtn, { backgroundColor: primaryColor }]}
+                  scaleTo={0.96}
+                >
+                  <Text style={[styles.goToSentBtnText, { color: colors.primaryOn }]}>Ver en Enviadas</Text>
+                </PressableScale>
+              </View>
+            ) : (
+              <PressableScale
+                onPress={() => void handleSubmit()}
+                disabled={isSubmitting}
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: colors.primary },
+                  isSubmitting && { opacity: 0.7 },
+                ]}
+                scaleTo={0.97}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color={colors.primaryOn} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={isTodaySelected ? 'paper-plane' : 'lock-closed'}
+                      size={17}
+                      color={colors.primaryOn}
+                    />
+                    <Text style={styles.submitButtonText}>
+                      {isTodaySelected ? 'Enviar Carta para Hoy' : 'Sellar Carta con Candado'}
+                    </Text>
+                  </>
+                )}
+              </PressableScale>
+            )}
           </View>
         ) : (
           <View style={styles.sentContainer}>
@@ -499,8 +495,10 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 />
               ) : (
                 visibleSent.map((letter) => {
-                  const isFuture =
-                    toLocalDateString(letter.scheduled_date) > getTodayString();
+                  const letterDateStr = toLocalDateString(letter.scheduled_date);
+                  const isTodayLetter = letterDateStr === getTodayString();
+                  const isFuture = letterDateStr > getTodayString();
+
                   return (
                     <View
                       key={letter.id}
@@ -521,23 +519,28 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                             ]}
                           />
                           <Text style={styles.sentDateText}>
-                            {isFuture
+                            {isTodayLetter
+                              ? 'Carta de Hoy'
+                              : isFuture
                               ? `Se abrirá el ${formatDisplayDate(letter.scheduled_date)}`
                               : `Entregada el ${formatDisplayDate(letter.scheduled_date)}`}
                           </Text>
                         </View>
+
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          {/* Botón Editar Carta */}
-                          <TouchableOpacity
-                            onPress={() => handleStartEditLetter(letter)}
-                            style={[styles.editLetterBtn, { backgroundColor: `${colors.primary}15` }]}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Ionicons name="pencil" size={12} color={colors.primary} />
-                            <Text style={[styles.editLetterBtnText, { color: colors.primary }]}>
-                              Editar
-                            </Text>
-                          </TouchableOpacity>
+                          {/* EL BOTÓN DE EDITAR SOLO APARECE EN LA TARJETA DEL DÍA (NO EN LAS PASADAS NI FUTURAS) */}
+                          {isTodayLetter && (
+                            <TouchableOpacity
+                              onPress={() => handleStartEditLetter(letter)}
+                              style={[styles.editTodayBtn, { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` }]}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Ionicons name="pencil" size={12} color={colors.primary} />
+                              <Text style={[styles.editTodayBtnText, { color: colors.primary }]}>
+                                Editar
+                              </Text>
+                            </TouchableOpacity>
+                          )}
 
                           <View
                             style={[
@@ -558,11 +561,12 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                                 { color: isFuture ? colors.primary : '#2a9d8f' },
                               ]}
                             >
-                              {isFuture ? 'Sellada' : 'Abierta'}
+                              {isFuture ? 'Sellada' : 'Entregada'}
                             </Text>
                           </View>
                         </View>
                       </View>
+
                       <Text
                         style={[
                           styles.sentSnippet,
@@ -695,18 +699,14 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             >
               <Ionicons name="sparkles" size={11} color={themeColor} />
               <Text style={[styles.sealedPillText, { color: themeColor }]}>
-                {sealedModalData?.isUpdate
-                  ? 'CARTA ACTUALIZADA'
-                  : sealedModalData?.scheduledDate === getTodayString()
+                {sealedModalData?.scheduledDate === getTodayString()
                   ? 'CARTA ENTREGADA HOY'
                   : 'CARTA SELLADA CON CANDADO'}
               </Text>
             </View>
 
             <Text style={[styles.sealedSuccessTitle, { color: colors.text }]}>
-              {sealedModalData?.isUpdate
-                ? '¡Carta actualizada!'
-                : sealedModalData?.scheduledDate === getTodayString()
+              {sealedModalData?.scheduledDate === getTodayString()
                 ? '¡Tu carta fue entregada!'
                 : '¡Tu carta está protegida!'}
             </Text>
@@ -751,7 +751,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 style={{ marginTop: 2 }}
               />
               <Text style={[styles.sealedInfoText, { color: colors.textMuted }]}>
-                Puedes revisar y corregir tus cartas en cualquier momento desde la pestaña 'Enviadas'.
+                Si notas algún error en tu carta de hoy, puedes corregirla desde 'Enviadas'.
               </Text>
             </View>
 
@@ -839,21 +839,42 @@ const makeStyles = (c: ThemePalette) =>
       fontSize: 11.5,
       fontWeight: '800',
     },
-    existingLetterBanner: {
+    alreadySentTodayCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 12,
+      gap: 10,
+      padding: 12,
+      borderRadius: 16,
       borderWidth: 1,
-      marginBottom: 4,
+      marginTop: 10,
+      marginBottom: 6,
     },
-    existingLetterBannerText: {
-      flex: 1,
+    alreadySentTodayIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    alreadySentTodayTitle: {
+      fontSize: 12.5,
+      fontWeight: '700',
+    },
+    alreadySentTodaySub: {
+      fontSize: 10.5,
+      marginTop: 2,
+      lineHeight: 14,
+    },
+    goToSentBtn: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    goToSentBtnText: {
       fontSize: 11,
-      fontWeight: '600',
-      color: '#92400e',
+      fontWeight: '800',
     },
     writeViewport: {
       flex: 1,
@@ -1047,15 +1068,16 @@ const makeStyles = (c: ThemePalette) =>
       color: c.textSecondary,
       textTransform: 'capitalize',
     },
-    editLetterBtn: {
+    editTodayBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 3,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 8,
+      borderWidth: 1,
     },
-    editLetterBtnText: {
+    editTodayBtnText: {
       fontSize: 11,
       fontWeight: '700',
     },
