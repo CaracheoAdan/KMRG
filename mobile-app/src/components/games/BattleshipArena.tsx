@@ -90,6 +90,7 @@ export const BattleshipArena: React.FC<Props> = ({
   const [selectedSetupShipId, setSelectedSetupShipId] = useState<string>('carrier');
 
   const radarPulseAnim = useRef(new Animated.Value(0)).current;
+  const shipGlowPulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -101,6 +102,17 @@ export const BattleshipArena: React.FC<Props> = ({
     loop.start();
     return () => loop.stop();
   }, [radarPulseAnim]);
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shipGlowPulseAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(shipGlowPulseAnim, { toValue: 0, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shipGlowPulseAnim]);
 
   // Dimensiones calibradas del tablero con 16px de margen
   const boardSize = Math.min(SCREEN_W - 32, 350);
@@ -162,6 +174,40 @@ export const BattleshipArena: React.FC<Props> = ({
     void triggerGameHaptic('selection');
   };
 
+  const handleMoveShipTo = (shipId: string, originIdx: number) => {
+    const ship = myFleet.find((s) => s.id === shipId);
+    if (!ship) return;
+    const isHoriz = (ship.orientation || 'H') === 'H';
+    const r = Math.floor(originIdx / 10);
+    const c = originIdx % 10;
+    if (isHoriz && c + ship.size > 10) {
+      void triggerGameHaptic('error');
+      return;
+    }
+    if (!isHoriz && r + ship.size > 10) {
+      void triggerGameHaptic('error');
+      return;
+    }
+
+    const newCells: number[] = [];
+    for (let i = 0; i < ship.size; i++) {
+      newCells.push(isHoriz ? r * 10 + (c + i) : (r + i) * 10 + c);
+    }
+
+    const otherShips = myFleet.filter((s) => s.id !== shipId);
+    const hasOverlap = otherShips.some((s) => s.cells.some((cell) => newCells.includes(cell)));
+    if (hasOverlap) {
+      void triggerGameHaptic('error');
+      return;
+    }
+
+    const updated: BattleshipShip[] = myFleet.map((s) =>
+      s.id === shipId ? { ...s, cells: newCells } : s
+    );
+    setLocalSetupFleet(updated);
+    void triggerGameHaptic('selection');
+  };
+
   const handleRandomizeFleet = () => {
     const randomized = createRandomBattleshipFleet();
     setLocalSetupFleet(randomized);
@@ -207,19 +253,19 @@ export const BattleshipArena: React.FC<Props> = ({
       ? { borderTopRightRadius: 4, borderBottomRightRadius: 4 }
       : { borderBottomLeftRadius: 4, borderBottomRightRadius: 4 };
 
-    // Bordes continuos sin divisiones de dominó entre celdas del mismo barco
+    // Bordes continuos sin divisiones entre celdas del mismo barco
     const seamlessBorder = isHoriz
       ? {
-          borderTopWidth: isSelected ? 2 : 1.5,
-          borderBottomWidth: isSelected ? 2 : 1.5,
-          borderLeftWidth: isBow ? (isSelected ? 2.5 : 1.5) : 0,
-          borderRightWidth: isStern ? (isSelected ? 2.5 : 1.5) : 0,
+          borderTopWidth: 1.5,
+          borderBottomWidth: 1.5,
+          borderLeftWidth: isBow ? 2 : 0,
+          borderRightWidth: isStern ? 2 : 0,
         }
       : {
-          borderLeftWidth: isSelected ? 2 : 1.5,
-          borderRightWidth: isSelected ? 2 : 1.5,
-          borderTopWidth: isBow ? (isSelected ? 2.5 : 1.5) : 0,
-          borderBottomWidth: isStern ? (isSelected ? 2.5 : 1.5) : 0,
+          borderLeftWidth: 1.5,
+          borderRightWidth: 1.5,
+          borderTopWidth: isBow ? 2 : 0,
+          borderBottomWidth: isStern ? 2 : 0,
         };
 
     return (
@@ -231,7 +277,7 @@ export const BattleshipArena: React.FC<Props> = ({
             backgroundColor: hullBg,
             width: isHoriz ? '100%' : '84%',
             height: isHoriz ? '84%' : '100%',
-            borderColor: isSelected ? '#fef08a' : 'rgba(255, 255, 255, 0.65)',
+            borderColor: 'rgba(255, 255, 255, 0.65)',
             ...seamlessBorder,
           },
           isBow && bowRadius,
@@ -267,6 +313,29 @@ export const BattleshipArena: React.FC<Props> = ({
       </View>
     );
   };
+
+  // Cálculo del contorno único alrededor del barco seleccionado en setup
+  const selectedShip = myFleet.find((s) => s.id === selectedSetupShipId);
+  let selectedShipOverlay: { left: number; top: number; width: number; height: number } | null = null;
+  if (selectedShip && selectedShip.cells.length > 0) {
+    const isHoriz =
+      (selectedShip.orientation ||
+        (selectedShip.cells.length > 1 && selectedShip.cells[1] - selectedShip.cells[0] === 1 ? 'H' : 'V')) === 'H';
+    const r0 = Math.floor(selectedShip.cells[0] / 10);
+    const c0 = selectedShip.cells[0] % 10;
+    const rLast = Math.floor(selectedShip.cells[selectedShip.cells.length - 1] / 10);
+    const cLast = selectedShip.cells[selectedShip.cells.length - 1] % 10;
+
+    const minR = Math.min(r0, rLast);
+    const minC = Math.min(c0, cLast);
+
+    selectedShipOverlay = {
+      left: minC * cellSize + coordsHeaderPx,
+      top: minR * cellSize,
+      width: isHoriz ? selectedShip.size * cellSize : cellSize,
+      height: isHoriz ? cellSize : selectedShip.size * cellSize,
+    };
+  }
 
   return (
     <View style={styles.container}>
@@ -350,13 +419,18 @@ export const BattleshipArena: React.FC<Props> = ({
                 accessibilityLabel="Rotar barco seleccionado"
               >
                 <Ionicons name="sync" size={14} color="#ffffff" />
-                <Text style={[styles.actionChipText, { color: '#ffffff' }]}>↻ Rotar</Text>
+                <Text style={[styles.actionChipText, { color: '#ffffff' }]}>Rotar</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Tablero Océano 10x10 con Coordenadas */}
-          <View style={[styles.boardOceanFrame, { width: boardSize }, GAMES_THEME.shadows.boardDepth]}>
+          {/* Tablero Océano 10x10 con Coordenadas y Océano Profundo */}
+          <LinearGradient
+            colors={['#03182b', '#082f49', '#0c4a6e']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.boardOceanFrame, { width: boardSize }, GAMES_THEME.shadows.boardDepth]}
+          >
             {/* Encabezado de Columnas A-J */}
             <View style={styles.coordsLettersRow}>
               <View style={{ width: coordsHeaderPx }} />
@@ -367,8 +441,36 @@ export const BattleshipArena: React.FC<Props> = ({
               ))}
             </View>
 
-            {/* Filas 1-10 */}
-            <View style={{ flexDirection: 'column' }}>
+            {/* Filas 1-10 con Contorno Continuo del Barco Seleccionado */}
+            <View style={{ flexDirection: 'column', position: 'relative' }}>
+              {/* Contorno ÚNICO alrededor de TODO el barco seleccionado con glow y pulso */}
+              {selectedShipOverlay && (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.selectedShipContinuousOutline,
+                    {
+                      left: selectedShipOverlay.left,
+                      top: selectedShipOverlay.top,
+                      width: selectedShipOverlay.width,
+                      height: selectedShipOverlay.height,
+                      opacity: shipGlowPulseAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.75, 1],
+                      }),
+                      transform: [
+                        {
+                          scale: shipGlowPulseAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 1.025],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              )}
+
               {Array.from({ length: 10 }).map((_, r) => (
                 <View key={r} style={{ flexDirection: 'row' }}>
                   <View style={[styles.coordNumberCell, { height: cellSize, width: coordsHeaderPx }]}>
@@ -391,6 +493,8 @@ export const BattleshipArena: React.FC<Props> = ({
                             } else {
                               setSelectedSetupShipId(shipAtCell.id);
                             }
+                          } else {
+                            handleMoveShipTo(selectedSetupShipId, idx);
                           }
                         }}
                         style={[
@@ -398,9 +502,7 @@ export const BattleshipArena: React.FC<Props> = ({
                           {
                             width: cellSize,
                             height: cellSize,
-                            backgroundColor: isSelected
-                              ? 'rgba(14, 165, 233, 0.45)'
-                              : shipAtCell
+                            backgroundColor: shipAtCell
                               ? 'rgba(14, 165, 233, 0.22)'
                               : 'rgba(8, 47, 73, 0.88)',
                           },
@@ -413,12 +515,12 @@ export const BattleshipArena: React.FC<Props> = ({
                 </View>
               ))}
             </View>
-          </View>
+          </LinearGradient>
 
-          {/* Panel de Flota: Lista de los 5 barcos con silueta y selección */}
+          {/* Panel de Flota: Tarjetas con mini-silueta, nombre, tamaño y estado */}
           <View style={styles.fleetRosterCard}>
-            <Text style={styles.fleetRosterTitle}>Flota Disponible (Toca para seleccionar):</Text>
-            <View style={styles.fleetChipsRow}>
+            <Text style={styles.fleetRosterTitle}>Flota Disponible (Toca para seleccionar o rotar):</Text>
+            <View style={styles.fleetCardsGrid}>
               {myFleet.map((s) => {
                 const conf = SHIP_CONFIG[s.id] || { name: s.id, size: s.size, bg: '#0284c7' };
                 const isSel = s.id === selectedSetupShipId;
@@ -428,25 +530,54 @@ export const BattleshipArena: React.FC<Props> = ({
                     key={s.id}
                     onPress={() => {
                       void triggerGameHaptic('selection');
-                      setSelectedSetupShipId(s.id);
+                      if (isSel) {
+                        handleRotateShip(s.id);
+                      } else {
+                        setSelectedSetupShipId(s.id);
+                      }
                     }}
                     style={[
-                      styles.fleetChipItem,
-                      isSel && { borderColor: conf.bg, backgroundColor: `${conf.bg}18` },
+                      styles.fleetMiniCard,
+                      isSel && styles.fleetMiniCardSelected,
                     ]}
+                    activeOpacity={0.8}
+                    accessibilityLabel={`Barco ${conf.name}, tamaño ${conf.size}`}
                   >
-                    <View style={[styles.shipColorDot, { backgroundColor: conf.bg }]} />
-                    <Text style={[styles.fleetChipName, isSel && { fontWeight: '900', color: conf.bg }]}>
-                      {conf.name} ({conf.size})
-                    </Text>
+                    <View style={styles.fleetMiniCardTopRow}>
+                      {/* Mini silueta del barco */}
+                      <View style={styles.miniShipSilhouette}>
+                        {Array.from({ length: conf.size }).map((_, i) => (
+                          <View
+                            key={i}
+                            style={[
+                              styles.miniShipSegment,
+                              { backgroundColor: conf.bg },
+                              i === 0 && { borderTopLeftRadius: 3, borderBottomLeftRadius: 3 },
+                              i === conf.size - 1 && { borderTopRightRadius: 2, borderBottomRightRadius: 2 },
+                            ]}
+                          />
+                        ))}
+                      </View>
+                      <View style={styles.placedStatusBadge}>
+                        <Ionicons name="checkmark-circle" size={11} color="#15803d" />
+                        <Text style={styles.placedStatusText}>Colocado</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.fleetMiniCardBottomRow}>
+                      <Text style={[styles.fleetMiniCardName, isSel && { color: '#0284c7' }]}>
+                        {conf.name}
+                      </Text>
+                      <Text style={styles.fleetMiniCardSize}>{conf.size} casillas</Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </View>
 
-          {/* Botón de confirmación prominente */}
-          <View style={{ width: '100%', marginTop: 4 }}>
+          {/* Dock Inferior: Confirmar Flota */}
+          <View style={styles.setupDockContainer}>
             {!amIReady ? (
               <GameButton
                 label="Confirmar Flota y Entrar a Combate"
@@ -863,6 +994,23 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
     backgroundColor: '#ffffff',
   },
+  selectedShipContinuousOutline: {
+    position: 'absolute',
+    borderRadius: 10,
+    borderWidth: 2.5,
+    borderColor: '#facc15',
+    backgroundColor: 'rgba(250, 204, 21, 0.16)',
+    shadowColor: '#facc15',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 10,
+  },
+  setupDockContainer: {
+    width: '100%',
+    paddingTop: 4,
+  },
   fleetRosterCard: {
     width: '100%',
     backgroundColor: '#ffffff',
@@ -870,7 +1018,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    gap: 6,
+    gap: 8,
     ...GAMES_THEME.shadows.soft,
   },
   fleetRosterTitle: {
@@ -878,31 +1026,67 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#475569',
   },
-  fleetChipsRow: {
+  fleetCardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+    justifyContent: 'space-between',
   },
-  fleetChipItem: {
+  fleetMiniCard: {
+    width: '48.5%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 7,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    gap: 4,
+  },
+  fleetMiniCardSelected: {
+    borderColor: '#0284c7',
+    backgroundColor: 'rgba(2, 132, 199, 0.08)',
+  },
+  fleetMiniCardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
+    justifyContent: 'space-between',
   },
-  shipColorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  miniShipSilhouette: {
+    flexDirection: 'row',
+    gap: 1.5,
+    alignItems: 'center',
   },
-  fleetChipName: {
+  miniShipSegment: {
+    width: 6,
+    height: 10,
+  },
+  placedStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  placedStatusText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  fleetMiniCardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  fleetMiniCardName: {
     fontSize: 11,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  fleetMiniCardSize: {
+    fontSize: 9.5,
     fontWeight: '600',
-    color: '#334155',
+    color: '#64748b',
   },
   waitingPartnerBadge: {
     flexDirection: 'row',
