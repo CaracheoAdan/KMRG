@@ -27,6 +27,8 @@ import { ChessArena } from '../components/games/ChessArena';
 import { HangmanArena } from '../components/games/HangmanArena';
 import { BattleshipArena } from '../components/games/BattleshipArena';
 import { MoodMascot } from '../components/MoodMascot';
+import { GameHeader } from '../components/games/common/GameHeader';
+import { CelebrationOverlay } from '../components/games/common/CelebrationOverlay';
 import {
   getGamesState,
   saveGamesState,
@@ -1414,7 +1416,8 @@ export const GamesScreen: React.FC = () => {
       <View
         style={[
           styles.arenaCard,
-          { backgroundColor: colors.surface, borderColor: colors.border },
+          isFull && { backgroundColor: 'transparent', borderWidth: 0, padding: 0 },
+          !isFull && { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
 
@@ -1943,36 +1946,27 @@ export const GamesScreen: React.FC = () => {
         <SafeAreaView style={[styles.gameFullScreenContainer, { backgroundColor: colors.background }]}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
 
-          {/* Header Mínimo del Juego */}
-          <View style={[styles.gameMinimalHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <PressableScale
-              onPress={() => setActiveGame(null)}
-              style={styles.backBtn}
-              scaleTo={0.92}
-              accessibilityLabel="Volver al lobby"
-            >
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-              <Text style={[styles.backBtnText, { color: colors.text }]}>Lobby</Text>
-            </PressableScale>
-
-            <View style={{ alignItems: 'center' }}>
-              <Text style={[styles.gameMinimalTitle, { color: colors.text }]}>
-                {ALL_GAMES.find((g) => g.id === activeGame)?.label}
-              </Text>
-              <Text style={[styles.gameMinimalTurn, { color: colors.primary }]}>
-                {activeGame ? getGameTurnLabel(activeGame) : ''}
-              </Text>
-            </View>
-
-            <PressableScale
-              onPress={() => handleResetCurrentGame()}
-              style={[styles.resetGameBtn, { backgroundColor: colors.surfaceAlt }]}
-              scaleTo={0.92}
-              accessibilityLabel="Reiniciar partida"
-            >
-              <Ionicons name="reload" size={16} color={colors.text} />
-            </PressableScale>
-          </View>
+          {/* Header Unificado Premium del Juego */}
+          {activeGame && (
+            <GameHeader
+              title={ALL_GAMES.find((g) => g.id === activeGame)?.label || 'Juego'}
+              icon={(ALL_GAMES.find((g) => g.id === activeGame)?.icon as any) || 'game-controller'}
+              turnLabel={getGameTurnLabel(activeGame)}
+              isMyTurn={getGameStatus(activeGame).isMyTurn}
+              currentTurnPlayer={
+                activeGame === 'tictactoe'
+                  ? gamesState.ticTacToe.turn
+                  : activeGame === 'chess'
+                  ? gamesState.chess.turn
+                  : activeGame === 'battleship'
+                  ? bs.turn
+                  : null
+              }
+              onBack={() => setActiveGame(null)}
+              onReset={() => handleResetCurrentGame()}
+              primaryColor={primaryColor}
+            />
+          )}
 
           {/* Arena del Juego Montada Únicamente Cuando Está Activa */}
           <View style={styles.gameActiveArenaWrapper}>
@@ -1982,96 +1976,21 @@ export const GamesScreen: React.FC = () => {
       </Modal>
 
       {/* ================= GRAN MODAL DE CELEBRACIÓN DE VICTORIA ALEGRE ================= */}
-      <Modal
+      <CelebrationOverlay
         visible={Boolean(victoryCelebration)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVictoryCelebration(null)}
-      >
-        <View style={styles.victoryOverlay}>
-          {victoryCelebration && (
-            <Animated.View
-              style={[
-                styles.victoryCard,
-                {
-                  borderColor: victoryCelebration.color,
-                  transform: [{ scale: victoryScale }],
-                },
-              ]}
-            >
-              {/* Estrellas y Trofeo Grande */}
-              <View style={styles.victorySparklesRow}>
-                <Ionicons name="sparkles" size={28} color="#f59e0b" />
-                <View
-                  style={[
-                    styles.victoryTrophyCircle,
-                    { backgroundColor: `${victoryCelebration.color}18` },
-                  ]}
-                >
-                  <Ionicons name="trophy" size={54} color="#f59e0b" />
-                </View>
-                <Ionicons name="sparkles" size={28} color="#f59e0b" />
-              </View>
-
-              {/* Monito Celebrando */}
-              <View style={{ marginVertical: 6 }}>
-                <MoodMascot
-                  feeling="enamorado"
-                  size="lg"
-                  accentColor={victoryCelebration.color}
-                />
-              </View>
-
-              <Text style={[styles.victoryGameTag, { color: victoryCelebration.color }]}>
-                {victoryCelebration.gameTitle.toUpperCase()}
-              </Text>
-
-              <Text style={styles.victoryWinnerTitle}>
-                ¡GANÓ {victoryCelebration.winnerName.toUpperCase()}!
-              </Text>
-
-              <Text style={styles.victorySubtitle}>{victoryCelebration.subtitle}</Text>
-
-              <View
-                style={[
-                  styles.victoryRewardPill,
-                  { backgroundColor: victoryCelebration.color },
-                ]}
-              >
-                <Ionicons name="star" size={18} color="#fde047" />
-                <Text style={styles.victoryRewardText}>
-                  +{victoryCelebration.pointsEarned} PUNTOS Y +1 TROFEO
-                </Text>
-              </View>
-
-              <View style={styles.victoryButtonsRow}>
-                <TouchableOpacity
-                  onPress={() => {
-                    const cb = victoryCelebration.onPlayAgain;
-                    setVictoryCelebration(null);
-                    cb();
-                  }}
-                  style={[
-                    styles.victoryPlayAgainBtn,
-                    { backgroundColor: victoryCelebration.color },
-                  ]}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="refresh" size={18} color="#ffffff" />
-                  <Text style={styles.victoryPlayAgainText}>Jugar Otra Partida</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setVictoryCelebration(null)}
-                  style={styles.victoryCloseBtn}
-                >
-                  <Text style={styles.victoryCloseText}>Seguir Viendo</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          )}
-        </View>
-      </Modal>
+        winnerName={victoryCelebration?.winnerName || ''}
+        gameTitle={victoryCelebration?.gameTitle || ''}
+        pointsEarned={victoryCelebration?.pointsEarned || 100}
+        subtitle={victoryCelebration?.subtitle || ''}
+        onPlayAgain={() => {
+          if (victoryCelebration) {
+            const cb = victoryCelebration.onPlayAgain;
+            setVictoryCelebration(null);
+            cb();
+          }
+        }}
+        onClose={() => setVictoryCelebration(null)}
+      />
 
       {/* Modal Retar a mi Pareja en el Ahorcado */}
       <Modal

@@ -1,13 +1,16 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   TextInput,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '../ui/Icon';
 import { UserProfile } from '../../types';
+import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
+import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 export interface SavedSudokuSession {
   difficulty: 'easy' | 'medium' | 'hard';
@@ -53,7 +56,9 @@ export const SudokuArena: React.FC<Props> = ({
   isSudokuGameOver,
 }) => {
   const sudokuInputRef = useRef<any>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
+  // Contador de dígitos restantes
   const digitCounts: Record<number, number> = {
     1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0,
   };
@@ -63,9 +68,33 @@ export const SudokuArena: React.FC<Props> = ({
     });
   });
 
+  // Animación shake en error
+  useEffect(() => {
+    if (sudoku.mistakes > 0) {
+      void triggerGameHaptic('error');
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: -6, duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 6, duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -4, duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 4, duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [sudoku.mistakes, shakeAnim]);
+
+  const handleCellSelect = (r: number, c: number) => {
+    void triggerGameHaptic('selection');
+    onSelectCell(r, c);
+  };
+
+  const handleNumClick = (digit: number) => {
+    void triggerGameHaptic('light');
+    onNumberPress(digit);
+  };
+
   return (
     <View style={styles.container}>
-      {/* Invisible Input for Native Numpad */}
+      {/* Input invisible para teclados de hardware / accesibilidad */}
       <TextInput
         ref={sudokuInputRef}
         value=""
@@ -74,25 +103,17 @@ export const SudokuArena: React.FC<Props> = ({
         maxLength={1}
         onChangeText={(txt) => {
           const digit = parseInt(txt.slice(-1), 10);
-          if (digit >= 1 && digit <= 9) {
-            onNumberPress(digit);
-          }
+          if (digit >= 1 && digit <= 9) onNumberPress(digit);
         }}
         onKeyPress={({ nativeEvent }) => {
-          if (nativeEvent.key === 'Backspace') {
-            onNumberPress(0);
-          }
+          if (nativeEvent.key === 'Backspace') onNumberPress(0);
         }}
-        style={{
-          position: 'absolute',
-          width: 1,
-          height: 1,
-          opacity: 0,
-        }}
+        style={styles.hiddenInput}
       />
 
+      {/* Barra Superior: Selector Segmented de Dificultad + Vidas + Herramientas */}
       <View style={styles.topControls}>
-        <View style={styles.diffPillsRow}>
+        <View style={styles.segmentedControl}>
           {[
             { key: 'easy', label: 'Fácil' },
             { key: 'medium', label: 'Medio' },
@@ -102,23 +123,17 @@ export const SudokuArena: React.FC<Props> = ({
             return (
               <TouchableOpacity
                 key={d.key}
-                onPress={() => onNewGame(d.key as any)}
+                onPress={() => {
+                  void triggerGameHaptic('selection');
+                  onNewGame(d.key as any);
+                }}
                 style={[
-                  styles.diffChip,
-                  isFull && { backgroundColor: '#1e293b', borderColor: '#334155' },
-                  active && {
-                    backgroundColor: isFull ? '#0284c7' : primaryColor,
-                    borderColor: isFull ? '#38bdf8' : primaryColor,
-                  },
+                  styles.segmentBtn,
+                  active && styles.segmentBtnActive,
                 ]}
+                activeOpacity={0.8}
               >
-                <Text
-                  style={[
-                    styles.diffChipText,
-                    isFull && { color: '#cbd5e1' },
-                    active && { color: '#ffffff' },
-                  ]}
-                >
+                <Text style={[styles.segmentBtnText, active && styles.segmentBtnTextActive]}>
                   {d.label}
                 </Text>
               </TouchableOpacity>
@@ -126,63 +141,68 @@ export const SudokuArena: React.FC<Props> = ({
           })}
         </View>
 
-        {/* 3 Lives Indicator */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+        {/* 3 Corazones de Vidas */}
+        <View style={styles.livesWrapper}>
           {[0, 1, 2].map((lifeIdx) => {
             const alive = lifeIdx < MAX_SUDOKU_MISTAKES - sudoku.mistakes;
             return (
               <Ionicons
                 key={lifeIdx}
-                name={alive ? 'heart' : 'heart-dislike-outline'}
-                size={15}
-                color={alive ? '#e11d48' : '#94a3b8'}
+                name={alive ? 'heart' : 'heart-dislike'}
+                size={16}
+                color={alive ? '#e11d48' : '#cbd5e1'}
               />
             );
           })}
         </View>
 
+        {/* Herramientas: Lápiz, Borrar, Pista */}
         <View style={styles.toolsRow}>
           <TouchableOpacity
-            onPress={() => setIsNoteMode((n) => !n)}
-            style={[
-              styles.toolBtn,
-              isFull && { backgroundColor: '#1e293b' },
-              isNoteMode && { backgroundColor: isFull ? '#0284c7' : primaryColor },
-            ]}
+            onPress={() => {
+              void triggerGameHaptic('selection');
+              setIsNoteMode((n) => !n);
+            }}
+            style={[styles.toolBtn, isNoteMode && styles.toolBtnActive]}
+            accessibilityLabel="Modo Notas / Lápiz"
           >
             <Ionicons
               name="pencil"
-              size={13}
-              color={isNoteMode ? '#ffffff' : isFull ? '#cbd5e1' : '#475569'}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => onNumberPress(0)}
-            style={[styles.toolBtn, isFull && { backgroundColor: '#1e293b' }]}
-          >
-            <Ionicons
-              name="backspace-outline"
               size={14}
-              color={isFull ? '#cbd5e1' : '#475569'}
+              color={isNoteMode ? '#ffffff' : '#475569'}
             />
           </TouchableOpacity>
+
           <TouchableOpacity
-            onPress={onHint}
-            style={[
-              styles.toolBtn,
-              { backgroundColor: isFull ? '#1e293b' : `${primaryColor}18` },
-            ]}
+            onPress={() => {
+              void triggerGameHaptic('light');
+              onNumberPress(0);
+            }}
+            style={styles.toolBtn}
+            accessibilityLabel="Borrar número"
           >
-            <Ionicons name="bulb" size={14} color={isFull ? '#fde047' : primaryColor} />
+            <Ionicons name="backspace-outline" size={15} color="#475569" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              void triggerGameHaptic('medium');
+              onHint();
+            }}
+            style={[styles.toolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}
+            accessibilityLabel="Pista mágica"
+          >
+            <Ionicons name="bulb" size={15} color="#d97706" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Grid */}
-      <View
+      {/* Cuadrícula Nítida 9x9 con Separadores de Caja 3x3 */}
+      <Animated.View
         style={[
-          styles.gridContainer,
+          styles.gridOuter,
           isSudokuGameOver && { opacity: 0.45 },
+          { transform: [{ translateX: shakeAnim }] },
         ]}
       >
         {sudoku.board.map((row, r) => (
@@ -207,30 +227,31 @@ export const SudokuArena: React.FC<Props> = ({
               const isWrong = val !== 0 && val !== sudoku.solution[r][c];
               const cellNotes = sudoku.notes[`${r}-${c}`] || [];
 
-              const rightBorder = (c + 1) % 3 === 0 && c < 8 ? 2 : 0.5;
-              const bottomBorder = (r + 1) % 3 === 0 && r < 8 ? 2 : 0.5;
+              const rightThick = (c + 1) % 3 === 0 && c < 8;
+              const bottomThick = (r + 1) % 3 === 0 && r < 8;
 
               return (
                 <TouchableOpacity
                   key={`${r}-${c}`}
-                  onPress={() => onSelectCell(r, c)}
+                  onPress={() => handleCellSelect(r, c)}
                   style={[
                     styles.cell,
                     {
                       width: sudokuCellPx,
                       height: sudokuCellPx,
-                      borderRightWidth: rightBorder,
-                      borderBottomWidth: bottomBorder,
-                      borderRightColor: rightBorder === 2 ? '#2563eb' : '#e2e8f0',
-                      borderBottomColor: bottomBorder === 2 ? '#2563eb' : '#e2e8f0',
+                      borderRightWidth: rightThick ? 2.5 : 0.5,
+                      borderBottomWidth: bottomThick ? 2.5 : 0.5,
+                      borderRightColor: rightThick ? '#0284c7' : '#e2e8f0',
+                      borderBottomColor: bottomThick ? '#0284c7' : '#e2e8f0',
                       backgroundColor: isSelected
-                        ? '#bfdbfe'
+                        ? '#bae6fd'
                         : isSameNumber
-                        ? '#fef3c7'
+                        ? '#fef08a'
                         : isSameCross
-                        ? '#eff6ff'
+                        ? '#f0f9ff'
                         : '#ffffff',
                     },
+                    isSelected && styles.cellSelectedBorder,
                   ]}
                   activeOpacity={0.75}
                 >
@@ -238,26 +259,20 @@ export const SudokuArena: React.FC<Props> = ({
                     <Text
                       style={[
                         styles.valText,
-                        { fontSize: isFull ? 18 : 14 },
+                        { fontSize: isFull ? 19 : 14 },
                         isFixed
-                          ? { color: '#0f172a', fontWeight: '900' }
-                          : {
-                              color: currentProfile === 'Karla' ? '#9333ea' : '#0284c7',
-                              fontWeight: '800',
-                            },
-                        isWrong && { color: '#ef4444', fontWeight: '900' },
+                          ? styles.fixedDigit
+                          : currentProfile === 'Karla'
+                          ? styles.karlaDigit
+                          : styles.javierDigit,
+                        isWrong && styles.wrongDigit,
                       ]}
                     >
                       {val}
                     </Text>
                   ) : cellNotes.length > 0 ? (
-                    <Text
-                      style={[
-                        styles.notesText,
-                        isFull && { color: '#94a3b8' },
-                      ]}
-                    >
-                      {cellNotes.join('')}
+                    <Text style={styles.notesText} numberOfLines={2}>
+                      {cellNotes.join(' ')}
                     </Text>
                   ) : null}
                 </TouchableOpacity>
@@ -265,17 +280,17 @@ export const SudokuArena: React.FC<Props> = ({
             })}
           </View>
         ))}
-      </View>
+      </Animated.View>
 
-      {/* Number Pad */}
+      {/* Teclado Numérico Táctil con Contador Restante */}
       {isSudokuGameOver ? (
         <TouchableOpacity
           onPress={() => onNewGame(sudoku.difficulty)}
-          style={[styles.gameOverBtn, { backgroundColor: '#e11d48' }]}
+          style={styles.gameOverBtn}
         >
-          <Ionicons name="refresh-circle" size={18} color="#ffffff" />
+          <Ionicons name="refresh-circle" size={20} color="#ffffff" />
           <Text style={styles.gameOverBtnText}>
-            ¡Perdiste tus 3 vidas! Jugar Nuevo Sudoku
+            ¡Perdiste las 3 vidas! Jugar Nuevo Sudoku
           </Text>
         </TouchableOpacity>
       ) : (
@@ -285,21 +300,22 @@ export const SudokuArena: React.FC<Props> = ({
               const count = digitCounts[num] || 0;
               const remaining = Math.max(0, 9 - count);
               const isDone = remaining === 0;
+
               return (
                 <TouchableOpacity
                   key={num}
                   disabled={isDone}
-                  onPress={() => onNumberPress(num)}
+                  onPress={() => handleNumClick(num)}
                   style={[
                     styles.numKey,
-                    isDone && { opacity: 0.35, backgroundColor: '#f1f5f9' },
+                    isDone && styles.numKeyDone,
                   ]}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
-                  <Text style={[styles.numKeyDigit, isDone && { color: '#94a3b8' }]}>
+                  <Text style={[styles.numKeyDigit, isDone && styles.numKeyDigitDone]}>
                     {num}
                   </Text>
-                  <Text style={[styles.numKeyRem, isDone && { color: '#94a3b8' }]}>
+                  <Text style={[styles.remainingCountText, isDone && { color: '#cbd5e1' }]}>
                     {isDone ? '✓' : remaining}
                   </Text>
                 </TouchableOpacity>
@@ -307,6 +323,15 @@ export const SudokuArena: React.FC<Props> = ({
             })}
           </View>
         </View>
+      )}
+
+      {/* Footer con Racha y Tips de Pareja */}
+      {isFull && (
+        <MatchInfoFooter
+          streakCount={sudoku.difficulty === 'hard' ? 5 : 3}
+          gameStatsText={`Sudoku ${sudoku.difficulty.toUpperCase()} • Modo Colaborativo`}
+          coupleBanter="Ambos pueden colocar números juntos en tiempo real para resolver el reto ❤️"
+        />
       )}
     </View>
   );
@@ -318,6 +343,12 @@ const styles = StyleSheet.create({
     gap: 10,
     width: '100%',
   },
+  hiddenInput: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
   topControls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -325,38 +356,64 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 4,
   },
-  diffPillsRow: {
+  segmentedControl: {
     flexDirection: 'row',
-    gap: 4,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 14,
+    padding: 3,
   },
-  diffChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  segmentBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 11,
+  },
+  segmentBtnActive: {
     backgroundColor: '#ffffff',
+    ...GAMES_THEME.shadows.soft,
   },
-  diffChipText: {
+  segmentBtnText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#64748b',
   },
+  segmentBtnTextActive: {
+    color: '#0f172a',
+    fontWeight: '800',
+  },
+  livesWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ffe4e6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   toolsRow: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
   },
   toolBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#f1f5f9',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  gridContainer: {
-    borderColor: '#2563eb',
-    backgroundColor: '#ffffff',
-    borderWidth: 2,
-    borderRadius: 12,
+  toolBtnActive: {
+    backgroundColor: GAMES_THEME.colors.purple,
+    borderColor: GAMES_THEME.colors.purple,
+  },
+  gridOuter: {
+    borderRadius: 18,
+    borderWidth: 2.5,
+    borderColor: '#0284c7',
     overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    ...GAMES_THEME.shadows.card,
   },
   gridRow: {
     flexDirection: 'row',
@@ -365,29 +422,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  valText: {},
+  cellSelectedBorder: {
+    borderWidth: 2,
+    borderColor: '#0284c7',
+    zIndex: 2,
+  },
+  valText: {
+    fontWeight: '800',
+  },
+  fixedDigit: {
+    color: '#0f172a',
+    fontWeight: '900',
+  },
+  karlaDigit: {
+    color: GAMES_THEME.colors.karla.text,
+  },
+  javierDigit: {
+    color: GAMES_THEME.colors.javier.text,
+  },
+  wrongDigit: {
+    color: '#ef4444',
+    fontWeight: '900',
+  },
   notesText: {
     fontSize: 8,
     color: '#64748b',
-    fontWeight: '600',
-  },
-  gameOverBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 14,
-    width: '100%',
-  },
-  gameOverBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 9,
   },
   numpadContainer: {
     width: '100%',
-    gap: 6,
     marginTop: 4,
   },
   numpadRow: {
@@ -398,20 +462,48 @@ const styles = StyleSheet.create({
   numKey: {
     flex: 1,
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#93c5fd',
-    borderRadius: 8,
-    paddingVertical: 5,
+    borderRadius: 12,
+    paddingVertical: 7,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    ...GAMES_THEME.shadows.soft,
+  },
+  numKeyDone: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#f1f5f9',
+    opacity: 0.45,
   },
   numKeyDigit: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
     color: '#0f172a',
   },
-  numKeyRem: {
+  numKeyDigitDone: {
+    color: '#94a3b8',
+  },
+  remainingCountText: {
     fontSize: 9,
-    fontWeight: '700',
-    color: '#2563eb',
+    fontWeight: '800',
+    color: '#0284c7',
+    marginTop: 1,
+  },
+  gameOverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#e11d48',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    width: '100%',
+    ...GAMES_THEME.shadows.glowCoral,
+  },
+  gameOverBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });
