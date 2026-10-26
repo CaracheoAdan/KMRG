@@ -8,8 +8,11 @@ import {
   Modal,
   Vibration,
   Platform,
+  Alert,
   KeyboardAvoidingView,
 } from 'react-native';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from './ui/Icon';
 import { VoiceNoteData, UserProfile } from '../types';
 import { FONTS } from '../theme/designSystem';
@@ -42,6 +45,9 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     0.35, 0.6, 0.45, 0.8, 0.5, 0.9, 0.4, 0.75, 0.55, 0.85, 0.5, 0.65, 0.4, 0.7,
   ]);
 
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const recordedUriRef = useRef<string | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -49,29 +55,18 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       if (playTimerRef.current) clearInterval(playTimerRef.current);
+      if (soundRef.current) {
+        void soundRef.current.unloadAsync();
+      }
+      if (recordingRef.current) {
+        void recordingRef.current.stopAndUnloadAsync();
+      }
     };
   }, []);
 
-  const handleTogglePlay = (note: VoiceNoteData) => {
-    if (playTimerRef.current) {
-      clearInterval(playTimerRef.current);
-      playTimerRef.current = null;
-    }
-
-    if (playingId === note.id) {
-      setPlayingId(null);
-      setPlayProgress(0);
-      return;
-    }
-
-    if (Platform.OS !== 'web') {
-      Vibration.vibrate(25);
-    }
-
-    setPlayingId(note.id);
-    setPlayProgress(0);
+  const simulatePlayback = (note: VoiceNoteData) => {
     const totalMs = Math.max(3, note.durationSeconds) * 1000;
-    const stepMs = 150;
+    const stepMs = 120;
     let elapsed = 0;
 
     playTimerRef.current = setInterval(() => {
@@ -86,50 +81,205 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     }, stepMs);
   };
 
-  const startRecording = () => {
-    setIsRecording(true);
-    setRecordSeconds(0);
-    if (Platform.OS !== 'web') {
-      Vibration.vibrate(40);
+  const handleTogglePlay = async (note: VoiceNoteData) => {
+    if (playTimerRef.current) {
+      clearInterval(playTimerRef.current);
+      playTimerRef.current = null;
     }
 
-    recordTimerRef.current = setInterval(() => {
-      setRecordSeconds((prev) => {
-        if (prev >= 30) {
-          stopRecording();
-          return 30;
-        }
-        return prev + 1;
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+      } catch {}
+      soundRef.current = null;
+    }
+
+    if (playingId === note.id) {
+      setPlayingId(null);
+      setPlayProgress(0);
+      return;
+    }
+
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate(25);
+    }
+
+    setPlayingId(note.id);
+    setPlayProgress(0);
+
+    if (!note.audioUri) {
+      simulatePlayback(note);
+      return;
+    }
+
+    try {
+      let playUri = note.audioUri;
+      if (playUri.startsWith('data:audio/')) {
+        const cachePath = `${FileSystem.cacheDirectory}vn_${note.id}.m4a`;
+        const base64Content = playUri.replace(/^data:audio\/[^;]+;base64,/, '');
+        await FileSystem.writeAsStringAsync(cachePath, base64Content, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        playUri = cachePath;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
       });
-      setLiveWaveform(
-        Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: playUri },
+        { shouldPlay: true },
+        (status) => {
+          if (!status.isLoaded) return;
+          if (status.durationMillis && status.positionMillis) {
+            const ratio = Math.min(1, status.positionMillis / status.durationMillis);
+            setPlayProgress(ratio);
+          }
+          if (status.didJustFinish) {
+            setPlayingId(null);
+            setPlayProgress(0);
+          }
+        }
       );
-    }, 1000);
+      soundRef.current = sound;
+    } catch (err) {
+      console.warn('Fallo al reproducir audio real, usando modo visual:', err);
+      simulatePlayback(note);
+    }
   };
 
-  const stopRecording = () => {
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permiso necesario',
+          'Se requiere acceso al micrófono para grabar notas de voz.'
+        );
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      if (recordingRef.current) {
+        try {
+          await recordingRef.current.stopAndUnloadAsync();
+        } catch {}
+        recordingRef.current = null;
+      }
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.LOW_QUALITY,
+        (status) => {
+          if (status.metering !== undefined) {
+            const db = Math.max(-60, status.metering);
+            const norm = Math.min(1, Math.max(0.18, (db + 60) / 60));
+            setLiveWaveform((prev) => [...prev.slice(1), norm]);
+          }
+        },
+        100
+      );
+
+      recordingRef.current = recording;
+      setIsRecording(true);
+      setRecordSeconds(0);
+      recordedUriRef.current = null;
+
+      if (Platform.OS !== 'web') {
+        Vibration.vibrate(40);
+      }
+
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((prev) => {
+          if (prev >= 30) {
+            void stopRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      console.warn('Error iniciando grabación:', err);
+      // Fallback a simulación si el dispositivo no soporta grabación
+      setIsRecording(true);
+      setRecordSeconds(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((prev) => {
+          if (prev >= 30) {
+            stopRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
+        setLiveWaveform(
+          Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
+        );
+      }, 1000);
+    }
+  };
+
+  const stopRecording = async () => {
     if (recordTimerRef.current) {
       clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
     }
     setIsRecording(false);
+
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+        const uri = recordingRef.current.getURI();
+        recordedUriRef.current = uri;
+      } catch (e) {
+        console.warn('Error deteniendo grabación:', e);
+      }
+      recordingRef.current = null;
+    }
   };
 
-  const handleConfirmSave = () => {
-    stopRecording();
+  const handleConfirmSave = async () => {
+    await stopRecording();
+    const uri = recordedUriRef.current;
+    let finalAudioUri = uri || '';
+
+    if (uri) {
+      try {
+        const base64Data = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        if (base64Data) {
+          finalAudioUri = `data:audio/m4a;base64,${base64Data}`;
+        }
+      } catch (err) {
+        console.warn('Error leyendo archivo de audio grabado:', err);
+      }
+    }
+
     const newNote: VoiceNoteData = {
       id: `vn-${Date.now()}`,
       sender: currentProfile,
-      title: noteTitle.trim() || `Nota de voz de ${currentProfile === 'Karla' ? 'Karlita' : 'Javier'}`,
-      durationSeconds: Math.max(4, recordSeconds || 8),
+      title:
+        noteTitle.trim() ||
+        `Nota de voz de ${currentProfile === 'Karla' ? 'Karlita' : 'Javier'}`,
+      durationSeconds: Math.max(2, recordSeconds || 5),
       waveform: liveWaveform,
-      transcript: noteTranscript.trim() || 'Escucha este mensaje especial para ti.',
+      audioUri: finalAudioUri,
+      transcript:
+        noteTranscript.trim() || 'Escucha este mensaje especial para ti.',
       createdAt: new Date().toISOString(),
     };
+
     onSaveVoiceNote(newNote);
     setNoteTitle('');
     setNoteTranscript('');
     setRecordSeconds(0);
+    recordedUriRef.current = null;
     setIsRecordModalOpen(false);
   };
 
@@ -161,7 +311,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
           return (
             <View key={note.id} style={styles.voiceCard}>
               <TouchableOpacity
-                onPress={() => handleTogglePlay(note)}
+                onPress={() => void handleTogglePlay(note)}
                 style={[styles.playButton, { backgroundColor: primaryColor }]}
                 activeOpacity={0.85}
               >
@@ -223,7 +373,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
         transparent
         animationType="fade"
         onRequestClose={() => {
-          stopRecording();
+          void stopRecording();
           setIsRecordModalOpen(false);
         }}
       >
@@ -236,7 +386,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
               <Text style={styles.modalTitle}>Nueva Nota de Voz</Text>
               <TouchableOpacity
                 onPress={() => {
-                  stopRecording();
+                  void stopRecording();
                   setIsRecordModalOpen(false);
                 }}
                 style={styles.closeBtn}
@@ -266,7 +416,13 @@ export const VoiceNoteWidget: React.FC<Props> = ({
               </View>
 
               <TouchableOpacity
-                onPress={isRecording ? stopRecording : startRecording}
+                onPress={() => {
+                  if (isRecording) {
+                    void stopRecording();
+                  } else {
+                    void startRecording();
+                  }
+                }}
                 style={[
                   styles.micCircleBtn,
                   { backgroundColor: isRecording ? '#ef4444' : primaryColor },
@@ -304,7 +460,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
             />
 
             <TouchableOpacity
-              onPress={handleConfirmSave}
+              onPress={() => void handleConfirmSave()}
               style={[styles.saveBtn, { backgroundColor: primaryColor }]}
             >
               <Ionicons name="send" size={16} color="#ffffff" />
@@ -348,94 +504,104 @@ const styles = StyleSheet.create({
   },
   recordBtnText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   emptyCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#f1f5f9',
+    alignItems: 'center',
   },
   emptyText: {
-    fontSize: 12,
-    color: '#64748b',
+    fontSize: 13,
+    color: '#94a3b8',
     textAlign: 'center',
+    lineHeight: 18,
   },
   voiceCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    padding: 12,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    gap: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
   voiceCenter: {
     flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
   },
   voiceTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 4,
   },
   voiceTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
     color: '#1e293b',
+    flex: 1,
+    marginRight: 8,
   },
   voiceDuration: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
     color: '#94a3b8',
+    fontWeight: '500',
   },
   waveformRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     height: 24,
     marginVertical: 4,
   },
   waveBar: {
-    width: 3.5,
+    width: 4,
     borderRadius: 2,
   },
   voiceTranscript: {
     fontSize: 11,
     color: '#64748b',
     fontStyle: 'italic',
+    marginTop: 2,
   },
   deleteBtn: {
     padding: 6,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
   },
   modalCard: {
-    width: '100%',
-    maxWidth: 370,
     backgroundColor: '#ffffff',
     borderRadius: 24,
     padding: 20,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 18,
@@ -444,54 +610,54 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.serif,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 4,
   },
   recorderBox: {
-    alignItems: 'center',
     borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
   },
   timerText: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 14,
+    fontFamily: FONTS.serif,
   },
   liveWaveRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
-    height: 38,
-    marginVertical: 10,
+    height: 40,
+    marginBottom: 16,
   },
   liveWaveBar: {
-    width: 4,
-    borderRadius: 2,
+    width: 6,
+    borderRadius: 3,
   },
   micCircleBtn: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   recorderHint: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#64748b',
-    marginTop: 4,
+    marginTop: 12,
   },
   inputLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#475569',
-    marginBottom: 4,
-    marginTop: 6,
+    marginBottom: 6,
   },
   input: {
     backgroundColor: '#f8fafc',
@@ -499,22 +665,23 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 13,
+    paddingVertical: 10,
+    fontSize: 14,
     color: '#1e293b',
+    marginBottom: 14,
   },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 13,
+    paddingVertical: 14,
     borderRadius: 14,
-    marginTop: 14,
+    marginTop: 4,
   },
   saveBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
     color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

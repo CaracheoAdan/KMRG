@@ -83,7 +83,8 @@
             "extraProguardRules": "-keep class androidx.work.** { *; }\n-keep class androidx.room.** { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-keep class * extends androidx.work.InputMerger { <init>(); }\n-keep class * extends androidx.work.Worker { <init>(...); }\n-keep class * extends androidx.work.ListenableWorker { <init>(...); }\n-keep class com.caverock.androidsvg.** { *; }"
           }
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

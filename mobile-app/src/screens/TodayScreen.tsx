@@ -30,6 +30,10 @@ import { DatePickerModal } from '../components/DatePickerModal';
 import { AppHeader } from '../components/AppHeader';
 import { VoiceNoteWidget } from '../components/VoiceNoteWidget';
 import { TimeCapsulesWidget } from '../components/TimeCapsulesWidget';
+import { QuickNotesWidget } from '../components/QuickNotesWidget';
+import { TodaySongWidget } from '../components/TodaySongWidget';
+import { HeartbeatHeatmap } from '../components/HeartbeatHeatmap';
+import { QuickNoteMessage, TodaySongData } from '../types';
 import {
   MoodMascot,
   PRESET_FEELINGS,
@@ -46,7 +50,12 @@ import {
   syncSupabaseMessages,
   sendSupabaseInteraction,
   markSupabaseMessageRead,
+  pruneOldInteractions,
 } from '../services/SupabaseService';
+import {
+  registerDevicePushToken,
+  sendPartnerPushNotification,
+} from '../services/NotificationService';
 import {
   getHomeState,
   saveHomeState,
@@ -86,6 +95,8 @@ export const TodayScreen: React.FC = () => {
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCapsulesModalOpen, setIsCapsulesModalOpen] = useState(false);
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [isSongModalOpen, setIsSongModalOpen] = useState(false);
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
   const [petNameDraft, setPetNameDraft] = useState('Pochito');
   const [isEditingPetName, setIsEditingPetName] = useState(false);
@@ -509,6 +520,20 @@ export const TodayScreen: React.FC = () => {
         setIsEditingPetName(false);
         setIsPetModalOpen(true);
       },
+    },
+    {
+      key: 'chat',
+      title: 'Notitas',
+      subtitle: (homeState.quickNotes?.length || 0) > 0 ? `${homeState.quickNotes?.length} notas` : 'Escribir',
+      icon: 'chatbubbles',
+      onPress: () => setIsNotesModalOpen(true),
+    },
+    {
+      key: 'song',
+      title: 'Canción',
+      subtitle: homeState.todaySong?.title || 'Dedicar',
+      icon: 'musical-notes',
+      onPress: () => setIsSongModalOpen(true),
     },
     {
       key: 'voice',
@@ -948,10 +973,32 @@ export const TodayScreen: React.FC = () => {
                   },
                 ]}
               >
-                {/* Coronita o Corazón en la cabeza */}
-                <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
-                  <Ionicons name="heart" size={14} color="#ffffff" />
-                </View>
+                {/* Accesorios de Pochito 2.0 */}
+                {petInfo.accessory === 'crown' && (
+                  <View style={[styles.pouTopHat, { backgroundColor: '#f59e0b' }]}>
+                    <Text style={{ fontSize: 18 }}>👑</Text>
+                  </View>
+                )}
+                {petInfo.accessory === 'party_hat' && (
+                  <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
+                    <Text style={{ fontSize: 18 }}>🥳</Text>
+                  </View>
+                )}
+                {petInfo.accessory === 'flower' && (
+                  <View style={[styles.pouTopHat, { backgroundColor: '#ec4899', right: 10 }]}>
+                    <Text style={{ fontSize: 18 }}>🌸</Text>
+                  </View>
+                )}
+                {petInfo.accessory === 'sunglasses' && (
+                  <View style={[styles.pouTopHat, { top: 35, backgroundColor: 'transparent' }]}>
+                    <Text style={{ fontSize: 24 }}>🕶️</Text>
+                  </View>
+                )}
+                {(!petInfo.accessory || petInfo.accessory === 'none') && (
+                  <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
+                    <Ionicons name="heart" size={14} color="#ffffff" />
+                  </View>
+                )}
 
                 {/* Ojos expresivos estilo Pou */}
                 <View style={styles.pouEyesRow}>
@@ -1009,6 +1056,75 @@ export const TodayScreen: React.FC = () => {
                   />
                 </View>
               </View>
+
+              {/* Conexión Semanal */}
+              <HeartbeatHeatmap
+                streakCount={homeState.streakCount || 1}
+                lastInteractionDate={homeState.lastInteractionDate}
+                primaryColor={primaryColor}
+              />
+            </View>
+
+            {/* Armario de Pochito */}
+            <View style={{ marginTop: 10, marginBottom: 12 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b', marginBottom: 8 }}>
+                Armario de {petInfo.name}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {[
+                  { id: 'none', label: 'Sin gorro', emoji: '✨', minLvl: 1, minHearts: 0 },
+                  { id: 'crown', label: 'Corona Real', emoji: '👑', minLvl: 2, minHearts: 3 },
+                  { id: 'flower', label: 'Florecita', emoji: '🌸', minLvl: 3, minHearts: 8 },
+                  { id: 'sunglasses', label: 'Gafas Cool', emoji: '🕶️', minLvl: 4, minHearts: 15 },
+                  { id: 'party_hat', label: 'Fiesta', emoji: '🥳', minLvl: 5, minHearts: 25 },
+                ].map((item) => {
+                  const isUnlocked = petInfo.level >= item.minLvl || (petInfo.heartsFedTotal || 0) >= item.minHearts;
+                  const isEquipped = (petInfo.accessory || 'none') === item.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => {
+                        if (!isUnlocked) {
+                          Alert.alert(
+                            'Accesorio Bloqueado 🔒',
+                            `Para desbloquear ${item.label}, ${petInfo.name} necesita alcanzar el Nivel ${item.minLvl} o recibir ${item.minHearts} corazones.`
+                          );
+                          return;
+                        }
+                        const updated: HomeState = {
+                          ...homeState,
+                          couplePet: {
+                            ...petInfo,
+                            accessory: item.id as any,
+                          },
+                        };
+                        void updateAndSyncHome(updated);
+                      }}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 14,
+                        backgroundColor: isEquipped ? `${primaryColor}20` : '#f8fafc',
+                        borderWidth: 1.5,
+                        borderColor: isEquipped ? primaryColor : '#e2e8f0',
+                        alignItems: 'center',
+                        gap: 2,
+                        minWidth: 70,
+                        opacity: isUnlocked ? 1 : 0.6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
+                      <Text style={{ fontSize: 10, fontWeight: '600', color: isEquipped ? primaryColor : '#475569' }}>
+                        {item.label}
+                      </Text>
+                      {!isUnlocked && (
+                        <Text style={{ fontSize: 8, color: '#94a3b8' }}>Nv.{item.minLvl}</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Botón para Mandar Corazón y Alimentar */}
@@ -1129,6 +1245,117 @@ export const TodayScreen: React.FC = () => {
             />
           </View>
         </View>
+      </Modal>
+
+      {/* ================= MODAL: NOTITAS RÁPIDAS ================= */}
+      <Modal
+        visible={isNotesModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsNotesModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notitas de Amor</Text>
+              <TouchableOpacity
+                onPress={() => setIsNotesModalOpen(false)}
+                style={styles.closeBtn}
+              >
+                <Ionicons name="close" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <QuickNotesWidget
+              messages={homeState.quickNotes || []}
+              currentProfile={currentProfile}
+              primaryColor={primaryColor}
+              onSendNote={(text, sticker) => {
+                const newNote: QuickNoteMessage = {
+                  id: `qn-${Date.now()}`,
+                  sender: currentProfile,
+                  text,
+                  sticker,
+                  createdAt: new Date().toISOString(),
+                };
+                const updatedNotes = [...(homeState.quickNotes || []), newNote].slice(-50);
+                const updatedHome: HomeState = {
+                  ...homeState,
+                  quickNotes: updatedNotes,
+                };
+                void updateAndSyncHome(updatedHome);
+
+                const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+                const recipientToken = homeState.pushTokens?.[recipientRole];
+                if (recipientToken) {
+                  const preview =
+                    text ||
+                    (sticker
+                      ? `Sticker de Pochito ${sticker.replace('pochito_', '')}`
+                      : 'Un mensajito');
+                  void sendPartnerPushNotification(
+                    recipientToken,
+                    `KMRG 💭 Mensaje de ${getDisplayName(currentProfile)}`,
+                    preview,
+                    { type: 'QUICK_NOTE', sender: currentProfile }
+                  );
+                }
+              }}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ================= MODAL: NUESTRA CANCIÓN DE HOY ================= */}
+      <Modal
+        visible={isSongModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsSongModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Nuestra Música</Text>
+              <TouchableOpacity
+                onPress={() => setIsSongModalOpen(false)}
+                style={styles.closeBtn}
+              >
+                <Ionicons name="close" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <TodaySongWidget
+              song={homeState.todaySong}
+              currentProfile={currentProfile}
+              primaryColor={primaryColor}
+              onSaveSong={(newSong: TodaySongData) => {
+                const updatedHome: HomeState = {
+                  ...homeState,
+                  todaySong: newSong,
+                };
+                void updateAndSyncHome(updatedHome);
+
+                const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+                const recipientToken = homeState.pushTokens?.[recipientRole];
+                if (recipientToken) {
+                  void sendPartnerPushNotification(
+                    recipientToken,
+                    'KMRG 🎵 Canción dedicada',
+                    `¡${getDisplayName(currentProfile)} te dedicó "${newSong.title} - ${newSong.artist}"!`,
+                    { type: 'TODAY_SONG', sender: currentProfile }
+                  );
+                }
+              }}
+            />
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Selector de Fecha de Aniversario */}

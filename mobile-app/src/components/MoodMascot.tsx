@@ -15,6 +15,7 @@ interface MoodMascotProps {
   emoji?: string;
   size?: 'sm' | 'md' | 'lg';
   accentColor?: string;
+  accessory?: 'none' | 'crown' | 'party_hat' | 'flower' | 'sunglasses';
 }
 
 export const PRESET_FEELINGS: Array<{
@@ -64,6 +65,7 @@ export const MoodMascot: React.FC<MoodMascotProps> = ({
   emoji,
   size = 'md',
   accentColor = '#e11d48',
+  accessory,
 }) => {
   const feelingType = resolveFeelingType(feeling, emoji);
 
@@ -74,6 +76,27 @@ export const MoodMascot: React.FC<MoodMascotProps> = ({
 
   return (
     <View style={[styles.container, { width: baseWidth + 12 * scale, height: baseHeight + 14 * scale }]}>
+      {/* Accesorios de Pochito 2.0 */}
+      {accessory === 'crown' && (
+        <View style={[styles.floatingBadgeTop, { top: -10 * scale, left: baseWidth / 2 - 6 * scale, zIndex: 12 }]}>
+          <Text style={{ fontSize: 16 * scale }}>👑</Text>
+        </View>
+      )}
+      {accessory === 'party_hat' && (
+        <View style={[styles.floatingBadgeTop, { top: -10 * scale, left: baseWidth / 2 - 6 * scale, zIndex: 12 }]}>
+          <Text style={{ fontSize: 16 * scale }}>🥳</Text>
+        </View>
+      )}
+      {accessory === 'flower' && (
+        <View style={[styles.floatingBadgeTop, { top: 0, right: -4 * scale, zIndex: 12 }]}>
+          <Text style={{ fontSize: 15 * scale }}>🌸</Text>
+        </View>
+      )}
+      {accessory === 'sunglasses' && (
+        <View style={[styles.floatingBadgeTop, { top: 18 * scale, left: baseWidth / 2 - 10 * scale, zIndex: 12 }]}>
+          <Text style={{ fontSize: 15 * scale }}>🕶️</Text>
+        </View>
+      )}
       {/* Aura o accesorio flotante superior según el estado */}
       {feelingType === 'enamorado' && (
         <View style={[styles.floatingBadgeTop, { top: -2 * scale }]}>

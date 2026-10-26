@@ -197,3 +197,15 @@ export const sendSupabaseInteraction = async (
     return { success: false };
   }
 };
+
+/**
+ * Poda interacciones transitorias antiguas (> 3 días) para mantener la base de datos veloz y ligera
+ */
+export const pruneOldInteractions = async (): Promise<void> => {
+  try {
+    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('interactions').delete().lt('created_at', cutoff);
+  } catch {
+    // Silencioso
+  }
+};

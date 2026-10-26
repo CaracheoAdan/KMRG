@@ -42,6 +42,8 @@ export interface CouplePetState {
   heartsFedTotal: number;
   lastFedAt: string; // ISO string
   lastFedBy?: UserProfile;
+  accessory?: 'none' | 'crown' | 'party_hat' | 'flower' | 'sunglasses';
+  unlockedAccessories?: string[];
 }
 
 export type RootTabParamList = {
@@ -115,6 +117,23 @@ export interface SpecialPlace {
   favorite?: boolean;
 }
 
+export interface QuickNoteMessage {
+  id: string;
+  sender: UserProfile;
+  text: string;
+  sticker?: string;
+  createdAt: string;
+}
+
+export interface TodaySongData {
+  title: string;
+  artist: string;
+  dedication?: string;
+  addedBy: UserProfile;
+  url?: string;
+  updatedAt: string;
+}
+
 export interface HomeState {
   anniversaryDate: string; // YYYY-MM-DD
   nextEventTitle: string;
@@ -138,6 +157,12 @@ export interface HomeState {
     Karla: PartnerProfileInfo;
     Javier: PartnerProfileInfo;
   };
+  pushTokens?: {
+    Karla?: string;
+    Javier?: string;
+  };
+  quickNotes?: QuickNoteMessage[];
+  todaySong?: TodaySongData;
 }
 
 export interface MovieItem {

@@ -137,3 +137,61 @@ export const scheduleDailyMessage = async (): Promise<void> => {
     console.warn('Error programando notificaciones locales:', error);
   }
 };
+
+/**
+ * Registra y devuelve el token de Expo Push para este dispositivo
+ */
+export const registerDevicePushToken = async (): Promise<string | null> => {
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return null;
+
+    const tokenResult = await Notifications.getExpoPushTokenAsync({
+      projectId: '7f11a031-8db2-49bd-be59-44f2a3426c2a',
+    });
+    return tokenResult?.data || null;
+  } catch (error) {
+    console.log('[NotificationService] No se pudo obtener push token (normal en emulador o sin EAS):', error);
+    return null;
+  }
+};
+
+/**
+ * Envía una notificación push inmediata al dispositivo de la pareja vía Expo Push API
+ */
+export const sendPartnerPushNotification = async (
+  recipientToken: string,
+  title: string,
+  body: string,
+  data: Record<string, unknown> = {}
+): Promise<boolean> => {
+  if (!recipientToken || typeof recipientToken !== 'string') {
+    return false;
+  }
+
+  try {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: recipientToken,
+        title,
+        body,
+        sound: 'default',
+        priority: 'high',
+        channelId: 'daily-messages',
+        data,
+      }),
+    });
+
+    const result = await response.json();
+    return result?.data?.status === 'ok';
+  } catch (error) {
+    console.warn('[NotificationService] Error enviando push notification:', error);
+    return false;
+  }
+};
