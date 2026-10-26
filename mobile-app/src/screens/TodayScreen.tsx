@@ -531,7 +531,6 @@ export const TodayScreen: React.FC = () => {
     setIsNextEventModalOpen(false);
   };
 
-  const voiceCount = (homeState.voiceNotes || []).length;
   const capsulesCount = (homeState.timeCapsules || []).length;
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 

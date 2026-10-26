@@ -8,7 +8,6 @@ import { MoviesScreen } from '../screens/MoviesScreen';
 import { WriteScreen } from '../screens/WriteScreen';
 import { GamesScreen } from '../screens/GamesScreen';
 import { MemoriesScreen } from '../screens/MemoriesScreen';
-import { ChatScreen } from '../screens/ChatScreen';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -41,7 +40,16 @@ export const TabNavigator: React.FC = () => {
         headerShown: false,
         tabBarActiveTintColor: primaryColor,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: [styles.tabBar, { backgroundColor: colors.surface, borderTopColor: colors.border, shadowColor: colors.shadow, height: 64 + insets.bottom, paddingBottom: 8 + insets.bottom }],
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            shadowColor: colors.shadow,
+            height: 64 + insets.bottom,
+            paddingBottom: 8 + insets.bottom,
+          },
+        ],
         animation: 'shift',
         tabBarLabelStyle: styles.tabBarLabel,
       }}
@@ -65,15 +73,15 @@ export const TabNavigator: React.FC = () => {
       />
 
       <Tab.Screen
-        name="Chat"
-        component={ChatScreen as any}
+        name="Cine"
+        component={MoviesScreen as any}
         options={{
-          tabBarLabel: 'Chat',
-          tabBarButton: createAccessibleTabButton('Chat', 'Chat íntimo de pareja') as any,
+          tabBarLabel: 'Cine',
+          tabBarButton: createAccessibleTabButton('Cine y Planes', 'Películas y lista de sueños') as any,
           tabBarIcon: ({ focused, color }) => (
             <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
               <Ionicons
-                name={focused ? 'chatbubbles' : 'chatbubbles-outline'}
+                name={focused ? 'film' : 'film-outline'}
                 size={21}
                 color={color}
               />
@@ -88,31 +96,15 @@ export const TabNavigator: React.FC = () => {
         options={{
           tabBarLabel: 'Escribir',
           tabBarButton: createAccessibleTabButton('Escribir', 'Redactar una carta para tu pareja') as any,
-          tabBarIcon: ({ focused, color }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons
-                name={focused ? 'pencil' : 'pencil-outline'}
-                size={21}
-                color={color}
-              />
-            </View>
-          ),
-        }}
-      />
-
-      <Tab.Screen
-        name="Cine"
-        component={MoviesScreen as any}
-        options={{
-          tabBarLabel: 'Cine',
-          tabBarButton: createAccessibleTabButton('Cine y Planes', 'Películas y lista de sueños') as any,
-          tabBarIcon: ({ focused, color }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
-              <Ionicons
-                name={focused ? 'film' : 'film-outline'}
-                size={21}
-                color={color}
-              />
+          tabBarIcon: ({ focused }) => (
+            <View
+              style={[
+                styles.writeIconCircle,
+                { backgroundColor: primaryColor, shadowColor: primaryColor },
+                focused && { transform: [{ scale: 1.08 }] },
+              ]}
+            >
+              <Ionicons name="pencil" size={18} color="#ffffff" />
             </View>
           ),
         }}
@@ -178,5 +170,16 @@ const styles = StyleSheet.create({
   },
   activeIconContainer: {
     transform: [{ scale: 1.08 }],
+  },
+  writeIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });

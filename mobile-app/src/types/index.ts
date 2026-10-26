@@ -52,7 +52,6 @@ export type RootTabParamList = {
   Escribir: undefined;
   Juegos: undefined;
   Nosotros: undefined;
-  Chat?: undefined;
 };
 
 export interface UserMood {
