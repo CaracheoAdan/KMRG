@@ -142,7 +142,17 @@ export const TabNavigator: React.FC = () => {
         name="Chat"
         component={ChatScreen as any}
         options={{
-          tabBarButton: () => null,
+          tabBarLabel: 'Chat',
+          tabBarButton: createAccessibleTabButton('Chat', 'Chat íntimo de pareja') as any,
+          tabBarIcon: ({ focused, color }) => (
+            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+              <Ionicons
+                name={focused ? 'chatbubbles' : 'chatbubbles-outline'}
+                size={21}
+                color={color}
+              />
+            </View>
+          ),
         }}
       />
     </Tab.Navigator>
