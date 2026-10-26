@@ -1848,16 +1848,6 @@ export const GamesScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={() => handleOpenScoreBreakdown('all')}
-          style={styles.breakdownHintRow}
-          activeOpacity={0.75}
-          accessibilityLabel="Abrir desglose semanal de juegos"
-        >
-          <Ionicons name="stats-chart" size={12} color="#f43f5e" />
-          <Text style={styles.breakdownHintText}>Toca los puntos para ver el desglose semanal ↗</Text>
-        </TouchableOpacity>
-
         {/* 2. Grid de 5 Juegos: 2 Columnas x 3 Filas (Misma altura para todas mediante flex) */}
         {(() => {
           // Ordenar juegos: donde es el turno del usuario van PRIMERO
@@ -2535,20 +2525,6 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
-  },
-  breakdownHintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    marginTop: -4,
-    marginBottom: 2,
-    paddingVertical: 2,
-  },
-  breakdownHintText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#e11d48',
   },
   unifiedTurnPill: {
     flexDirection: 'row',
