@@ -384,13 +384,237 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   const karlaBaseTime = new Date(normBase.moods.Karla.updatedAt || 0).getTime();
   const karlaIncTime = new Date(normIncoming.moods.Karla.updatedAt || 0).getTime();
 
+  // Preservar fecha de aniversario personalizada
+  const anniversaryDate =
+    normIncoming.anniversaryDate && normIncoming.anniversaryDate !== DEFAULT_HOME_STATE.anniversaryDate
+      ? normIncoming.anniversaryDate
+      : normBase.anniversaryDate || DEFAULT_HOME_STATE.anniversaryDate;
+
+  // Preservar próximo evento agendado
+  const nextEventTitle = normIncoming.nextEventTitle || normBase.nextEventTitle || '';
+  const nextEventDate = normIncoming.nextEventDate || normBase.nextEventDate || '';
+
+  // Notita fija: la más reciente gana
+  const stickyBaseTime = new Date(normBase.stickyNote?.updatedAt || 0).getTime();
+  const stickyIncTime = new Date(normIncoming.stickyNote?.updatedAt || 0).getTime();
+  const stickyNote =
+    stickyIncTime >= stickyBaseTime ? normIncoming.stickyNote : normBase.stickyNote;
+
+  // Razones para amar: unión por ID sin perder ninguna
+  const reasonsMap = new Map<string, any>();
+  (normBase.loveReasons || []).forEach((r) => reasonsMap.set(r.id, r));
+  (normIncoming.loveReasons || []).forEach((r) => reasonsMap.set(r.id, r));
+
+  // Notas de voz: unión por ID sin perder ninguna
+  const voiceMap = new Map<string, any>();
+  (normBase.voiceNotes || []).forEach((v) => voiceMap.set(v.id, v));
+  (normIncoming.voiceNotes || []).forEach((v) => voiceMap.set(v.id, v));
+
+  // Cápsulas de tiempo: unión por ID sin perder ninguna
+  const capsulesMap = new Map<string, any>();
+  (normBase.timeCapsules || []).forEach((c) => capsulesMap.set(c.id, c));
+  (normIncoming.timeCapsules || []).forEach((c) => capsulesMap.set(c.id, c));
+
+  // Mascota de pareja Pochito: retener mayor nivel, xp, corazones y accesorios
+  const basePet = normBase.couplePet || DEFAULT_HOME_STATE.couplePet!;
+  const incPet = normIncoming.couplePet || DEFAULT_HOME_STATE.couplePet!;
+  const unlockedAccs = Array.from(
+    new Set([
+      ...(basePet.unlockedAccessories || ['none']),
+      ...(incPet.unlockedAccessories || ['none']),
+    ])
+  );
+
+  const couplePet = {
+    name: incPet.name && incPet.name !== 'Pochito' ? incPet.name : (basePet.name || 'Pochito'),
+    level: Math.max(basePet.level || 1, incPet.level || 1),
+    xp: Math.max(basePet.xp || 0, incPet.xp || 0),
+    happiness: Math.max(basePet.happiness || 50, incPet.happiness || 50),
+    heartsFedTotal: Math.max(basePet.heartsFedTotal || 0, incPet.heartsFedTotal || 0),
+    lastFedAt:
+      new Date(incPet.lastFedAt || 0).getTime() >= new Date(basePet.lastFedAt || 0).getTime()
+        ? incPet.lastFedAt
+        : basePet.lastFedAt,
+    lastFedBy: incPet.lastFedBy || basePet.lastFedBy,
+    accessory:
+      incPet.accessory && incPet.accessory !== 'none'
+        ? incPet.accessory
+        : (basePet.accessory || 'none'),
+    unlockedAccessories: unlockedAccs,
+  };
+
+  // Perfiles de pareja: conservar avatares y nombres personalizados
+  const partnerProfiles = {
+    Karla: {
+      id: 'Karla' as const,
+      displayName:
+        normIncoming.partnerProfiles?.Karla?.displayName &&
+        normIncoming.partnerProfiles?.Karla?.displayName !== 'Karlita'
+          ? normIncoming.partnerProfiles.Karla.displayName
+          : (normBase.partnerProfiles?.Karla?.displayName || 'Karlita'),
+      avatarUri:
+        normIncoming.partnerProfiles?.Karla?.avatarUri ||
+        normBase.partnerProfiles?.Karla?.avatarUri ||
+        null,
+    },
+    Javier: {
+      id: 'Javier' as const,
+      displayName:
+        normIncoming.partnerProfiles?.Javier?.displayName &&
+        normIncoming.partnerProfiles?.Javier?.displayName !== 'Javier'
+          ? normIncoming.partnerProfiles.Javier.displayName
+          : (normBase.partnerProfiles?.Javier?.displayName || 'Javier'),
+      avatarUri:
+        normIncoming.partnerProfiles?.Javier?.avatarUri ||
+        normBase.partnerProfiles?.Javier?.avatarUri ||
+        null,
+    },
+  };
+
+  // Notitas rápidas: unión por ID ordenadas por fecha
+  const quickMap = new Map<string, any>();
+  (normBase.quickNotes || []).forEach((n) => quickMap.set(n.id, n));
+  (normIncoming.quickNotes || []).forEach((n) => quickMap.set(n.id, n));
+  const quickNotes = Array.from(quickMap.values())
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-50);
+
+  // Canción de hoy: más reciente
+  const songBaseTime = new Date(normBase.todaySong?.updatedAt || 0).getTime();
+  const songIncTime = new Date(normIncoming.todaySong?.updatedAt || 0).getTime();
+  const todaySong =
+    songIncTime >= songBaseTime
+      ? normIncoming.todaySong
+      : (normBase.todaySong || normIncoming.todaySong);
+
   return {
     ...normBase,
     ...normIncoming,
+    anniversaryDate,
+    nextEventTitle,
+    nextEventDate,
     streakCount: Math.max(normBase.streakCount || 1, normIncoming.streakCount || 1),
+    lastInteractionDate:
+      normIncoming.lastInteractionDate > normBase.lastInteractionDate
+        ? normIncoming.lastInteractionDate
+        : normBase.lastInteractionDate,
     moods: {
       Javier: javierIncTime >= javierBaseTime ? normIncoming.moods.Javier : normBase.moods.Javier,
       Karla: karlaIncTime >= karlaBaseTime ? normIncoming.moods.Karla : normBase.moods.Karla,
+    },
+    stickyNote,
+    loveReasons: Array.from(reasonsMap.values()),
+    voiceNotes: Array.from(voiceMap.values()),
+    timeCapsules: Array.from(capsulesMap.values()),
+    couplePet,
+    partnerProfiles,
+    pushTokens: {
+      ...(normBase.pushTokens || {}),
+      ...(normIncoming.pushTokens || {}),
+    },
+    quickNotes,
+    todaySong,
+  };
+}
+
+function mergeMoviesStates(
+  base: MoviesAndPlansState,
+  incoming: MoviesAndPlansState
+): MoviesAndPlansState {
+  const normBase = normalizeMoviesState(base);
+  const normIncoming = normalizeMoviesState(incoming);
+
+  // Unir películas por ID sin perder ninguna calificación ni notas
+  const moviesMap = new Map<string, any>();
+  normBase.movies.forEach((m) => moviesMap.set(m.id, m));
+  normIncoming.movies.forEach((m) => {
+    if (moviesMap.has(m.id)) {
+      const existing = moviesMap.get(m.id)!;
+      moviesMap.set(m.id, {
+        ...existing,
+        ...m,
+        watched: existing.watched || m.watched,
+        ratingJavier: m.ratingJavier ?? existing.ratingJavier,
+        ratingKarla: m.ratingKarla ?? existing.ratingKarla,
+        notes: m.notes || existing.notes,
+      });
+    } else {
+      moviesMap.set(m.id, m);
+    }
+  });
+
+  // Unir bucket list por ID sin perder ítems completados
+  const bucketMap = new Map<string, any>();
+  normBase.bucketList.forEach((b) => bucketMap.set(b.id, b));
+  normIncoming.bucketList.forEach((b) => {
+    if (bucketMap.has(b.id)) {
+      const existing = bucketMap.get(b.id)!;
+      bucketMap.set(b.id, {
+        ...existing,
+        ...b,
+        completed: existing.completed || b.completed,
+      });
+    } else {
+      bucketMap.set(b.id, b);
+    }
+  });
+
+  // Unir opciones de comida personalizadas
+  const foods = Array.from(
+    new Set([...normBase.foodOptions, ...normIncoming.foodOptions])
+  );
+
+  return {
+    movies: Array.from(moviesMap.values()),
+    bucketList: Array.from(bucketMap.values()),
+    foodOptions: foods.length > 0 ? foods : DEFAULT_MOVIES_STATE.foodOptions,
+  };
+}
+
+function mergeSpecialPlaces(
+  base: SpecialPlacesState,
+  incoming: SpecialPlacesState
+): SpecialPlacesState {
+  const normBase = normalizePlacesState(base);
+  const normIncoming = normalizePlacesState(incoming);
+
+  const placesMap = new Map<string, any>();
+  normBase.places.forEach((p) => placesMap.set(p.id, p));
+  normIncoming.places.forEach((p) => {
+    if (placesMap.has(p.id)) {
+      const existing = placesMap.get(p.id)!;
+      placesMap.set(p.id, {
+        ...existing,
+        ...p,
+        favorite: existing.favorite || p.favorite,
+        imageUri: p.imageUri || existing.imageUri,
+      });
+    } else {
+      placesMap.set(p.id, p);
+    }
+  });
+
+  return {
+    places: Array.from(placesMap.values()),
+  };
+}
+
+function mergeGamesStates(base: GamesState, incoming: GamesState): GamesState {
+  const normBase = normalizeGamesState(base);
+  const normIncoming = normalizeGamesState(incoming);
+
+  return {
+    ...normBase,
+    ...normIncoming,
+    ticTacToe: {
+      ...normIncoming.ticTacToe,
+      scoreKarla: Math.max(normBase.ticTacToe.scoreKarla || 0, normIncoming.ticTacToe.scoreKarla || 0),
+      scoreJavier: Math.max(normBase.ticTacToe.scoreJavier || 0, normIncoming.ticTacToe.scoreJavier || 0),
+    },
+    battleship: {
+      ...normIncoming.battleship,
+      winsKarla: Math.max(normBase.battleship.winsKarla || 0, normIncoming.battleship.winsKarla || 0),
+      winsJavier: Math.max(normBase.battleship.winsJavier || 0, normIncoming.battleship.winsJavier || 0),
     },
   };
 }
@@ -505,7 +729,28 @@ async function fetchLatestSyncedState<T>(
 
   let localCached: T | null = null;
   try {
-    const raw = await AsyncStorage.getItem(localKey);
+    let raw = await AsyncStorage.getItem(localKey);
+
+    // Migración automática de claves legadas/anteriores para evitar pérdida de datos en actualizaciones
+    if (!raw) {
+      const legacyCandidates = [
+        localKey.replace('_v2', '_v1'),
+        localKey.replace('_v2', ''),
+        localKey.replace('_v1', ''),
+      ];
+      for (const leg of legacyCandidates) {
+        if (leg !== localKey) {
+          const legRaw = await AsyncStorage.getItem(leg);
+          if (legRaw) {
+            raw = legRaw;
+            // Escribir en la clave actual para futuras lecturas rápidas
+            await AsyncStorage.setItem(localKey, legRaw);
+            break;
+          }
+        }
+      }
+    }
+
     if (raw) {
       localCached = applyNormalize({ ...defaultValue, ...(JSON.parse(raw) as T) });
     }
@@ -523,8 +768,11 @@ async function fetchLatestSyncedState<T>(
 
     if (!error && data && data.length > 0 && data[0].payload) {
       const remoteRaw = applyNormalize({ ...defaultValue, ...(data[0].payload as T) });
-      const finalState =
-        localCached && merger ? merger(localCached, remoteRaw) : remoteRaw;
+      const finalState = localCached
+        ? merger
+          ? merger(localCached, remoteRaw)
+          : { ...remoteRaw, ...localCached }
+        : remoteRaw;
       await AsyncStorage.setItem(localKey, JSON.stringify(finalState));
       return finalState;
     }
@@ -603,7 +851,8 @@ export const getMoviesState = (): Promise<MoviesAndPlansState> =>
     'sync_movies_state',
     MOVIES_STATE_KEY,
     DEFAULT_MOVIES_STATE,
-    normalizeMoviesState
+    normalizeMoviesState,
+    mergeMoviesStates
   );
 
 export const saveMoviesState = (sender: UserProfile, state: MoviesAndPlansState): Promise<void> =>
@@ -620,7 +869,8 @@ export const getGamesState = (): Promise<GamesState> =>
     'sync_games_state',
     GAMES_STATE_KEY,
     DEFAULT_GAMES_STATE,
-    normalizeGamesState
+    normalizeGamesState,
+    mergeGamesStates
   );
 
 export const saveGamesState = (sender: UserProfile, state: GamesState): Promise<void> =>
@@ -637,7 +887,8 @@ export const getSpecialPlacesState = (): Promise<SpecialPlacesState> =>
     'sync_places_state',
     PLACES_STATE_KEY,
     DEFAULT_PLACES_STATE,
-    normalizePlacesState
+    normalizePlacesState,
+    mergeSpecialPlaces
   );
 
 export const saveSpecialPlacesState = (

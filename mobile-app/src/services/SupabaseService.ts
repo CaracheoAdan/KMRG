@@ -204,7 +204,13 @@ export const sendSupabaseInteraction = async (
 export const pruneOldInteractions = async (): Promise<void> => {
   try {
     const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from('interactions').delete().lt('created_at', cutoff);
+    // SEGURIDAD CRÍTICA: Solo podar latidos efímeros 'thinking_of_you'.
+    // NUNCA eliminar registros de estado sincronizado ('sync_home_state', 'sync_movies_state', etc.).
+    await supabase
+      .from('interactions')
+      .delete()
+      .eq('type', 'thinking_of_you')
+      .lt('created_at', cutoff);
   } catch {
     // Silencioso
   }

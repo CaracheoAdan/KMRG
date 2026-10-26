@@ -10,6 +10,12 @@ import { ThemeSelectorModal } from './src/components/ThemeSelectorModal';
 import { CustomAlertProvider } from './src/components/CustomAlertModal';
 import { syncSupabaseMessages, syncSupabaseMilestones } from './src/services/SupabaseService';
 import { scheduleDailyMessage } from './src/services/NotificationService';
+import {
+  getHomeState,
+  getMoviesState,
+  getSpecialPlacesState,
+  getGamesState,
+} from './src/services/CoupleSyncService';
 
 // Limitar escala de fuente a 1.2 para que ninguna pantalla rompa el diseño responsivo sin scroll
 if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
@@ -27,7 +33,14 @@ function MainNavigator() {
 
   useEffect(() => {
     if (profile) {
-      void Promise.all([syncSupabaseMessages(), syncSupabaseMilestones()]).then(() => {
+      void Promise.all([
+        syncSupabaseMessages(profile),
+        syncSupabaseMilestones(),
+        getHomeState(),
+        getMoviesState(),
+        getSpecialPlacesState(),
+        getGamesState(),
+      ]).then(() => {
         void scheduleDailyMessage();
       });
     }
