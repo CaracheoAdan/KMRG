@@ -72,15 +72,25 @@ export const HangmanArena: React.FC<Props> = ({
   );
 
   // Palabras y casillas GRANDES y legibles
-  const wordChars = hangman.word.split('');
+  const cleanWord = (hangman.word || '').trim();
+  const wordChars = cleanWord.split('');
   const isLongWord = wordChars.length > 7;
 
-  // Dimensiones amplias para que las letras se vean GRANDES (26px a 32px)
-  const slotWidth = isLongWord
-    ? Math.max(34, Math.floor((SCREEN_W - 64) / Math.min(wordChars.length, 6)))
-    : Math.min(48, Math.max(38, Math.floor((SCREEN_W - 56) / wordChars.length)));
+  // Ancho del contenedor disponible
+  const containerWidth = Math.min(SCREEN_W - 16, 400);
+
+  // Dimensiones del teclado QWERTY: 10 teclas por fila + 9 espacios de 4px
+  const keyWidth = Math.floor((containerWidth - (9 * 4)) / 10);
+  const keyHeight = 46;
+
+  // Dimensiones de las casillas de letras
+  const maxSlotsInRow = isLongWord ? Math.ceil(wordChars.length / 2) : Math.max(wordChars.length, 1);
+  const slotWidth = Math.min(
+    48,
+    Math.max(34, Math.floor((containerWidth - 24 - (maxSlotsInRow * 6)) / maxSlotsInRow))
+  );
   const slotHeight = Math.floor(slotWidth * 1.25);
-  const letterFontSize = Math.floor(slotWidth * 0.72);
+  const letterFontSize = Math.floor(slotWidth * 0.7);
 
   return (
     <View style={styles.container}>
@@ -211,7 +221,7 @@ export const HangmanArena: React.FC<Props> = ({
         )}
       </View>
 
-      {/* 4. Teclado QWERTY Táctil con Letras Grandes (18px) */}
+      {/* 4. Teclado QWERTY Táctil con Botones Robustos (Ancho Explícito, Nunca se Colapsan) */}
       <View style={styles.keyboardContainer}>
         {QWERTY_ROWS.map((row, rIdx) => (
           <View key={rIdx} style={styles.keyboardRow}>
@@ -228,6 +238,7 @@ export const HangmanArena: React.FC<Props> = ({
                   onPress={() => handleKeyPress(letter)}
                   style={[
                     styles.keyButton,
+                    { width: keyWidth, height: keyHeight },
                     isHit && styles.keyHit,
                     isMiss && styles.keyMiss,
                   ]}
@@ -291,7 +302,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: GAMES_THEME.spacing.sm + 2,
     width: '100%',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
   stageCard: {
     width: '100%',
@@ -559,6 +570,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0f172a',
     textAlign: 'center',
+    includeFontPadding: false,
   },
   slotLetterTextRevealed: {
     color: '#7c3aed',
@@ -601,19 +613,18 @@ const styles = StyleSheet.create({
   },
   keyboardContainer: {
     width: '100%',
-    gap: 5,
-    marginTop: 2,
+    gap: 6,
+    marginTop: 4,
+    alignItems: 'center',
   },
   keyboardRow: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 4,
   },
   keyButton: {
-    flex: 1,
-    maxWidth: 36,
-    height: 48, // 48px de alto táctil
-    borderRadius: 10,
+    borderRadius: 8,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -631,9 +642,11 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   keyText: {
-    fontSize: 18, // 18px grande y claro
+    fontSize: 16,
     fontWeight: '900',
     color: '#0f172a',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   keyTextHit: {
     color: '#ffffff',

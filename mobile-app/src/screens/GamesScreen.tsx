@@ -1416,6 +1416,7 @@ export const GamesScreen: React.FC = () => {
       <View
         style={[
           styles.arenaCard,
+          { width: '100%', alignItems: 'center' },
           isFull && { backgroundColor: 'transparent', borderWidth: 0, padding: 0 },
           !isFull && { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
@@ -2218,6 +2219,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   gameActiveScrollContent: {
     flexGrow: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 12,

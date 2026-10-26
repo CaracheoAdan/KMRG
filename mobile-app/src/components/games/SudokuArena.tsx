@@ -55,10 +55,14 @@ export const SudokuArena: React.FC<Props> = ({
 }) => {
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Tablero grande aprovechando el ancho útil
-  const boardSize = Math.min(SCREEN_W - 20, 380);
+  // Tablero grande aprovechando el ancho disponible
+  const availableWidth = Math.min(SCREEN_W - 20, 380);
+  const boardSize = availableWidth;
   const cellPx = Math.floor((boardSize - 10) / 9);
-  const digitFontSize = Math.floor(cellPx * 0.72); // Números grandes y legibles (~28px)
+  const digitFontSize = Math.floor(cellPx * 0.72); // ~28px de altura nítida
+
+  // Teclado numérico: ancho explícito por tecla (9 teclas + 8 gaps de 4px)
+  const numKeyWidth = Math.floor((availableWidth - (8 * 4)) / 9);
 
   // Contador de dígitos restantes
   const digitCounts: Record<number, number> = {
@@ -293,7 +297,7 @@ export const SudokuArena: React.FC<Props> = ({
         </View>
       </View>
 
-      {/* 4. Teclado Numérico 1–9 Fijo con Dígitos Grandes (22px) y 52px de alto */}
+      {/* 4. Teclado Numérico 1–9 Fijo con Botones Robustos (Ancho Explícito, Nunca se Colapsan) */}
       {isSudokuGameOver ? (
         <TouchableOpacity
           onPress={() => onNewGame(sudoku.difficulty)}
@@ -319,6 +323,7 @@ export const SudokuArena: React.FC<Props> = ({
                   onPress={() => handleNumClick(num)}
                   style={[
                     styles.numKey,
+                    { width: numKeyWidth },
                     isDone && styles.numKeyDone,
                   ]}
                   activeOpacity={0.7}
@@ -350,7 +355,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: GAMES_THEME.spacing.sm,
     width: '100%',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   topBar: {
     flexDirection: 'row',
@@ -434,17 +439,18 @@ const styles = StyleSheet.create({
   valText: {
     fontWeight: '900',
     textAlign: 'center',
+    includeFontPadding: false,
   },
   fixedDigit: {
-    color: '#0f172a', // Negro carbón profundo y ultra nítido
+    color: '#0f172a',
     fontWeight: '900',
   },
   karlaDigit: {
-    color: '#9333ea', // Morado intenso para Karla
+    color: '#9333ea',
     fontWeight: '900',
   },
   javierDigit: {
-    color: '#0284c7', // Azul brillante para Javier
+    color: '#0284c7',
     fontWeight: '900',
   },
   wrongDigit: {
@@ -482,18 +488,19 @@ const styles = StyleSheet.create({
   },
   numpadContainer: {
     width: '100%',
-    marginTop: 2,
+    marginTop: 4,
+    alignItems: 'center',
   },
   numpadRow: {
+    width: '100%',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     gap: 4,
   },
   numKey: {
-    flex: 1,
-    height: 52, // 52px de altura táctil
+    height: 52,
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -506,18 +513,22 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   numKeyDigit: {
-    fontSize: 22, // Dígito grande y claro
+    fontSize: 22,
     fontWeight: '900',
     color: '#0f172a',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   numKeyDigitDone: {
     color: '#94a3b8',
   },
   remainingCountText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '800',
     color: '#0284c7',
     marginTop: 1,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   gameOverBtn: {
     flexDirection: 'row',
