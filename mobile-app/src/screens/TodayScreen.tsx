@@ -396,6 +396,16 @@ export const TodayScreen: React.FC = () => {
       message_id: message?.id || null,
       timestamp: new Date().toISOString(),
     });
+
+    const recipientPushToken = homeState.pushTokens?.[recipientRole];
+    if (recipientPushToken) {
+      void sendPartnerPushNotification(
+        recipientPushToken,
+        'KMRG ❤️ Latido de Amor',
+        `¡${getDisplayName(currentProfile)} está pensando en ti en este momento!`,
+        { type: 'HEARTBEAT', sender: currentProfile }
+      );
+    }
     void clearHeartbeatInWidget();
     void syncWidgetData({
       streakActive: true,

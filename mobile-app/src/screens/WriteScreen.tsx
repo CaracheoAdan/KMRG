@@ -29,6 +29,8 @@ import {
   formatDisplayDate,
 } from '../services/StorageService';
 import { syncWidgetData } from '../services/WidgetSyncService';
+import { sendPartnerPushNotification } from '../services/NotificationService';
+import { getHomeState } from '../services/CoupleSyncService';
 
 const SERIF_FONT = Platform.select({
   ios: 'Georgia',
@@ -103,6 +105,18 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
           });
         }
+
+        void getHomeState().then((home) => {
+          const token = home?.pushTokens?.[recipient];
+          if (token) {
+            void sendPartnerPushNotification(
+              token,
+              `KMRG 💌 Carta de ${profile === 'Karla' ? 'Karlita' : 'Javier'}`,
+              `Te ha escrito una carta especial para el ${scheduledDate}.`,
+              { type: 'SEALED_LETTER', sender: profile }
+            );
+          }
+        });
         setIsSealingEnvelope(true);
         Animated.sequence([
           Animated.timing(sealAnim, {

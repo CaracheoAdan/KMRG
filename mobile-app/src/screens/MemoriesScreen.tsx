@@ -43,6 +43,11 @@ import {
   deleteSupabaseMilestone,
 } from '../services/SupabaseService';
 import { scheduleDailyMessage } from '../services/NotificationService';
+import { SupabaseMediaService } from '../services/SupabaseMediaService';
+import { LoveBookModal } from '../components/LoveBookModal';
+import { TimeCapsuleModal } from '../components/TimeCapsuleModal';
+import { getHomeState, saveHomeState, DEFAULT_HOME_STATE } from '../services/CoupleSyncService';
+import { TimeCapsuleItem } from '../types';
 
 const SERIF_FONT = Platform.select({
   ios: 'Georgia',
@@ -104,6 +109,37 @@ export const MemoriesScreen: React.FC = () => {
   // Paginación para cero scroll
   const [albumPage, setAlbumPage] = useState(0);
   const [timelinePage, setTimelinePage] = useState(0);
+
+  // Modales de Libro de Amor y Cápsulas del Tiempo
+  const [isLoveBookOpen, setIsLoveBookOpen] = useState(false);
+  const [isTimeCapsuleOpen, setIsTimeCapsuleOpen] = useState(false);
+  const [homeState, setHomeState] = useState(() => DEFAULT_HOME_STATE);
+
+  useEffect(() => {
+    void getHomeState().then((s) => {
+      if (s) setHomeState(s);
+    });
+  }, []);
+
+  const handleSaveCapsule = async (newCap: TimeCapsuleItem) => {
+    const updatedCapsules = [newCap, ...(homeState.timeCapsules || [])];
+    const nextHome = { ...homeState, timeCapsules: updatedCapsules };
+    setHomeState(nextHome);
+    await saveHomeState(currentProfile, nextHome);
+  };
+
+  const handleOpenCapsule = async (capId: string) => {
+    const updatedCapsules = (homeState.timeCapsules || []).map((c) =>
+      c.id === capId ? { ...c, openedAt: new Date().toISOString() } : c
+    );
+    const nextHome = { ...homeState, timeCapsules: updatedCapsules };
+    setHomeState(nextHome);
+    await saveHomeState(currentProfile, nextHome);
+  };
+
+  const startAnniv = new Date(`${homeState.anniversaryDate || '2026-06-18'}T00:00:00`);
+  const diffAnnivMs = Math.max(0, Date.now() - startAnniv.getTime());
+  const daysTogether = Math.floor(diffAnnivMs / (1000 * 60 * 60 * 24));
 
   const loadMemories = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -209,18 +245,19 @@ export const MemoriesScreen: React.FC = () => {
 
     setIsSaving(true);
     try {
+      const finalImage = await SupabaseMediaService.uploadPhoto(selectedImageUri, 'memories');
       const local = await addLocalMilestone({
         author: currentProfile,
         title: newTitle.trim(),
         date: newDate,
-        image_url: selectedImageUri,
+        image_url: finalImage,
       });
 
       void createSupabaseMilestone({
         author: currentProfile,
         title: newTitle.trim(),
         date: newDate,
-        image_url: selectedImageUri,
+        image_url: finalImage,
       });
 
       setMilestones((prev) =>
@@ -569,6 +606,24 @@ export const MemoriesScreen: React.FC = () => {
             <Text style={styles.screenSubtitle}>Cada recuerdo, cada lugar y cada fotografía</Text>
           </View>
           <View style={styles.headerButtonsRow}>
+            <PressableScale
+              onPress={() => setIsLoveBookOpen(true)}
+              style={[styles.headerActionBtn, { backgroundColor: '#f59e0b' }]}
+              scaleTo={0.92}
+              accessibilityLabel="El Libro de Nuestro Amor"
+            >
+              <Ionicons name="book" size={19} color="#ffffff" />
+            </PressableScale>
+
+            <PressableScale
+              onPress={() => setIsTimeCapsuleOpen(true)}
+              style={[styles.headerActionBtn, { backgroundColor: primaryColor }]}
+              scaleTo={0.92}
+              accessibilityLabel="Cápsulas del Tiempo"
+            >
+              <Ionicons name="hourglass" size={19} color="#ffffff" />
+            </PressableScale>
+
             <PressableScale
               onPress={() => setIsModalOpen(true)}
               style={[styles.headerAddBtn, { backgroundColor: primaryColor }]}
@@ -1065,6 +1120,30 @@ export const MemoriesScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal El Libro de Nuestro Amor */}
+      <LoveBookModal
+        visible={isLoveBookOpen}
+        onClose={() => setIsLoveBookOpen(false)}
+        primaryColor={primaryColor}
+        currentProfile={currentProfile}
+        daysTogether={daysTogether}
+        streakCount={homeState.streakCount || 1}
+        milestones={milestones}
+        messages={memories}
+        todaySong={homeState.todaySong}
+      />
+
+      {/* Modal Cápsulas del Tiempo Multimedia */}
+      <TimeCapsuleModal
+        visible={isTimeCapsuleOpen}
+        onClose={() => setIsTimeCapsuleOpen(false)}
+        capsules={homeState.timeCapsules || []}
+        currentProfile={currentProfile}
+        primaryColor={primaryColor}
+        onSaveCapsule={handleSaveCapsule}
+        onOpenCapsule={handleOpenCapsule}
+      />
     </SafeAreaView>
   );
 };
@@ -1276,6 +1355,18 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerActionBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerAddBtn: {
     width: 42,

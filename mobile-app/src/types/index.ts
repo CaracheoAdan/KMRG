@@ -90,6 +90,8 @@ export interface TimeCapsuleItem {
   themeColor: string;
   createdAt: string;
   openedAt?: string;
+  photoUrl?: string;
+  audioUri?: string;
 }
 
 export type PlaceCategory =
