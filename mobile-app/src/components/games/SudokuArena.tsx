@@ -10,7 +10,6 @@ import {
 import { Ionicons } from '../ui/Icon';
 import { UserProfile } from '../../types';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
-import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 export interface SavedSudokuSession {
   difficulty: 'easy' | 'medium' | 'hard';
@@ -340,12 +339,6 @@ export const SudokuArena: React.FC<Props> = ({
           </View>
         </View>
       )}
-
-      {/* 5. Footer con Racha y Tips */}
-      <MatchInfoFooter
-        gameTip="El Sudoku es colaborativo: las celdas moradas son de Karla y las azules de Javier."
-        streakCount={4}
-      />
     </View>
   );
 };

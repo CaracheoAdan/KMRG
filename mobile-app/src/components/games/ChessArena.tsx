@@ -12,7 +12,6 @@ import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
-import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 interface Props {
   chess: GamesState['chess'];
@@ -328,12 +327,6 @@ export const ChessArena: React.FC<Props> = ({
           <Text style={styles.resetBtnText}>Reiniciar</Text>
         </TouchableOpacity>
       </View>
-
-      {/* 6. Footer con Racha y Tips */}
-      <MatchInfoFooter
-        gameTip="El ajedrez entrena la paciencia y el respeto mutuo. ¡El perdedor invita un café!"
-        streakCount={6}
-      />
     </View>
   );
 };

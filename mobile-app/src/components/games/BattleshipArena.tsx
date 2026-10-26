@@ -17,7 +17,6 @@ import {
 import { UserProfile } from '../../types';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
-import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 interface Props {
   boardPx: number;
@@ -666,13 +665,6 @@ export const BattleshipArena: React.FC<Props> = ({
           </View>
         </View>
       )}
-
-      {/* Footer con Racha y Tips */}
-      <MatchInfoFooter
-        gameTip="El que pierda este combate naval prepara los snacks para ver una película."
-        scoreKarla={remainingShipsKarla}
-        scoreJavier={remainingShipsJavier}
-      />
     </View>
   );
 };

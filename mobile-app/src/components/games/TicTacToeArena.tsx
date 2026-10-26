@@ -12,7 +12,6 @@ import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
-import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 interface Props {
   boardPx: number;
@@ -201,14 +200,6 @@ export const TicTacToeArena: React.FC<Props> = ({
           onPress={onNewRound}
         />
       </View>
-
-      {/* 5. Footer con Racha y Tips */}
-      <MatchInfoFooter
-        scoreKarla={ticTacToeState.scoreKarla}
-        scoreJavier={ticTacToeState.scoreJavier}
-        streakCount={5}
-        gameTip="¡El clásico duelo de 3 en raya! El que gane 3 rondas elige qué cenar hoy."
-      />
     </View>
   );
 };

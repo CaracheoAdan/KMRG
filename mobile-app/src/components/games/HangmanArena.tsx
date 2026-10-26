@@ -10,7 +10,6 @@ import {
 import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
-import { MatchInfoFooter } from './common/MatchInfoFooter';
 
 interface Props {
   hangman: GamesState['hangman'];
@@ -287,12 +286,6 @@ export const HangmanArena: React.FC<Props> = ({
           <Text style={styles.challengePartnerBtnText}>+400 Retar Pareja</Text>
         </TouchableOpacity>
       </View>
-
-      {/* 6. Footer con Racha y Tips */}
-      <MatchInfoFooter
-        gameTip="Adivina la palabra secreta antes de agotar los 6 corazones de amor."
-        streakCount={5}
-      />
     </View>
   );
 };
