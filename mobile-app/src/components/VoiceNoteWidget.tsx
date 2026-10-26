@@ -11,8 +11,20 @@ import {
   Alert,
   KeyboardAvoidingView,
 } from 'react-native';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
+let AudioModule: any = null;
+let FileSystemModule: any = null;
+
+try {
+  AudioModule = require('expo-av')?.Audio;
+} catch {
+  AudioModule = null;
+}
+
+try {
+  FileSystemModule = require('expo-file-system/legacy');
+} catch {
+  FileSystemModule = null;
+}
 import { Ionicons } from './ui/Icon';
 import { VoiceNoteData, UserProfile } from '../types';
 import { FONTS } from '../theme/designSystem';
@@ -45,8 +57,8 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     0.35, 0.6, 0.45, 0.8, 0.5, 0.9, 0.4, 0.75, 0.55, 0.85, 0.5, 0.65, 0.4, 0.7,
   ]);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const recordingRef = useRef<any>(null);
+  const soundRef = useRef<any>(null);
   const recordedUriRef = useRef<string | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -108,7 +120,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     setPlayingId(note.id);
     setPlayProgress(0);
 
-    if (!note.audioUri) {
+    if (!note.audioUri || !AudioModule || !FileSystemModule) {
       simulatePlayback(note);
       return;
     }
@@ -116,23 +128,23 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     try {
       let playUri = note.audioUri;
       if (playUri.startsWith('data:audio/')) {
-        const cachePath = `${FileSystem.cacheDirectory}vn_${note.id}.m4a`;
+        const cachePath = `${FileSystemModule.cacheDirectory}vn_${note.id}.m4a`;
         const base64Content = playUri.replace(/^data:audio\/[^;]+;base64,/, '');
-        await FileSystem.writeAsStringAsync(cachePath, base64Content, {
-          encoding: FileSystem.EncodingType.Base64,
+        await FileSystemModule.writeAsStringAsync(cachePath, base64Content, {
+          encoding: FileSystemModule.EncodingType.Base64,
         });
         playUri = cachePath;
       }
 
-      await Audio.setAudioModeAsync({
+      await AudioModule.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
       });
 
-      const { sound } = await Audio.Sound.createAsync(
+      const { sound } = await AudioModule.Sound.createAsync(
         { uri: playUri },
         { shouldPlay: true },
-        (status) => {
+        (status: any) => {
           if (!status.isLoaded) return;
           if (status.durationMillis && status.positionMillis) {
             const ratio = Math.min(1, status.positionMillis / status.durationMillis);
@@ -152,8 +164,30 @@ export const VoiceNoteWidget: React.FC<Props> = ({
   };
 
   const startRecording = async () => {
+    if (!AudioModule) {
+      // Fallback visual fluido si el binario del teléfono no tiene el módulo nativo compilado
+      setIsRecording(true);
+      setRecordSeconds(0);
+      if (Platform.OS !== 'web') {
+        Vibration.vibrate(40);
+      }
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((prev) => {
+          if (prev >= 30) {
+            void stopRecording();
+            return 30;
+          }
+          return prev + 1;
+        });
+        setLiveWaveform(
+          Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
+        );
+      }, 1000);
+      return;
+    }
+
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await AudioModule.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
           'Permiso necesario',
@@ -162,7 +196,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
         return;
       }
 
-      await Audio.setAudioModeAsync({
+      await AudioModule.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
@@ -174,9 +208,9 @@ export const VoiceNoteWidget: React.FC<Props> = ({
         recordingRef.current = null;
       }
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.LOW_QUALITY,
-        (status) => {
+      const { recording } = await AudioModule.Recording.createAsync(
+        AudioModule.RecordingOptionsPresets.LOW_QUALITY,
+        (status: any) => {
           if (status.metering !== undefined) {
             const db = Math.max(-60, status.metering);
             const norm = Math.min(1, Math.max(0.18, (db + 60) / 60));
@@ -248,10 +282,10 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     const uri = recordedUriRef.current;
     let finalAudioUri = uri || '';
 
-    if (uri) {
+    if (uri && FileSystemModule) {
       try {
-        const base64Data = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
+        const base64Data = await FileSystemModule.readAsStringAsync(uri, {
+          encoding: FileSystemModule.EncodingType.Base64,
         });
         if (base64Data) {
           finalAudioUri = `data:audio/m4a;base64,${base64Data}`;

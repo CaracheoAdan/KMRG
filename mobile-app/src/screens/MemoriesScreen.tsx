@@ -23,8 +23,6 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '../components/ui/Icon';
 import { PressableScale, EmptyState } from '../components/ui/Kit';
 import * as ImagePicker from 'expo-image-picker';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { PhotoCalendar } from '../components/PhotoCalendar';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { SpecialPlacesMap } from '../components/SpecialPlacesMap';
