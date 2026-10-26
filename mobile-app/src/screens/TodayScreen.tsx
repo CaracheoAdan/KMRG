@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../components/ui/Icon';
@@ -28,9 +29,8 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { AppHeader } from '../components/AppHeader';
-import { TimeCapsuleModal } from '../components/TimeCapsuleModal';
 import { LoveBookModal } from '../components/LoveBookModal';
-import { TimeCapsuleItem, Milestone } from '../types';
+import { Milestone } from '../types';
 import { HeartbeatHeatmap } from '../components/HeartbeatHeatmap';
 import {
   MoodMascot,
@@ -92,7 +92,6 @@ export const TodayScreen: React.FC = () => {
 
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
-  const [isCapsulesModalOpen, setIsCapsulesModalOpen] = useState(false);
   const [isLoveBookOpen, setIsLoveBookOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
 
@@ -108,24 +107,6 @@ export const TodayScreen: React.FC = () => {
       if (m) setMilestones(m);
     });
   }, []);
-
-  const handleSaveCapsule = (newCap: TimeCapsuleItem) => {
-    const currentCaps = homeState.timeCapsules || [];
-    void updateAndSyncHome({
-      ...homeState,
-      timeCapsules: [newCap, ...currentCaps],
-    });
-  };
-
-  const handleOpenCapsule = (capId: string) => {
-    const currentCaps = (homeState.timeCapsules || []).map((c) =>
-      c.id === capId ? { ...c, openedAt: new Date().toISOString() } : c
-    );
-    void updateAndSyncHome({
-      ...homeState,
-      timeCapsules: currentCaps,
-    });
-  };
 
   // Selector de fecha aniversario
   const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
@@ -226,6 +207,12 @@ export const TodayScreen: React.FC = () => {
 
     setLoading(false);
   }, [currentProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData])
+  );
 
   useEffect(() => {
     void loadData();
@@ -531,9 +518,8 @@ export const TodayScreen: React.FC = () => {
     setIsNextEventModalOpen(false);
   };
 
-  const capsulesCount = (homeState.timeCapsules || []).length;
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const NEGATIVE_FEELINGS = ['triste', 'enojado', 'cansado'];
   const POSITIVE_FEELINGS = ['feliz', 'enamorado', 'divertido', 'tranquilo'];
   const POSITIVE_TEXT = /(feliz|content|alegr|ganas de verte|enamorad|genial|emocionad|de maravilla)/i;
@@ -557,13 +543,6 @@ export const TodayScreen: React.FC = () => {
         setIsEditingPetName(false);
         setIsPetModalOpen(true);
       },
-    },
-    {
-      key: 'capsules',
-      title: 'Cápsulas',
-      subtitle: plural(capsulesCount, 'sellada', 'selladas'),
-      icon: 'time' as const,
-      onPress: () => setIsCapsulesModalOpen(true),
     },
     {
       key: 'book',
@@ -1187,17 +1166,6 @@ export const TodayScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-
-      {/* ================= MODAL: CÁPSULAS DEL TIEMPO UNIFICADAS ================= */}
-      <TimeCapsuleModal
-        visible={isCapsulesModalOpen}
-        onClose={() => setIsCapsulesModalOpen(false)}
-        capsules={homeState.timeCapsules || []}
-        currentProfile={currentProfile}
-        primaryColor={primaryColor}
-        onSaveCapsule={handleSaveCapsule}
-        onOpenCapsule={handleOpenCapsule}
-      />
 
       {/* ================= MODAL: COLLAGE DE NUESTRO AMOR (BAJO DEMANDA) ================= */}
       <LoveBookModal

@@ -200,15 +200,8 @@ export const getPastMessages = async (profile: UserProfile): Promise<Message[]> 
 export const getSentMessages = async (profile: UserProfile): Promise<Message[]> => {
   try {
     const messages = await getCachedMessages();
-    const todayStr = toLocalDateString(new Date());
     return messages
       .filter((m) => m.sender === profile)
-      .map((m) => {
-        const isFuture = toLocalDateString(m.scheduled_date) > todayStr;
-        return isFuture
-          ? { ...m, content: '🔒 Sorpresa sellada 💌' }
-          : m;
-      })
       .sort((a, b) =>
         toLocalDateString(b.scheduled_date).localeCompare(toLocalDateString(a.scheduled_date))
       );

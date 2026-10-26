@@ -84,6 +84,56 @@ export const createSupabaseMessage = async (msg: {
 };
 
 /**
+ * Actualiza una carta existente en Supabase y sincroniza la caché local
+ */
+export const updateSupabaseMessage = async (
+  id: string,
+  updates: {
+    content?: string;
+    scheduled_date?: string;
+    theme_color?: string;
+  }
+): Promise<{ success: boolean; data?: Message; error?: string }> => {
+  try {
+    const patch: any = {};
+    if (updates.content !== undefined) patch.content = updates.content.trim();
+    if (updates.scheduled_date !== undefined) patch.scheduled_date = updates.scheduled_date;
+    if (updates.theme_color !== undefined) patch.theme_color = updates.theme_color;
+
+    const { data, error } = await supabase
+      .from('messages')
+      .update(patch)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await syncSupabaseMessages();
+    return { success: true, data: data as Message };
+  } catch (error: any) {
+    console.warn('Error al actualizar mensaje en Supabase:', error.message);
+    try {
+      const local = await getCachedMessages();
+      const updated = local.map((m) =>
+        m.id === id
+          ? {
+              ...m,
+              ...updates,
+              content: updates.content !== undefined ? updates.content.trim() : m.content,
+            }
+          : m
+      );
+      await saveCachedMessages(updated);
+      const found = updated.find((m) => m.id === id);
+      return { success: true, data: found };
+    } catch {
+      return { success: false, error: error.message };
+    }
+  }
+};
+
+/**
  * Marca una carta como leída en Supabase
  */
 export const markSupabaseMessageRead = async (id: string): Promise<void> => {
