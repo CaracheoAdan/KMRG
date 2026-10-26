@@ -28,9 +28,10 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { AppHeader } from '../components/AppHeader';
-import { VoiceNoteWidget } from '../components/VoiceNoteWidget';
-import { TimeCapsulesWidget } from '../components/TimeCapsulesWidget';
-import { QuickNotesWidget } from '../components/QuickNotesWidget';
+import { ChatScreen } from './ChatScreen';
+import { TimeCapsuleModal } from '../components/TimeCapsuleModal';
+import { LoveBookModal } from '../components/LoveBookModal';
+import { TimeCapsuleItem, Milestone } from '../types';
 import { TodaySongWidget } from '../components/TodaySongWidget';
 import { HeartbeatHeatmap } from '../components/HeartbeatHeatmap';
 import { QuickNoteMessage, TodaySongData } from '../types';
@@ -45,6 +46,7 @@ import {
   markMessageAsRead,
   formatDisplayDate,
   toLocalDateString,
+  getCachedMilestones,
 } from '../services/StorageService';
 import {
   syncSupabaseMessages,
@@ -93,13 +95,42 @@ export const TodayScreen: React.FC = () => {
 
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
-  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [isCapsulesModalOpen, setIsCapsulesModalOpen] = useState(false);
-  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [isLoveBookOpen, setIsLoveBookOpen] = useState(false);
   const [isSongModalOpen, setIsSongModalOpen] = useState(false);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+
+  const startAnniv = new Date(`${homeState.anniversaryDate || '2026-06-18'}T00:00:00`);
+  const diffAnnivMs = Math.max(0, Date.now() - startAnniv.getTime());
+  const daysTogether = Math.floor(diffAnnivMs / (1000 * 60 * 60 * 24));
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
   const [petNameDraft, setPetNameDraft] = useState('Pochito');
   const [isEditingPetName, setIsEditingPetName] = useState(false);
+
+  useEffect(() => {
+    void getCachedMilestones().then((m) => {
+      if (m) setMilestones(m);
+    });
+  }, []);
+
+  const handleSaveCapsule = (newCap: TimeCapsuleItem) => {
+    const currentCaps = homeState.timeCapsules || [];
+    void updateAndSyncHome({
+      ...homeState,
+      timeCapsules: [newCap, ...currentCaps],
+    });
+  };
+
+  const handleOpenCapsule = (capId: string) => {
+    const currentCaps = (homeState.timeCapsules || []).map((c) =>
+      c.id === capId ? { ...c, openedAt: new Date().toISOString() } : c
+    );
+    void updateAndSyncHome({
+      ...homeState,
+      timeCapsules: currentCaps,
+    });
+  };
 
   // Selector de fecha aniversario
   const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
@@ -533,10 +564,10 @@ export const TodayScreen: React.FC = () => {
     },
     {
       key: 'chat',
-      title: 'Notitas',
-      subtitle: (homeState.quickNotes?.length || 0) > 0 ? `${homeState.quickNotes?.length} notas` : 'Escribir',
+      title: 'Chat Íntimo',
+      subtitle: (homeState.quickNotes?.length || 0) > 0 ? `${homeState.quickNotes?.length} msgs` : 'Abrir chat',
       icon: 'chatbubbles',
-      onPress: () => setIsNotesModalOpen(true),
+      onPress: () => setIsChatOpen(true),
     },
     {
       key: 'song',
@@ -546,18 +577,18 @@ export const TodayScreen: React.FC = () => {
       onPress: () => setIsSongModalOpen(true),
     },
     {
-      key: 'voice',
-      title: 'Voz',
-      subtitle: plural(voiceCount, 'nota', 'notas'),
-      icon: 'mic',
-      onPress: () => setIsVoiceModalOpen(true),
-    },
-    {
       key: 'capsules',
       title: 'Cápsulas',
       subtitle: plural(capsulesCount, 'sellada', 'selladas'),
       icon: 'hourglass',
       onPress: () => setIsCapsulesModalOpen(true),
+    },
+    {
+      key: 'book',
+      title: 'Libro de Amor',
+      subtitle: `${daysTogether} días`,
+      icon: 'book',
+      onPress: () => setIsLoveBookOpen(true),
     },
   ];
 
@@ -1175,149 +1206,35 @@ export const TodayScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* ================= MODAL: NOTAS DE VOZ ================= */}
-      <Modal
-        visible={isVoiceModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsVoiceModalOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nuestras Notas de Voz</Text>
-              <TouchableOpacity
-                onPress={() => setIsVoiceModalOpen(false)}
-                style={styles.closeBtn}
-              >
-                <Ionicons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-            <VoiceNoteWidget
-              voiceNotes={homeState.voiceNotes || []}
-              currentProfile={currentProfile}
-              primaryColor={primaryColor}
-              onSaveVoiceNote={(note) => {
-                const currentNotes = homeState.voiceNotes || [];
-                void updateAndSyncHome({
-                  ...homeState,
-                  voiceNotes: [note, ...currentNotes],
-                });
-              }}
-              onDeleteVoiceNote={(id) => {
-                const currentNotes = homeState.voiceNotes || [];
-                void updateAndSyncHome({
-                  ...homeState,
-                  voiceNotes: currentNotes.filter((n) => n.id !== id),
-                });
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
+{/* ================= MODAL: CHAT ÍNTIMO COMPLETO ================= */}
+      <ChatScreen
+        visible={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+      />
 
-      {/* ================= MODAL: CÁPSULAS DEL TIEMPO ================= */}
-      <Modal
+      {/* ================= MODAL: CÁPSULAS DEL TIEMPO UNIFICADAS ================= */}
+      <TimeCapsuleModal
         visible={isCapsulesModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsCapsulesModalOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Cápsulas del Tiempo</Text>
-              <TouchableOpacity
-                onPress={() => setIsCapsulesModalOpen(false)}
-                style={styles.closeBtn}
-              >
-                <Ionicons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-            <TimeCapsulesWidget
-              capsules={homeState.timeCapsules || []}
-              currentProfile={currentProfile}
-              primaryColor={primaryColor}
-              onSaveCapsule={(cap) => {
-                const currentCaps = homeState.timeCapsules || [];
-                void updateAndSyncHome({
-                  ...homeState,
-                  timeCapsules: [cap, ...currentCaps],
-                });
-              }}
-              onDeleteCapsule={(id) => {
-                const currentCaps = homeState.timeCapsules || [];
-                void updateAndSyncHome({
-                  ...homeState,
-                  timeCapsules: currentCaps.filter((c) => c.id !== id),
-                });
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setIsCapsulesModalOpen(false)}
+        capsules={homeState.timeCapsules || []}
+        currentProfile={currentProfile}
+        primaryColor={primaryColor}
+        onSaveCapsule={handleSaveCapsule}
+        onOpenCapsule={handleOpenCapsule}
+      />
 
-      {/* ================= MODAL: NOTITAS RÁPIDAS ================= */}
-      <Modal
-        visible={isNotesModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsNotesModalOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Notitas de Amor</Text>
-              <TouchableOpacity
-                onPress={() => setIsNotesModalOpen(false)}
-                style={styles.closeBtn}
-              >
-                <Ionicons name="close" size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <QuickNotesWidget
-              messages={homeState.quickNotes || []}
-              currentProfile={currentProfile}
-              primaryColor={primaryColor}
-              onSendNote={(text, sticker) => {
-                const newNote: QuickNoteMessage = {
-                  id: `qn-${Date.now()}`,
-                  sender: currentProfile,
-                  text,
-                  sticker,
-                  createdAt: new Date().toISOString(),
-                };
-                const updatedNotes = [...(homeState.quickNotes || []), newNote].slice(-50);
-                const updatedHome: HomeState = {
-                  ...homeState,
-                  quickNotes: updatedNotes,
-                };
-                void updateAndSyncHome(updatedHome);
-
-                const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
-                const recipientToken = homeState.pushTokens?.[recipientRole];
-                if (recipientToken) {
-                  const preview =
-                    text ||
-                    (sticker
-                      ? `Sticker de Pochito ${sticker.replace('pochito_', '')}`
-                      : 'Un mensajito');
-                  void sendPartnerPushNotification(
-                    recipientToken,
-                    `KMRG 💭 Mensaje de ${getDisplayName(currentProfile)}`,
-                    preview,
-                    { type: 'QUICK_NOTE', sender: currentProfile }
-                  );
-                }
-              }}
-            />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* ================= MODAL: EL LIBRO DE NUESTRO AMOR ================= */}
+      <LoveBookModal
+        visible={isLoveBookOpen}
+        onClose={() => setIsLoveBookOpen(false)}
+        primaryColor={primaryColor}
+        currentProfile={currentProfile}
+        daysTogether={daysTogether}
+        streakCount={homeState.streakCount || 1}
+        milestones={milestones}
+        messages={message ? [message] : []}
+        todaySong={homeState.todaySong}
+      />
 
       {/* ================= MODAL: NUESTRA CANCIÓN DE HOY ================= */}
       <Modal

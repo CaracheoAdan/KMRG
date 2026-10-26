@@ -8,6 +8,7 @@ import { MoviesScreen } from '../screens/MoviesScreen';
 import { WriteScreen } from '../screens/WriteScreen';
 import { GamesScreen } from '../screens/GamesScreen';
 import { MemoriesScreen } from '../screens/MemoriesScreen';
+import { ChatScreen } from '../screens/ChatScreen';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -134,6 +135,14 @@ export const TabNavigator: React.FC = () => {
               />
             </View>
           ),
+        }}
+      />
+
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen as any}
+        options={{
+          tabBarButton: () => null,
         }}
       />
     </Tab.Navigator>

@@ -50,7 +50,12 @@ export const LoveBookModal: React.FC<Props> = ({
   places = [],
 }) => {
   const [currentPage, setCurrentPage] = useState<number>(0);
+  const [isStoryCardOpen, setIsStoryCardOpen] = useState<boolean>(false);
   const totalPages = 4;
+
+  const monthsTogether = Math.max(1, Math.floor(daysTogether / 30.4375));
+  const remainingDays = Math.floor(daysTogether % 30.4375);
+  const timeTogetherLabel = `${monthsTogether} ${monthsTogether === 1 ? 'Mes' : 'Meses'} y ${remainingDays} ${remainingDays === 1 ? 'Día' : 'Días'}`;
 
   const handleShareSummary = async () => {
     try {
@@ -84,9 +89,19 @@ export const LoveBookModal: React.FC<Props> = ({
         <View style={styles.bookContainer}>
           {/* Header del Libro */}
           <View style={styles.bookHeader}>
-            <TouchableOpacity onPress={handleShareSummary} style={styles.shareBtn}>
-              <Ionicons name="share-outline" size={20} color="#f59e0b" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={() => setIsStoryCardOpen(true)}
+                style={styles.storyHeaderBtn}
+                accessibilityLabel="Historia de Instagram"
+              >
+                <Ionicons name="logo-instagram" size={18} color="#ffffff" />
+                <Text style={styles.storyHeaderBtnText}>Historia</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShareSummary} style={styles.shareBtn}>
+                <Ionicons name="share-outline" size={20} color="#f59e0b" />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.pageIndicatorContainer}>
               <Text style={styles.pageIndicatorText}>
@@ -136,6 +151,14 @@ export const LoveBookModal: React.FC<Props> = ({
                     <Text style={styles.coverQuote}>
                       "Una historia de amor escrita día con día, sonrisa con sonrisa."
                     </Text>
+
+                    <TouchableOpacity
+                      onPress={() => setIsStoryCardOpen(true)}
+                      style={styles.storyCoverBtn}
+                    >
+                      <Ionicons name="logo-instagram" size={17} color="#ffffff" />
+                      <Text style={styles.storyCoverBtnText}>Tarjeta para Historia de Instagram</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </ScrollView>
@@ -294,6 +317,83 @@ export const LoveBookModal: React.FC<Props> = ({
           </View>
         </View>
       </View>
+
+      {/* ================= MODAL TARJETA DE HISTORIA PARA INSTAGRAM (9:16) ================= */}
+      <Modal visible={isStoryCardOpen} animationType="fade" transparent onRequestClose={() => setIsStoryCardOpen(false)}>
+        <View style={styles.storyOverlay}>
+          <View style={styles.storyCardContainer}>
+            {/* Cabecera de la Historia */}
+            <View style={styles.storyTopBar}>
+              <TouchableOpacity onPress={() => setIsStoryCardOpen(false)} style={styles.storyCloseBtn}>
+                <Ionicons name="close" size={22} color="#ffffff" />
+              </TouchableOpacity>
+              <Text style={styles.storyBadge}>✨ INSTAGRAM STORY (9:16) ✨</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (Platform.OS !== 'web') Vibration.vibrate(30);
+                  void Share.share({
+                    message: `💖 ¡Celebrando nuestro Mesiversario! (${timeTogetherLabel})\n\n✨ Llevamos ${daysTogether} días juntos llenos de amor y momentos mágicos.\nKarlita & Javier 💕\n\n"Te amo hoy más que ayer y menos que mañana."`,
+                    title: 'Historia de Nuestro Mesiversario',
+                  });
+                }}
+                style={styles.storyShareBtn}
+              >
+                <Ionicons name="paper-plane" size={18} color="#f59e0b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Tarjeta Visual 9:16 para Screenshot o Compartir */}
+            <View style={styles.storyCanvas}>
+              <View style={styles.storyGoldBorder}>
+                <Ionicons name="sparkles" size={24} color="#f59e0b" style={{ alignSelf: 'center', marginBottom: 4 }} />
+                <Text style={styles.storyAnniversaryTitle}>¡FELIZ MESIVERSARIO!</Text>
+                <Text style={styles.storyTimeBadge}>{timeTogetherLabel.toUpperCase()}</Text>
+
+                <View style={styles.storyDivider} />
+
+                <Text style={styles.storyCoupleName}>Karlita & Javier</Text>
+                <Text style={styles.storyDaysCount}>{daysTogether} Días de Puro Amor</Text>
+
+                {/* Pochito con Corona */}
+                <View style={styles.storyMascotHolder}>
+                  <MoodMascot feeling="enamorado" size="lg" accentColor={primaryColor} accessory="crown" />
+                </View>
+
+                {/* Foto destacada si existe */}
+                {milestones.length > 0 && milestones[0].image_url ? (
+                  <View style={styles.storyPhotoFrame}>
+                    <Image source={{ uri: milestones[0].image_url }} style={styles.storyPhoto} resizeMode="cover" />
+                    <Text style={styles.storyPhotoCaption} numberOfLines={1}>{milestones[0].title}</Text>
+                  </View>
+                ) : null}
+
+                <Text style={styles.storyLoveQuote}>
+                  "Un mes más eligiéndonos con el corazón y llenando cada día de risas y complicidad."
+                </Text>
+
+                <View style={styles.storyFooter}>
+                  <Text style={styles.storyWatermark}>KMRG · NUESTRA HISTORIA</Text>
+                  <Text style={styles.storyAnnivDate}>Desde el 18 de Junio de 2026</Text>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => {
+                if (Platform.OS !== 'web') Vibration.vibrate(30);
+                void Share.share({
+                  message: `💖 ¡Celebrando nuestro Mesiversario! (${timeTogetherLabel})\n\n✨ Llevamos ${daysTogether} días juntos.\nKarlita & Javier 💕`,
+                  title: 'Mi Historia de Pareja',
+                });
+              }}
+              style={styles.storyActionShareBtn}
+            >
+              <Ionicons name="share-social" size={18} color="#ffffff" />
+              <Text style={styles.storyActionShareText}>Compartir en Historias</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -331,6 +431,197 @@ const styles = StyleSheet.create({
   },
   shareBtn: {
     padding: 6,
+  },
+  storyHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e1306c',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    gap: 4,
+  },
+  storyHeaderBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  storyCoverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e1306c',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    gap: 8,
+    marginTop: 18,
+    shadowColor: '#e1306c',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  storyCoverBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  storyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+  },
+  storyCardContainer: {
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+  },
+  storyTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 10,
+  },
+  storyCloseBtn: {
+    padding: 6,
+  },
+  storyBadge: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#f59e0b',
+    letterSpacing: 1,
+  },
+  storyShareBtn: {
+    padding: 6,
+  },
+  storyCanvas: {
+    width: '100%',
+    aspectRatio: 9 / 16,
+    maxHeight: 560,
+    backgroundColor: '#180e29',
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    padding: 16,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  storyGoldBorder: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  storyAnniversaryTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#f59e0b',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  storyTimeBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#ffffff',
+    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  storyDivider: {
+    width: 40,
+    height: 2,
+    backgroundColor: '#f59e0b',
+    marginVertical: 6,
+  },
+  storyCoupleName: {
+    fontSize: 24,
+    fontFamily: SERIF_FONT,
+    fontStyle: 'italic',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  storyDaysCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#cbd5e1',
+    marginTop: 2,
+  },
+  storyMascotHolder: {
+    marginVertical: 4,
+  },
+  storyPhotoFrame: {
+    width: '85%',
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 6,
+    paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  storyPhoto: {
+    width: '100%',
+    height: 100,
+    borderRadius: 6,
+  },
+  storyPhotoCaption: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  storyLoveQuote: {
+    fontSize: 11,
+    fontFamily: SERIF_FONT,
+    fontStyle: 'italic',
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
+    lineHeight: 16,
+    marginVertical: 6,
+  },
+  storyFooter: {
+    alignItems: 'center',
+  },
+  storyWatermark: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#f59e0b',
+    letterSpacing: 1,
+  },
+  storyAnnivDate: {
+    fontSize: 9,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  storyActionShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e1306c',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    gap: 8,
+    marginTop: 14,
+    shadowColor: '#e1306c',
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  storyActionShareText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   pageIndicatorContainer: {
     backgroundColor: '#1e293b',

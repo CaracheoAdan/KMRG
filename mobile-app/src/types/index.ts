@@ -52,6 +52,7 @@ export type RootTabParamList = {
   Escribir: undefined;
   Juegos: undefined;
   Nosotros: undefined;
+  Chat?: undefined;
 };
 
 export interface UserMood {
@@ -122,8 +123,11 @@ export interface SpecialPlace {
 export interface QuickNoteMessage {
   id: string;
   sender: UserProfile;
-  text: string;
+  text?: string;
   sticker?: string;
+  audioUri?: string;
+  audioDurationSeconds?: number;
+  photoUrl?: string;
   createdAt: string;
 }
 
