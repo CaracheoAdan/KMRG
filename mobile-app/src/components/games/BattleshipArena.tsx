@@ -5,6 +5,7 @@ import {
   View,
   TouchableOpacity,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../ui/Icon';
@@ -27,95 +28,120 @@ interface Props {
   onSendInvite: () => void;
   onAcceptInvite: () => void;
   onReadyFleet: (fleet: BattleshipShip[]) => void;
-  onFire: (cellIdx: number) => void;
+  onFire: (idx: number) => void;
   onReset: () => void;
 }
 
-const COLS_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-const ROWS_NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+const { width: SCREEN_W } = Dimensions.get('window');
 
-const SHIP_COLORS: Record<string, { bg: string; name: string; size: number }> = {
-  carrier: { bg: '#f43f5e', name: 'Portaaviones', size: 5 },
-  battleship: { bg: '#f59e0b', name: 'Acorazado', size: 4 },
-  cruiser: { bg: '#8b5cf6', name: 'Crucero', size: 3 },
-  submarine: { bg: '#10b981', name: 'Submarino', size: 3 },
-  destroyer: { bg: '#ec4899', name: 'Destructor', size: 2 },
+const COLS_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+const ROWS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+const SHIP_CONFIG: Record<
+  string,
+  { name: string; size: number; bg: string; icon: string; desc: string }
+> = {
+  carrier: {
+    name: 'Portaaviones',
+    size: 5,
+    bg: '#f43f5e',
+    icon: 'airplane',
+    desc: 'Cubierta naval para cazas',
+  },
+  battleship: {
+    name: 'Acorazado',
+    size: 4,
+    bg: '#f59e0b',
+    icon: 'shield',
+    desc: 'Torretas blindadas de artillería',
+  },
+  cruiser: {
+    name: 'Crucero',
+    size: 3,
+    bg: '#8b5cf6',
+    icon: 'boat',
+    desc: 'Chimeneas navales gemelas',
+  },
+  submarine: {
+    name: 'Submarino',
+    size: 3,
+    bg: '#10b981',
+    icon: 'locate',
+    desc: 'Periscopio y sigilo acústico',
+  },
+  destroyer: {
+    name: 'Destructor',
+    size: 2,
+    bg: '#ec4899',
+    icon: 'flame',
+    desc: 'Lanzatorpedos de ataque rápido',
+  },
 };
 
 export const BattleshipArena: React.FC<Props> = ({
-  boardPx,
-  isFull,
-  primaryColor,
   currentProfile,
   battleshipState: bs,
   onSendInvite,
   onAcceptInvite,
   onReadyFleet,
   onFire,
-  onReset,
 }) => {
   const [radarMode, setRadarMode] = useState<'attack' | 'fleet'>('attack');
-  const [selectedSetupShipId, setSelectedSetupShipId] = useState<string>('carrier');
   const [localSetupFleet, setLocalSetupFleet] = useState<BattleshipShip[] | null>(null);
+  const [selectedSetupShipId, setSelectedSetupShipId] = useState<string>('carrier');
 
   const radarPulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(radarPulseAnim, {
-          toValue: 1,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(radarPulseAnim, {
-          toValue: 0,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
+        Animated.timing(radarPulseAnim, { toValue: 1, duration: 1400, useNativeDriver: true }),
+        Animated.timing(radarPulseAnim, { toValue: 0, duration: 1400, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, [radarPulseAnim]);
 
-  const isShipSunk = (ship: BattleshipShip, shots: number[]): boolean =>
+  // Dimensiones calibradas del tablero con 16px de margen
+  const boardSize = Math.min(SCREEN_W - 32, 350);
+  const coordsHeaderPx = 18;
+  const actualBoardPx = boardSize - coordsHeaderPx;
+  const cellSize = Math.floor(actualBoardPx / 10);
+
+  const myFleet: BattleshipShip[] = useMemo(() => {
+    if (localSetupFleet) return localSetupFleet;
+    const fromState = currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier;
+    if (fromState && fromState.length > 0) return fromState;
+    return createRandomBattleshipFleet();
+  }, [localSetupFleet, currentProfile, bs.fleetKarla, bs.fleetJavier]);
+
+  const enemyFleet: BattleshipShip[] = currentProfile === 'Karla' ? bs.fleetJavier || [] : bs.fleetKarla || [];
+  const myShots: number[] = currentProfile === 'Karla' ? bs.shotsByKarla || [] : bs.shotsByJavier || [];
+  const enemyShots: number[] = currentProfile === 'Karla' ? bs.shotsByJavier || [] : bs.shotsByKarla || [];
+
+  const amIReady = currentProfile === 'Karla' ? bs.readyKarla : bs.readyJavier;
+  const isPartnerReady = currentProfile === 'Karla' ? bs.readyJavier : bs.readyKarla;
+  const isMyTurn = bs.phase === 'battle' && bs.turn === currentProfile;
+
+  const isShipSunk = (ship: BattleshipShip, shots: number[]) =>
     ship.cells.every((c) => shots.includes(c));
 
+  // Conteo de barcos no hundidos
   const remainingShipsKarla = useMemo(
-    () => bs.fleetKarla.filter((s) => !isShipSunk(s, bs.shotsByJavier)).length,
+    () => (bs.fleetKarla || []).filter((s) => !isShipSunk(s, bs.shotsByJavier || [])).length,
     [bs.fleetKarla, bs.shotsByJavier]
   );
-
   const remainingShipsJavier = useMemo(
-    () => bs.fleetJavier.filter((s) => !isShipSunk(s, bs.shotsByKarla)).length,
+    () => (bs.fleetJavier || []).filter((s) => !isShipSunk(s, bs.shotsByKarla || [])).length,
     [bs.fleetJavier, bs.shotsByKarla]
   );
 
-  const syncedMyFleet = currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier;
-  const myFleet = bs.phase === 'setup' && localSetupFleet ? localSetupFleet : syncedMyFleet;
-  const enemyFleet = currentProfile === 'Karla' ? bs.fleetJavier : bs.fleetKarla;
-  const myShots = currentProfile === 'Karla' ? bs.shotsByKarla : bs.shotsByJavier;
-  const enemyShotsAtMe = currentProfile === 'Karla' ? bs.shotsByJavier : bs.shotsByKarla;
-  const amIReady = currentProfile === 'Karla' ? bs.readyKarla : bs.readyJavier;
-  const isPartnerReady = currentProfile === 'Karla' ? bs.readyJavier : bs.readyKarla;
-
-  useEffect(() => {
-    if (bs.phase === 'setup') {
-      setLocalSetupFleet(currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier);
-    } else {
-      setLocalSetupFleet(null);
-    }
-  }, [bs.phase, currentProfile, bs.fleetKarla, bs.fleetJavier]);
-
-  // Rotar barco en fase de preparación
-  const handleRotateShip = (targetId?: string) => {
-    const shipId = targetId || selectedSetupShipId;
-    if (!myFleet) return;
+  const handleRotateShip = (shipId: string) => {
     const ship = myFleet.find((s) => s.id === shipId);
     if (!ship) return;
 
-    const newOrient: 'H' | 'V' = ship.orientation === 'H' ? 'V' : 'H';
+    const newOrient: 'H' | 'V' = (ship.orientation || 'H') === 'H' ? 'V' : 'H';
     const originCell = ship.cells[0];
     const r = Math.floor(originCell / 10);
     const c = originCell % 10;
@@ -130,7 +156,7 @@ export const BattleshipArena: React.FC<Props> = ({
       newCells.push(newOrient === 'H' ? safeR * 10 + (safeC + i) : (safeR + i) * 10 + safeC);
     }
 
-    const updated = myFleet.map((s) =>
+    const updated: BattleshipShip[] = myFleet.map((s) =>
       s.id === shipId ? { ...s, orientation: newOrient, cells: newCells } : s
     );
     setLocalSetupFleet(updated);
@@ -156,12 +182,7 @@ export const BattleshipArena: React.FC<Props> = ({
     onFire(idx);
   };
 
-  // Dimensiones calibradas del tablero con margen para coordenadas (A-J / 1-10)
-  const coordsHeaderPx = 16;
-  const actualBoardPx = boardPx - coordsHeaderPx;
-  const cellSize = Math.floor(actualBoardPx / 10);
-
-  // Renderizador de un segmento naval realista (Proa curva, Torretas y Popa)
+  // Renderizador de un segmento naval REALISTA (Proa angular, Cubierta especializada, Popa cuadrada)
   const renderNavalSegment = (
     ship: BattleshipShip,
     cellIdx: number,
@@ -176,8 +197,16 @@ export const BattleshipArena: React.FC<Props> = ({
       (ship.orientation ||
         (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V')) === 'H';
 
-    const shipMeta = SHIP_COLORS[ship.id] || { bg: '#0284c7', name: 'Barco' };
+    const shipMeta = SHIP_CONFIG[ship.id] || { bg: '#0284c7' };
     const hullBg = isSunk ? '#ef4444' : isSelected ? '#38bdf8' : shipMeta.bg;
+
+    // Proa puntiaguda naval, popa recortada
+    const bowRadius = isHoriz
+      ? { borderTopLeftRadius: 10, borderBottomLeftRadius: 10 }
+      : { borderTopLeftRadius: 10, borderTopRightRadius: 10 };
+    const sternRadius = isHoriz
+      ? { borderTopRightRadius: 3, borderBottomRightRadius: 3 }
+      : { borderBottomLeftRadius: 3, borderBottomRightRadius: 3 };
 
     return (
       <View
@@ -186,25 +215,40 @@ export const BattleshipArena: React.FC<Props> = ({
           styles.navalHull,
           {
             backgroundColor: hullBg,
-            width: isHoriz ? '95%' : '80%',
-            height: isHoriz ? '80%' : '95%',
-            borderTopLeftRadius: isBow ? 8 : 2,
-            borderBottomLeftRadius: isHoriz ? (isBow ? 8 : 2) : isStern ? 8 : 2,
-            borderTopRightRadius: isHoriz ? (isStern ? 8 : 2) : isBow ? 8 : 2,
-            borderBottomRightRadius: isStern ? 8 : 2,
+            width: isHoriz ? '96%' : '80%',
+            height: isHoriz ? '80%' : '96%',
             borderColor: isSelected ? '#fef08a' : 'rgba(255, 255, 255, 0.45)',
-            borderWidth: isSelected ? 1.8 : 1,
+            borderWidth: isSelected ? 2 : 1,
           },
+          isBow && bowRadius,
+          isStern && sternRadius,
         ]}
       >
         {isSunk ? (
           <Ionicons name="skull" size={Math.max(10, cellSize * 0.48)} color="#ffffff" />
         ) : isHit ? (
           <Ionicons name="flame" size={Math.max(11, cellSize * 0.52)} color="#fef08a" />
-        ) : isBow || isStern ? (
-          <View style={styles.turretPoint} />
+        ) : isBow ? (
+          // Proa: Ancla y torreta frontal
+          <View style={styles.bowTurretAnchor} />
+        ) : isStern ? (
+          // Popa: Timón y propulsión
+          <View style={styles.sternPropellerDetail} />
         ) : (
-          <View style={styles.deckPlate} />
+          // Sección central según tipo de nave (sin puntos de dominó)
+          <View style={styles.midSuperstructure}>
+            {ship.id === 'carrier' ? (
+              <View style={styles.carrierRunwayLine} />
+            ) : ship.id === 'battleship' ? (
+              <View style={styles.twinCannonTurret} />
+            ) : ship.id === 'cruiser' ? (
+              <View style={styles.smokestackDuo} />
+            ) : ship.id === 'submarine' ? (
+              <View style={styles.periscopeSail} />
+            ) : (
+              <View style={styles.destroyerBridge} />
+            )}
+          </View>
         )}
       </View>
     );
@@ -214,100 +258,92 @@ export const BattleshipArena: React.FC<Props> = ({
     <View style={styles.container}>
       {/* ================= FASE 1: INVITACIÓN / SALA DE ESPERA ================= */}
       {(bs.phase === 'idle' || bs.phase === 'invited') && (
-        <LinearGradient
-          colors={GAMES_THEME.colors.oceanDeep}
-          style={[styles.oceanCard as any, GAMES_THEME.shadows.glowCyan]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Animated.View
-            style={[
-              styles.radarEmblem,
-              {
-                transform: [
-                  {
-                    scale: radarPulseAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 1.15],
-                    }),
-                  },
-                ],
-              },
-            ]}
+        <View style={[styles.cardContainer, GAMES_THEME.shadows.card]}>
+          <LinearGradient
+            colors={GAMES_THEME.colors.oceanDeep}
+            style={[styles.oceanCard as any, GAMES_THEME.shadows.glowCyan]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
-            <Ionicons name="boat" size={36} color="#38bdf8" />
-          </Animated.View>
+            <Animated.View
+              style={[
+                styles.radarEmblem,
+                {
+                  transform: [
+                    {
+                      scale: radarPulseAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 1.15],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Ionicons name="boat" size={38} color="#38bdf8" />
+            </Animated.View>
 
-          <Text style={styles.oceanCardTitle}>Battleship Naval en Pareja</Text>
-          <Text style={styles.oceanCardSubtitle}>
-            {bs.phase === 'invited'
-              ? `${bs.invitedBy === 'Karla' ? 'Karlita' : 'Javier'} te desafió a un combate naval.`
-              : 'Invita a tu pareja a un duelo táctico en el océano.'}
-          </Text>
+            <Text style={styles.oceanCardTitle}>Battleship Naval en Pareja</Text>
+            <Text style={styles.oceanCardSubtitle}>
+              {bs.phase === 'invited'
+                ? `${bs.invitedBy === 'Karla' ? 'Karlita' : 'Javier'} te desafió a un combate naval.`
+                : 'Invita a tu pareja a un combate táctico en el océano de 10x10.'}
+            </Text>
 
-          {bs.phase === 'invited' && bs.invitedBy !== currentProfile ? (
-            <GameButton
-              label="Aceptar Desafío Naval"
-              icon="checkmark-done"
-              variant="cyan"
-              onPress={onAcceptInvite}
-            />
-          ) : bs.phase === 'invited' && bs.invitedBy === currentProfile ? (
-            <View style={styles.waitingInviteBadge}>
-              <Ionicons name="time" size={16} color="#38bdf8" />
-              <Text style={styles.waitingInviteText}>
-                Esperando a que tu pareja acepte el combate...
-              </Text>
-            </View>
-          ) : (
-            <GameButton
-              label="Desafiar a mi Pareja"
-              icon="paper-plane"
-              variant="primary"
-              onPress={onSendInvite}
-            />
-          )}
-        </LinearGradient>
+            {bs.phase === 'invited' && bs.invitedBy !== currentProfile ? (
+              <GameButton
+                label="Aceptar Desafío Naval"
+                icon="checkmark-done"
+                variant="cyan"
+                onPress={onAcceptInvite}
+              />
+            ) : (
+              <GameButton
+                label={bs.phase === 'invited' ? 'Esperando Respuesta...' : 'Desafiar a mi Pareja'}
+                icon="radio"
+                variant="primary"
+                onPress={onSendInvite}
+                disabled={bs.phase === 'invited'}
+              />
+            )}
+          </LinearGradient>
+        </View>
       )}
 
-      {/* ================= FASE 2: PREPARACIÓN Y ACOMODO DE FLOTA ================= */}
+      {/* ================= FASE 2: PREPARACIÓN DE FLOTA (SETUP) ================= */}
       {bs.phase === 'setup' && (
         <View style={styles.setupWrap}>
-          {/* Cabecera de Setup */}
-          <View style={styles.setupTopRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.setupHeading}>
-                {amIReady ? '¡Flota lista! Esperando pareja...' : 'Acomoda tus 5 barcos'}
-              </Text>
-              <Text style={styles.setupSub}>
-                Toca un barco para seleccionarlo o rotarlo
-              </Text>
+          {/* Barra Superior con Botones de Organización */}
+          <View style={styles.setupToolsBar}>
+            <View style={styles.setupInfoTextGroup}>
+              <Text style={styles.setupHeaderTitle}>Acomoda tu Flota</Text>
+              <Text style={styles.setupHeaderSub}>Toca un barco para seleccionarlo y rotarlo</Text>
             </View>
 
-            <View style={styles.setupToolsRow}>
+            <View style={styles.setupActionsRow}>
               <TouchableOpacity
                 onPress={handleRandomizeFleet}
-                style={styles.toolChip}
-                accessibilityLabel="Flota aleatoria"
+                style={styles.actionChip}
+                accessibilityLabel="Posición aleatoria de barcos"
               >
                 <Ionicons name="shuffle" size={14} color="#0284c7" />
-                <Text style={styles.toolChipText}>Aleatorio</Text>
+                <Text style={styles.actionChipText}>Aleatorio</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => handleRotateShip()}
-                style={[styles.toolChip, { backgroundColor: '#e0f2fe' }]}
-                accessibilityLabel="Rotar barco"
+                onPress={() => handleRotateShip(selectedSetupShipId)}
+                style={[styles.actionChip, styles.actionChipRotate]}
+                accessibilityLabel="Rotar barco seleccionado"
               >
-                <Ionicons name="sync" size={14} color="#0284c7" />
-                <Text style={styles.toolChipText}>Rotar</Text>
+                <Ionicons name="sync" size={14} color="#ffffff" />
+                <Text style={[styles.actionChipText, { color: '#ffffff' }]}>↻ Rotar</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Tablero Océano 10x10 con Coordenadas */}
-          <View style={styles.boardOuterOcean}>
-            {/* Encabezado A-J */}
+          <View style={[styles.boardOceanFrame, { width: boardSize }, GAMES_THEME.shadows.boardDepth]}>
+            {/* Encabezado de Columnas A-J */}
             <View style={styles.coordsLettersRow}>
               <View style={{ width: coordsHeaderPx }} />
               {COLS_LETTERS.map((l) => (
@@ -351,8 +387,8 @@ export const BattleshipArena: React.FC<Props> = ({
                             backgroundColor: isSelected
                               ? 'rgba(14, 165, 233, 0.45)'
                               : shipAtCell
-                              ? 'rgba(14, 165, 233, 0.25)'
-                              : 'rgba(8, 47, 73, 0.85)',
+                              ? 'rgba(14, 165, 233, 0.22)'
+                              : 'rgba(8, 47, 73, 0.88)',
                           },
                         ]}
                       >
@@ -365,8 +401,38 @@ export const BattleshipArena: React.FC<Props> = ({
             </View>
           </View>
 
-          {/* Botón de confirmación */}
-          <View style={{ width: '100%', marginTop: 8 }}>
+          {/* Panel de Flota: Lista de los 5 barcos con silueta y selección */}
+          <View style={styles.fleetRosterCard}>
+            <Text style={styles.fleetRosterTitle}>Flota Disponible (Toca para seleccionar):</Text>
+            <View style={styles.fleetChipsRow}>
+              {myFleet.map((s) => {
+                const conf = SHIP_CONFIG[s.id] || { name: s.id, size: s.size, bg: '#0284c7' };
+                const isSel = s.id === selectedSetupShipId;
+
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    onPress={() => {
+                      void triggerGameHaptic('selection');
+                      setSelectedSetupShipId(s.id);
+                    }}
+                    style={[
+                      styles.fleetChipItem,
+                      isSel && { borderColor: conf.bg, backgroundColor: `${conf.bg}18` },
+                    ]}
+                  >
+                    <View style={[styles.shipColorDot, { backgroundColor: conf.bg }]} />
+                    <Text style={[styles.fleetChipName, isSel && { fontWeight: '900', color: conf.bg }]}>
+                      {conf.name} ({conf.size})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Botón de confirmación prominente */}
+          <View style={{ width: '100%', marginTop: 4 }}>
             {!amIReady ? (
               <GameButton
                 label="Confirmar Flota y Entrar a Combate"
@@ -376,11 +442,11 @@ export const BattleshipArena: React.FC<Props> = ({
               />
             ) : (
               <View style={styles.waitingPartnerBadge}>
-                <Ionicons name="time" size={16} color="#0284c7" />
+                <Ionicons name="time-outline" size={16} color="#0284c7" />
                 <Text style={styles.waitingPartnerText}>
                   {isPartnerReady
-                    ? 'Iniciando radar naval...'
-                    : 'Tu pareja está acomodando sus barcos...'}
+                    ? '¡Ambos listos! Iniciando radar naval...'
+                    : 'Esperando a que tu pareja confirme su flota...'}
                 </Text>
               </View>
             )}
@@ -448,30 +514,26 @@ export const BattleshipArena: React.FC<Props> = ({
           <View
             style={[
               styles.turnStatusBanner,
-              bs.turn === currentProfile
-                ? styles.turnBannerMyTurn
-                : styles.turnBannerPartner,
+              isMyTurn ? styles.turnStatusBannerActive : styles.turnStatusBannerWaiting,
             ]}
           >
             <Ionicons
-              name={bs.turn === currentProfile ? 'locate' : 'time-outline'}
+              name={isMyTurn ? 'sparkles' : 'time-outline'}
               size={14}
-              color={bs.turn === currentProfile ? '#065f46' : '#92400e'}
+              color={isMyTurn ? '#065f46' : '#92400e'}
             />
             <Text
               style={[
-                styles.turnStatusBannerText,
-                { color: bs.turn === currentProfile ? '#065f46' : '#92400e' },
+                styles.turnStatusText,
+                { color: isMyTurn ? '#065f46' : '#92400e' },
               ]}
             >
-              {bs.turn === currentProfile
-                ? '¡Tu turno de disparar al radar enemigo!'
-                : `Esperando disparo de ${currentProfile === 'Karla' ? 'Javier' : 'Karlita'}...`}
+              {isMyTurn ? '¡Tu Turno! Toca una coordenada para disparar torpedo' : 'Turno de tu pareja... esperando disparo'}
             </Text>
           </View>
 
-          {/* Tablero Océano 10x10 de Combate */}
-          <View style={styles.boardOuterOcean}>
+          {/* Tablero de Combate */}
+          <View style={[styles.boardOceanFrame, { width: boardSize }, GAMES_THEME.shadows.boardDepth]}>
             {/* Encabezado A-J */}
             <View style={styles.coordsLettersRow}>
               <View style={{ width: coordsHeaderPx }} />
@@ -494,15 +556,15 @@ export const BattleshipArena: React.FC<Props> = ({
                     const idx = r * 10 + c;
 
                     if (radarMode === 'attack') {
+                      // Vista Radar Enemigo
                       const hasShot = myShots.includes(idx);
                       const hitShip = hasShot && enemyFleet.find((s) => s.cells.includes(idx));
-                      const isSunk = hitShip && isShipSunk(hitShip, myShots);
+                      const isSunk = Boolean(hitShip && isShipSunk(hitShip, myShots));
 
                       return (
                         <TouchableOpacity
                           key={idx}
-                          disabled={hasShot || bs.turn !== currentProfile}
-                          activeOpacity={0.7}
+                          disabled={!isMyTurn || hasShot}
                           onPress={() => handleFireAtCell(idx)}
                           style={[
                             styles.oceanCell,
@@ -510,29 +572,36 @@ export const BattleshipArena: React.FC<Props> = ({
                               width: cellSize,
                               height: cellSize,
                               backgroundColor: isSunk
-                                ? 'rgba(239, 68, 68, 0.85)'
+                                ? 'rgba(239, 68, 68, 0.45)'
                                 : hitShip
-                                ? 'rgba(249, 115, 22, 0.85)'
+                                ? 'rgba(249, 115, 22, 0.45)'
                                 : hasShot
-                                ? 'rgba(15, 23, 42, 0.95)'
-                                : 'rgba(8, 47, 73, 0.85)',
+                                ? 'rgba(56, 189, 248, 0.15)'
+                                : 'rgba(8, 47, 73, 0.92)',
                             },
                           ]}
+                          activeOpacity={0.65}
                         >
                           {isSunk ? (
-                            <Ionicons name="flame" size={cellSize * 0.58} color="#ffffff" />
+                            <View style={styles.sunkCellOverlay}>
+                              <Ionicons name="skull" size={Math.max(10, cellSize * 0.52)} color="#fca5a5" />
+                            </View>
                           ) : hitShip ? (
-                            <Ionicons name="close" size={cellSize * 0.62} color="#ffffff" />
+                            <Ionicons name="flame" size={Math.max(12, cellSize * 0.54)} color="#fde047" />
                           ) : hasShot ? (
-                            <View style={styles.splashWaterMiss} />
+                            <Ionicons name="water" size={Math.max(10, cellSize * 0.46)} color="#38bdf8" />
+                          ) : isMyTurn ? (
+                            <View style={styles.crosshairDot} />
                           ) : null}
                         </TouchableOpacity>
                       );
                     } else {
-                      // Modo Flota Propia
-                      const shipAtCell = myFleet.find((s) => s.cells.includes(idx));
-                      const wasHit = enemyShotsAtMe.includes(idx);
-                      const isSunk = shipAtCell && isShipSunk(shipAtCell, enemyShotsAtMe);
+                      // Vista Mi Flota
+                      const ship = myFleet.find((s) => s.cells.includes(idx));
+                      const hasShot = enemyShots.includes(idx);
+                      const isHit = Boolean(ship && hasShot);
+                      const isSunk = Boolean(ship && isShipSunk(ship, enemyShots));
+                      const isMiss = !ship && hasShot;
 
                       return (
                         <View
@@ -542,16 +611,14 @@ export const BattleshipArena: React.FC<Props> = ({
                             {
                               width: cellSize,
                               height: cellSize,
-                              backgroundColor: wasHit && shipAtCell
-                                ? 'rgba(239, 68, 68, 0.85)'
-                                : wasHit
-                                ? 'rgba(15, 23, 42, 0.95)'
-                                : 'rgba(8, 47, 73, 0.85)',
+                              backgroundColor: 'rgba(8, 47, 73, 0.92)',
                             },
                           ]}
                         >
-                          {shipAtCell && renderNavalSegment(shipAtCell, idx, wasHit, Boolean(isSunk), false)}
-                          {wasHit && !shipAtCell && <View style={styles.splashWaterMiss} />}
+                          {ship && renderNavalSegment(ship, idx, isHit, isSunk, false)}
+                          {isMiss && (
+                            <Ionicons name="water" size={Math.max(10, cellSize * 0.46)} color="#38bdf8" />
+                          )}
                         </View>
                       );
                     }
@@ -560,47 +627,52 @@ export const BattleshipArena: React.FC<Props> = ({
               ))}
             </View>
           </View>
-        </View>
-      )}
 
-      {/* ================= FASE 4: PARTIDA TERMINADA ================= */}
-      {bs.phase === 'finished' && (
-        <View style={styles.finishedCard}>
-          <Ionicons
-            name={bs.winner === currentProfile ? 'trophy' : 'heart'}
-            size={42}
-            color={bs.winner === currentProfile ? '#f59e0b' : '#ec4899'}
-          />
-          <Text style={styles.finishedTitle}>
-            {bs.winner === currentProfile ? '¡Victoria Naval!' : '¡Batalla Terminada!'}
-          </Text>
-          <Text style={styles.finishedSub}>
-            {bs.winner === currentProfile
-              ? 'Hundiste toda la flota enemiga. ¡Excelente estratega!'
-              : 'Tu pareja logró hundir tus barcos en esta ronda.'}
-          </Text>
+          {/* Panel de Flota Restante de la Pareja */}
+          <View style={styles.fleetStatusCard}>
+            <Text style={styles.fleetStatusTitle}>
+              {radarMode === 'attack' ? 'Flota Enemiga por Hundir:' : 'Estado de Mi Flota:'}
+            </Text>
+            <View style={styles.fleetIconsRow}>
+              {(radarMode === 'attack' ? enemyFleet : myFleet).map((s) => {
+                const conf = SHIP_CONFIG[s.id] || { name: s.id, size: s.size, bg: '#0284c7' };
+                const isSunk = isShipSunk(s, radarMode === 'attack' ? myShots : enemyShots);
 
-          <View style={{ width: '100%', marginTop: 8 }}>
-            <GameButton
-              label="Iniciar Nueva Batalla Naval"
-              icon="refresh"
-              variant="cyan"
-              onPress={onReset}
-            />
+                return (
+                  <View
+                    key={s.id}
+                    style={[
+                      styles.fleetMiniBadge,
+                      isSunk && styles.fleetMiniBadgeSunk,
+                    ]}
+                  >
+                    <Ionicons
+                      name={isSunk ? 'skull' : (conf.icon as any) || 'boat'}
+                      size={14}
+                      color={isSunk ? '#ef4444' : conf.bg}
+                    />
+                    <Text
+                      style={[
+                        styles.fleetMiniName,
+                        isSunk && { textDecorationLine: 'line-through', color: '#94a3b8' },
+                      ]}
+                    >
+                      {conf.name}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         </View>
       )}
 
-      {/* Footer con Racha y Consejos de Pareja */}
-      {isFull && (
-        <MatchInfoFooter
-          scoreKarla={remainingShipsKarla}
-          scoreJavier={remainingShipsJavier}
-          streakCount={4}
-          gameStatsText="Batalla Naval Estratégica 10x10"
-          coupleBanter="¡El que hunda el Portaaviones primero tiene derecho a elegir qué película ver! 🎬"
-        />
-      )}
+      {/* Footer con Racha y Tips */}
+      <MatchInfoFooter
+        gameTip="El que pierda este combate naval prepara los snacks para ver una película."
+        scoreKarla={remainingShipsKarla}
+        scoreJavier={remainingShipsJavier}
+      />
     </View>
   );
 };
@@ -608,8 +680,14 @@ export const BattleshipArena: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 10,
+    gap: GAMES_THEME.spacing.sm,
     width: '100%',
+    paddingHorizontal: GAMES_THEME.spacing.lg,
+  },
+  cardContainer: {
+    width: '100%',
+    borderRadius: 24,
+    overflow: 'hidden',
   },
   oceanCard: {
     width: '100%',
@@ -618,153 +696,228 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(56, 189, 248, 0.3)',
-    gap: 10,
+    gap: 12,
   },
   radarEmblem: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: 'rgba(14, 165, 233, 0.2)',
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 2,
+    borderColor: '#38bdf8',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#38bdf8',
+    marginBottom: 4,
   },
   oceanCardTitle: {
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '800',
     color: '#ffffff',
     fontFamily: GAMES_THEME.fonts.display,
   },
   oceanCardSubtitle: {
-    fontSize: 12.5,
+    fontSize: 13,
     color: '#94a3b8',
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 8,
-  },
-  waitingInviteBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(14, 165, 233, 0.15)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-  },
-  waitingInviteText: {
-    color: '#38bdf8',
-    fontSize: 12,
-    fontWeight: '700',
+    marginBottom: 6,
   },
   setupWrap: {
     width: '100%',
     alignItems: 'center',
-    gap: 8,
+    gap: GAMES_THEME.spacing.sm,
   },
-  setupTopRow: {
+  setupToolsBar: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
-  setupHeading: {
-    fontSize: 13.5,
+  setupInfoTextGroup: {
+    flex: 1,
+  },
+  setupHeaderTitle: {
+    fontSize: 15,
     fontWeight: '800',
     color: '#0f172a',
   },
-  setupSub: {
-    fontSize: 10.5,
+  setupHeaderSub: {
+    fontSize: 11,
     color: '#64748b',
   },
-  setupToolsRow: {
+  setupActionsRow: {
     flexDirection: 'row',
     gap: 6,
   },
-  toolChip: {
+  actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 10,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#0284c7',
   },
-  toolChipText: {
-    fontSize: 11,
+  actionChipRotate: {
+    backgroundColor: '#0284c7',
+  },
+  actionChipText: {
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#0284c7',
   },
-  boardOuterOcean: {
-    borderRadius: 20,
-    backgroundColor: '#075985',
-    borderWidth: 3,
+  boardOceanFrame: {
+    backgroundColor: '#082f49',
+    borderRadius: GAMES_THEME.radius.lg,
+    borderWidth: 2,
     borderColor: '#0284c7',
+    padding: 4,
     overflow: 'hidden',
-    padding: 3,
-    ...GAMES_THEME.shadows.card,
+    alignSelf: 'center',
   },
   coordsLettersRow: {
     flexDirection: 'row',
-    backgroundColor: '#075985',
-    paddingVertical: 2,
+    paddingBottom: 2,
   },
   coordLetterText: {
-    fontSize: 9,
-    fontWeight: '900',
     color: '#38bdf8',
+    fontSize: 10,
+    fontWeight: '800',
   },
   coordNumberCell: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#075985',
+    paddingRight: 2,
   },
   coordNumberText: {
-    fontSize: 8.5,
-    fontWeight: '900',
     color: '#38bdf8',
+    fontSize: 10,
+    fontWeight: '800',
   },
   oceanCell: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.5,
-    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderColor: 'rgba(56, 189, 248, 0.2)',
   },
   navalHull: {
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 2,
+    ...GAMES_THEME.shadows.soft,
   },
-  turretPoint: {
-    width: 4,
+  bowTurretAnchor: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  sternPropellerDetail: {
+    width: 8,
     height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
     borderRadius: 2,
+  },
+  midSuperstructure: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carrierRunwayLine: {
+    width: 2,
+    height: 12,
     backgroundColor: '#ffffff',
+    borderRadius: 1,
   },
-  deckPlate: {
-    width: '60%',
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+  twinCannonTurret: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#78350f',
   },
-  splashWaterMiss: {
+  smokestackDuo: {
+    width: 7,
+    height: 5,
+    backgroundColor: '#ffffff',
+    borderRadius: 2,
+  },
+  periscopeSail: {
+    width: 5,
+    height: 9,
+    backgroundColor: '#ffffff',
+    borderRadius: 2.5,
+  },
+  destroyerBridge: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#38bdf8',
-    opacity: 0.85,
+    backgroundColor: '#ffffff',
+  },
+  fleetRosterCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 6,
+    ...GAMES_THEME.shadows.soft,
+  },
+  fleetRosterTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  fleetChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  fleetChipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  shipColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  fleetChipName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  waitingPartnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#e0f2fe',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  waitingPartnerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284c7',
   },
   battleWrap: {
     width: '100%',
     alignItems: 'center',
-    gap: 8,
+    gap: GAMES_THEME.spacing.sm,
   },
   radarToggleContainer: {
     flexDirection: 'row',
@@ -772,6 +925,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 3,
     width: '100%',
+    gap: 4,
   },
   radarModeTab: {
     flex: 1,
@@ -780,14 +934,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 7,
-    borderRadius: 11,
+    borderRadius: 10,
   },
   radarModeTabActive: {
     backgroundColor: '#0284c7',
     ...GAMES_THEME.shadows.soft,
   },
   radarModeTabText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
     color: '#64748b',
   },
@@ -797,57 +951,69 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    width: '100%',
   },
-  turnBannerMyTurn: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#a7f3d0',
+  turnStatusBannerActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
   },
-  turnBannerPartner: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fde68a',
+  turnStatusBannerWaiting: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderColor: 'rgba(245, 158, 11, 0.4)',
   },
-  turnStatusBannerText: {
+  turnStatusText: {
     fontSize: 11.5,
-    fontWeight: '800',
-  },
-  waitingPartnerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#e0f2fe',
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-  waitingPartnerText: {
-    color: '#0284c7',
-    fontSize: 12,
     fontWeight: '700',
   },
-  finishedCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 20,
+  crosshairDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(56, 189, 248, 0.45)',
+  },
+  sunkCellOverlay: {
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fleetStatusCard: {
     width: '100%',
-    gap: 8,
-    borderWidth: 1.5,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
-    ...GAMES_THEME.shadows.card,
+    gap: 6,
+    ...GAMES_THEME.shadows.soft,
   },
-  finishedTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    fontFamily: GAMES_THEME.fonts.display,
+  fleetStatusTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#475569',
   },
-  finishedSub: {
-    fontSize: 12.5,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 18,
+  fleetIconsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  fleetMiniBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  fleetMiniBadgeSunk: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+  },
+  fleetMiniName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
   },
 });

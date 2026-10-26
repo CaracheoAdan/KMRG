@@ -58,24 +58,25 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
 
   return (
     <View style={styles.headerContainer}>
-      {/* Botón Salir / Volver */}
+      {/* Botón Volver al Lobby */}
       <TouchableOpacity
         onPress={() => {
           void triggerGameHaptic('light');
           onBack();
         }}
-        style={styles.circleBtn}
+        style={styles.backBtn}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        accessibilityLabel="Volver al lobby"
+        accessibilityLabel="Volver al lobby de juegos"
       >
-        <Ionicons name="chevron-back" size={20} color="#1e293b" />
+        <Ionicons name="chevron-back" size={20} color="#334155" />
+        <Text style={styles.backBtnText}>Lobby</Text>
       </TouchableOpacity>
 
       {/* Centro: Título del Juego + Pill de Turno */}
       <View style={styles.centerSection}>
         <View style={styles.titleRow}>
-          <View style={styles.gameIconHalo}>
-            <Ionicons name={icon} size={16} color={GAMES_THEME.colors.coral} />
+          <View style={styles.iconHalo}>
+            <Ionicons name={icon} size={15} color={GAMES_THEME.colors.coral} />
           </View>
           <Text style={styles.gameTitleText} numberOfLines={1}>
             {title}
@@ -85,9 +86,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
         <View
           style={[
             styles.turnPill,
-            isMyTurn
-              ? styles.turnPillMyTurn
-              : styles.turnPillPartner,
+            isMyTurn ? styles.turnPillMyTurn : styles.turnPillPartner,
           ]}
         >
           <Animated.View
@@ -111,29 +110,41 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
         </View>
       </View>
 
-      {/* Derecha: Mini Avatares de Pareja con Turno + Botón Reiniciar */}
+      {/* Derecha: Avatares SEPARADOS (K y J con borde blanco y halo de turno) + Botón Reiniciar */}
       <View style={styles.rightSection}>
         <View style={styles.avatarsRow}>
-          <View
+          {/* Avatar Karla */}
+          <Animated.View
             style={[
               styles.miniAvatar,
-              { backgroundColor: '#f3e8ff' },
-              isKarlaTurn && styles.activeAvatarRingKarla,
+              { backgroundColor: '#fdf2f8', borderColor: isKarlaTurn ? '#ec4899' : '#ffffff' },
+              isKarlaTurn && {
+                borderWidth: 2.5,
+                transform: [{ scale: pulseAnim }],
+                ...GAMES_THEME.shadows.glowCoral,
+              },
             ]}
           >
-            <Text style={styles.avatarLetterKarla}>K</Text>
-          </View>
-          <View
+            <Text style={[styles.avatarLetterKarla, isKarlaTurn && { fontWeight: '900' }]}>K</Text>
+          </Animated.View>
+
+          {/* Avatar Javier (Separado, sin superponerse) */}
+          <Animated.View
             style={[
               styles.miniAvatar,
-              { backgroundColor: '#e0f2fe', marginLeft: -6 },
-              isJavierTurn && styles.activeAvatarRingJavier,
+              { backgroundColor: '#f0f9ff', borderColor: isJavierTurn ? '#0ea5e9' : '#ffffff' },
+              isJavierTurn && {
+                borderWidth: 2.5,
+                transform: [{ scale: pulseAnim }],
+                ...GAMES_THEME.shadows.glowCyan,
+              },
             ]}
           >
-            <Text style={styles.avatarLetterJavier}>J</Text>
-          </View>
+            <Text style={[styles.avatarLetterJavier, isJavierTurn && { fontWeight: '900' }]}>J</Text>
+          </Animated.View>
         </View>
 
+        {/* Botón Reiniciar Partida */}
         <TouchableOpacity
           onPress={() => {
             void triggerGameHaptic('medium');
@@ -143,7 +154,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityLabel="Reiniciar partida"
         >
-          <Ionicons name="reload" size={17} color="#475569" />
+          <Ionicons name="reload" size={16} color="#475569" />
         </TouchableOpacity>
       </View>
     </View>
@@ -155,21 +166,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: GAMES_THEME.spacing.lg,
+    paddingVertical: GAMES_THEME.spacing.sm + 2,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: 'rgba(244, 63, 94, 0.15)',
+    ...GAMES_THEME.shadows.soft,
+    zIndex: 10,
   },
-  circleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: GAMES_THEME.radius.sm,
     backgroundColor: '#f8fafc',
+    gap: 2,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  backBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
   },
   centerSection: {
     alignItems: 'center',
@@ -180,10 +199,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  gameIconHalo: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  iconHalo: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: 'rgba(244, 63, 94, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -192,6 +211,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: '#0f172a',
+    letterSpacing: 0.2,
     fontFamily: GAMES_THEME.fonts.display,
   },
   turnPill: {
@@ -200,21 +220,21 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 2.5,
-    borderRadius: 12,
+    borderRadius: GAMES_THEME.radius.pill,
     borderWidth: 1,
   },
   turnPillMyTurn: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#a7f3d0',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
   },
   turnPillPartner: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fde68a',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderColor: 'rgba(245, 158, 11, 0.4)',
   },
   turnDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   turnLabelText: {
     fontSize: 11,
@@ -223,39 +243,39 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: GAMES_THEME.spacing.sm,
   },
   avatarsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6, // Separados limpiamente sin montarse
   },
   miniAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
-  },
-  activeAvatarRingKarla: {
-    borderColor: GAMES_THEME.colors.karla.primary,
-    borderWidth: 2,
-    transform: [{ scale: 1.12 }],
-  },
-  activeAvatarRingJavier: {
-    borderColor: GAMES_THEME.colors.javier.primary,
-    borderWidth: 2,
-    transform: [{ scale: 1.12 }],
   },
   avatarLetterKarla: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: GAMES_THEME.colors.karla.text,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#db2777',
   },
   avatarLetterJavier: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: GAMES_THEME.colors.javier.text,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0284c7',
+  },
+  circleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
 });

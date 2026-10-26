@@ -5,6 +5,7 @@ import {
   View,
   TouchableOpacity,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../ui/Icon';
@@ -22,17 +23,19 @@ interface Props {
   onNewRound: () => void;
 }
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
 export const TicTacToeArena: React.FC<Props> = ({
-  boardPx,
-  isFull,
-  primaryColor,
-  ticTacToeState,
   onCellPress,
   onNewRound,
+  ticTacToeState,
 }) => {
   const isWinner = !!ticTacToeState.winner;
   const isDraw = ticTacToeState.winner === 'Empate';
-  const isKarla = ticTacToeState.turn === 'Karla';
+  const isKarlaTurn = ticTacToeState.turn === 'Karla';
+
+  // Tablero grande aprovechando el ancho útil con 16px a cada lado
+  const boardSize = Math.min(SCREEN_W - 32, 340);
 
   // Animación de pulso para las celdas ganadoras
   const winPulseAnim = useRef(new Animated.Value(1)).current;
@@ -69,31 +72,62 @@ export const TicTacToeArena: React.FC<Props> = ({
 
   const statusBg = isWinner
     ? '#ecfdf5'
-    : isKarla
+    : isKarlaTurn
     ? '#fdf2f8'
     : '#f0f9ff';
 
   const statusBorder = isWinner
     ? '#a7f3d0'
-    : isKarla
+    : isKarlaTurn
     ? '#fbcfe8'
     : '#bae6fd';
 
   const statusColor = isWinner
     ? '#059669'
-    : isKarla
-    ? GAMES_THEME.colors.karla.text
-    : GAMES_THEME.colors.javier.text;
+    : isKarlaTurn
+    ? '#be185d'
+    : '#0369a1';
 
   const statusText = isWinner
     ? isDraw
-      ? '¡EMPATE AMOROSO! (+40 PTS)'
+      ? '¡EMPATE DE AMOR! (+40 PTS)'
       : `¡VICTORIA DE ${ticTacToeState.winner === 'Karla' ? 'KARLITA' : 'JAVIER'}! (+150 PTS)`
-    : `TURNO: ${isKarla ? 'KARLITA (✕)' : 'JAVIER (○)'}`;
+    : `TURNO: ${isKarlaTurn ? 'KARLITA (✕)' : 'JAVIER (○)'}`;
 
   return (
     <View style={styles.container}>
-      {/* Pill de Estado con Gradiente y Micro-indicador */}
+      {/* 1. Marcador de Rondas de Pareja con Avatares */}
+      <View style={[styles.roundScoreboard, GAMES_THEME.shadows.soft]}>
+        <View style={styles.playerScore}>
+          <View style={[styles.avatarCircle, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
+            <Text style={styles.avatarTxtKarla}>K</Text>
+          </View>
+          <View>
+            <Text style={styles.playerName}>Karlita (✕)</Text>
+            <Text style={styles.playerVictories}>
+              {ticTacToeState.scoreKarla ?? 0} victorias
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.roundVsBadge}>
+          <Text style={styles.roundVsText}>DUELO</Text>
+        </View>
+
+        <View style={[styles.playerScore, { flexDirection: 'row-reverse' }]}>
+          <View style={[styles.avatarCircle, { backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }]}>
+            <Text style={styles.avatarTxtJavier}>J</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.playerName}>Javier (○)</Text>
+            <Text style={styles.playerVictories}>
+              {ticTacToeState.scoreJavier ?? 0} victorias
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* 2. Pill de Estado de Turno */}
       <View style={[styles.statusPill, { backgroundColor: statusBg, borderColor: statusBorder }]}>
         <Ionicons
           name={isWinner ? (isDraw ? 'heart-half' : 'trophy') : 'sparkles'}
@@ -103,17 +137,16 @@ export const TicTacToeArena: React.FC<Props> = ({
         <Text style={[styles.statusPillText, { color: statusColor }]}>{statusText}</Text>
       </View>
 
-      {/* Tablero Neón Elevado con Sombra Suave y Glassmorphism */}
+      {/* 3. Tablero Neón Elegante: Marco Púrpura Profundo con Celdas Blancas Elevadas */}
       <LinearGradient
-        colors={isFull ? ['#1e1b4b', '#0f172a'] : ['#f8fafc', '#f1f5f9']}
+        colors={GAMES_THEME.gradients.tictactoeNeon}
         style={[
           styles.boardWrapper,
           {
-            width: boardPx,
-            height: boardPx,
-            borderColor: isFull ? 'rgba(139, 92, 246, 0.4)' : '#e2e8f0',
+            width: boardSize,
+            height: boardSize,
           },
-          isFull ? GAMES_THEME.shadows.glowPurple : GAMES_THEME.shadows.card,
+          GAMES_THEME.shadows.boardDepth,
         ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -128,9 +161,8 @@ export const TicTacToeArena: React.FC<Props> = ({
                 onPress={() => handleCellPress(idx)}
                 activeOpacity={cell || isWinner ? 1 : 0.75}
                 style={[
-                  styles.cellTouch,
-                  isFull && styles.cellTouchDark,
-                  isWinningCell && (isFull ? styles.winningCellDark : styles.winningCellLight),
+                  styles.cleanElevatedCell,
+                  isWinningCell && styles.winningElevatedCell,
                 ]}
               >
                 {cell === 'Karla' && (
@@ -140,14 +172,7 @@ export const TicTacToeArena: React.FC<Props> = ({
                       isWinningCell && { transform: [{ scale: winPulseAnim }] },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.symbolKarla,
-                        { fontSize: isFull ? 48 : 34 },
-                      ]}
-                    >
-                      ✕
-                    </Text>
+                    <Text style={styles.symbolKarla}>✕</Text>
                   </Animated.View>
                 )}
 
@@ -158,20 +183,8 @@ export const TicTacToeArena: React.FC<Props> = ({
                       isWinningCell && { transform: [{ scale: winPulseAnim }] },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.symbolJavier,
-                        { fontSize: isFull ? 48 : 34 },
-                      ]}
-                    >
-                      ○
-                    </Text>
+                    <Text style={styles.symbolJavier}>○</Text>
                   </Animated.View>
-                )}
-
-                {/* Sutil brillo al estar vacía en turno */}
-                {!cell && !isWinner && (
-                  <View style={styles.emptyGhostIndicator} />
                 )}
               </TouchableOpacity>
             );
@@ -179,8 +192,8 @@ export const TicTacToeArena: React.FC<Props> = ({
         </View>
       </LinearGradient>
 
-      {/* Botón de Acción Principal */}
-      <View style={{ width: '100%', maxWidth: boardPx }}>
+      {/* 4. Botón de Acción Principal (Reiniciar Ronda / Siguiente) */}
+      <View style={{ width: '100%', maxWidth: boardSize, marginTop: 4 }}>
         <GameButton
           label={isWinner ? 'Jugar Siguiente Ronda' : 'Reiniciar Ronda'}
           icon={isWinner ? 'play-forward' : 'reload'}
@@ -189,18 +202,13 @@ export const TicTacToeArena: React.FC<Props> = ({
         />
       </View>
 
-      {/* Espacio Inferior Aprovechado: Marcador, Racha y Tips de Pareja */}
-      {isFull && (
-        <View style={{ width: '100%', maxWidth: boardPx }}>
-          <MatchInfoFooter
-            scoreKarla={ticTacToeState.scoreKarla}
-            scoreJavier={ticTacToeState.scoreJavier}
-            streakCount={4}
-            gameStatsText="El clásico duelo de rapidez mental y amor 💖"
-            coupleBanter="¡El que pierda este juego debe darle un masaje de 5 minutos al ganador! 💆"
-          />
-        </View>
-      )}
+      {/* 5. Footer con Racha y Tips */}
+      <MatchInfoFooter
+        scoreKarla={ticTacToeState.scoreKarla}
+        scoreJavier={ticTacToeState.scoreJavier}
+        streakCount={5}
+        gameTip="¡El clásico duelo de 3 en raya! El que gane 3 rondas elige qué cenar hoy."
+      />
     </View>
   );
 };
@@ -208,27 +216,86 @@ export const TicTacToeArena: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 12,
+    gap: GAMES_THEME.spacing.sm + 2,
     width: '100%',
+    paddingHorizontal: GAMES_THEME.spacing.lg,
+  },
+  roundScoreboard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: GAMES_THEME.radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(244, 63, 94, 0.18)',
+  },
+  playerScore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarTxtKarla: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#db2777',
+  },
+  avatarTxtJavier: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0284c7',
+  },
+  playerName: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  playerVictories: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748b',
+  },
+  roundVsBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+  },
+  roundVsText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: '#8b5cf6',
+    letterSpacing: 0.5,
   },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 5,
     borderRadius: 20,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   statusPillText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   boardWrapper: {
-    borderRadius: 28,
-    padding: 10,
-    borderWidth: 2,
+    borderRadius: GAMES_THEME.radius.xl,
+    padding: 12,
+    borderWidth: 2.5,
+    borderColor: '#8b5cf6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -240,63 +307,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignContent: 'space-between',
   },
-  cellTouch: {
+  // Casillas elevadas limpias, SIN cuadrados oscuros ni puntos vacíos
+  cleanElevatedCell: {
     width: '31%',
     height: '31%',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.65)',
+    ...GAMES_THEME.shadows.card,
   },
-  cellTouchDark: {
-    backgroundColor: 'rgba(30, 41, 59, 0.85)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    shadowColor: '#8b5cf6',
-    shadowOpacity: 0.25,
-  },
-  winningCellLight: {
+  winningElevatedCell: {
     backgroundColor: '#fef08a',
-    borderColor: '#eab308',
+    borderColor: '#f59e0b',
     borderWidth: 3,
-  },
-  winningCellDark: {
-    backgroundColor: 'rgba(234, 179, 8, 0.25)',
-    borderColor: '#facc15',
-    borderWidth: 3,
-    shadowColor: '#facc15',
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    elevation: 6,
+    ...GAMES_THEME.shadows.glowCoral,
   },
   symbolWrap: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   symbolKarla: {
+    fontSize: 48,
     fontWeight: '900',
-    color: GAMES_THEME.colors.karla.primary,
-    textShadowColor: 'rgba(236, 72, 153, 0.45)',
+    color: '#f43f5e',
+    textShadowColor: 'rgba(244, 63, 94, 0.4)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadowRadius: 6,
   },
   symbolJavier: {
+    fontSize: 48,
     fontWeight: '900',
-    color: GAMES_THEME.colors.javier.primary,
-    textShadowColor: 'rgba(14, 165, 233, 0.45)',
+    color: '#0ea5e9',
+    textShadowColor: 'rgba(14, 165, 233, 0.4)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
-  },
-  emptyGhostIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(148, 163, 184, 0.25)',
+    textShadowRadius: 6,
   },
 });

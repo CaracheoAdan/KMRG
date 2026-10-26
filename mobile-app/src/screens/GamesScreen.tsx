@@ -1767,6 +1767,19 @@ export const GamesScreen: React.FC = () => {
             const color = g.iconColor;
             const isMyTurn = status.isMyTurn;
 
+            let miniStats = '';
+            if (g.id === 'tictactoe') {
+              miniStats = `${lb.pointsKarla} - ${lb.pointsJavier} rondas`;
+            } else if (g.id === 'chess') {
+              miniStats = `${chessHistory.length} movimientos`;
+            } else if (g.id === 'battleship') {
+              miniStats = 'Combate naval 10x10';
+            } else if (g.id === 'sudoku') {
+              miniStats = `Nivel ${sudoku.difficulty}`;
+            } else if (g.id === 'hangman') {
+              miniStats = `${6 - wrongGuessesCount} vidas`;
+            }
+
             return (
               <PressableScale
                 key={g.id}
@@ -1775,7 +1788,7 @@ export const GamesScreen: React.FC = () => {
                   styles.lobbyCardCompact,
                   {
                     backgroundColor: isDark ? colors.surface : '#ffffff',
-                    borderColor: `${color}66`,
+                    borderColor: `${color}50`,
                     borderWidth: 1.5,
                     shadowColor: color,
                   },
@@ -1783,12 +1796,12 @@ export const GamesScreen: React.FC = () => {
                 scaleTo={0.96}
                 accessibilityLabel={`Jugar ${g.label}`}
               >
-                {/* Ícono grande (56px) en círculo pastel del color del juego */}
+                {/* Ícono grande en círculo pastel del color del juego */}
                 <View style={[styles.lobbyCardIconCircle, { backgroundColor: g.bgTint }]}>
                   <Ionicons name={g.icon as any} size={28} color={color} />
                 </View>
 
-                {/* Nombre del juego centrado, serif, tamaño 20, peso 700 */}
+                {/* Nombre del juego centrado */}
                 <Text
                   style={[styles.lobbyCardTitle, { color: colors.text }]}
                   numberOfLines={1}
@@ -1797,7 +1810,11 @@ export const GamesScreen: React.FC = () => {
                   {g.label}
                 </Text>
 
-                {/* Descripción centrada, tamaño 13, gris */}
+                {/* Mini estado y descripción */}
+                <Text style={[styles.lobbyCardMiniStats, { color }]} numberOfLines={1}>
+                  {miniStats}
+                </Text>
+
                 <Text
                   style={[styles.lobbyCardDesc, { color: colors.textSecondary }]}
                   numberOfLines={2}
@@ -1805,7 +1822,7 @@ export const GamesScreen: React.FC = () => {
                   {g.description}
                 </Text>
 
-                {/* Badge de estado centrado abajo, una línea */}
+                {/* Badge de estado centrado abajo */}
                 <View
                   style={[
                     styles.turnBadgePill,
@@ -1831,6 +1848,68 @@ export const GamesScreen: React.FC = () => {
             );
           };
 
+          const renderBannerCard = (g: typeof ALL_GAMES[0]) => {
+            const status = getGameStatus(g.id);
+            const color = g.iconColor;
+            const isMyTurn = status.isMyTurn;
+
+            return (
+              <PressableScale
+                key={g.id}
+                onPress={() => setPendingGameToLaunch(g.id)}
+                style={[
+                  styles.lobbyBannerCard,
+                  {
+                    backgroundColor: isDark ? colors.surface : '#ffffff',
+                    borderColor: `${color}50`,
+                    shadowColor: color,
+                  },
+                ]}
+                scaleTo={0.97}
+                accessibilityLabel={`Jugar ${g.label}`}
+              >
+                <View style={[styles.lobbyBannerIconCircle, { backgroundColor: g.bgTint }]}>
+                  <Ionicons name={g.icon as any} size={24} color={color} />
+                </View>
+
+                <View style={styles.lobbyBannerInfo}>
+                  <View style={styles.lobbyBannerTitleRow}>
+                    <Text style={[styles.lobbyBannerTitle, { color: colors.text }]}>
+                      {g.label}
+                    </Text>
+                    <View
+                      style={[
+                        styles.turnBadgePill,
+                        isMyTurn
+                          ? { backgroundColor: color, borderColor: color }
+                          : { backgroundColor: `${color}18`, borderColor: `${color}40` },
+                      ]}
+                    >
+                      {isMyTurn && (
+                        <Ionicons name="sparkles" size={10} color="#ffffff" style={{ marginRight: 3 }} />
+                      )}
+                      <Text
+                        style={[
+                          styles.lobbyBadgeText,
+                          { color: isMyTurn ? '#ffffff' : color },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {status.text}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.lobbyBannerDesc, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {g.description}
+                  </Text>
+                </View>
+
+                <Ionicons name="chevron-forward" size={18} color={`${color}aa`} />
+              </PressableScale>
+            );
+          };
+
           return (
             <View style={styles.lobbyGamesGridArea}>
               <View style={styles.lobbyGridRowsContainer}>
@@ -1846,10 +1925,10 @@ export const GamesScreen: React.FC = () => {
                   <View style={styles.lobbyCol}>{renderCard(gridGames[3])}</View>
                 </View>
 
-                {/* Fila 3: 5to juego en ancho completo, misma altura flex: 1 */}
+                {/* Fila 3: 5to juego como banner compacto balanceado */}
                 {fullWidthGame && (
-                  <View style={styles.lobbyGridRow}>
-                    <View style={styles.lobbyColFull}>{renderCard(fullWidthGame)}</View>
+                  <View style={styles.lobbyBannerRow}>
+                    {renderBannerCard(fullWidthGame)}
                   </View>
                 )}
               </View>
@@ -1943,7 +2022,7 @@ export const GamesScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => setActiveGame(null)}
       >
-        <SafeAreaView style={[styles.gameFullScreenContainer, { backgroundColor: colors.background }]}>
+        <SafeAreaView style={[styles.gameFullScreenContainer, { backgroundColor: isDark ? colors.background : '#fff5f7' }]}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
 
           {/* Header Unificado Premium del Juego */}
@@ -1968,10 +2047,14 @@ export const GamesScreen: React.FC = () => {
             />
           )}
 
-          {/* Arena del Juego Montada Únicamente Cuando Está Activa */}
-          <View style={styles.gameActiveArenaWrapper}>
+          {/* Arena del Juego Montada con Scroll Adaptable que Centra Verticalmente */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.gameActiveScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {activeGame && renderActiveGameArena(true)}
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
 
@@ -2086,6 +2169,59 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   lobbyColFull: {
     flex: 1,
+  },
+  lobbyBannerRow: {
+    width: '100%',
+  },
+  lobbyBannerCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    gap: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  lobbyBannerIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lobbyBannerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  lobbyBannerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  lobbyBannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontFamily: SERIF_FONT,
+  },
+  lobbyBannerDesc: {
+    fontSize: 12,
+  },
+  lobbyCardMiniStats: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  gameActiveScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingBottom: 32,
   },
   lobbyCardCompact: {
     flex: 1,

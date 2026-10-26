@@ -14,7 +14,7 @@ interface MatchInfoFooterProps {
 }
 
 const FUN_COUPLE_TIPS = [
-  'El que pierda este duelo prepara el postre o la cena hoy 🍰',
+  'El perdedor de esta partida prepara la cena o el postre de hoy 🍰',
   'Cada victoria suma puntos para desbloquear accesorios de Pochito ✨',
   'Jugar en pareja fortalece la complicidad y el trabajo en equipo ❤️',
   'El perdedor debe darle un masaje de 5 minutos al ganador 💆‍♀️',
@@ -39,11 +39,12 @@ export const MatchInfoFooter: React.FC<MatchInfoFooterProps> = ({
       style={[
         styles.container,
         dark
-          ? { backgroundColor: 'rgba(30, 41, 59, 0.75)', borderColor: 'rgba(255, 255, 255, 0.1)' }
-          : { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
+          ? { backgroundColor: '#1e293b', borderColor: 'rgba(255, 255, 255, 0.12)' }
+          : { backgroundColor: '#ffffff', borderColor: 'rgba(244, 63, 94, 0.18)' },
+        GAMES_THEME.shadows.soft,
       ]}
     >
-      {/* Marcador Rápido de Pareja */}
+      {/* 1. Marcador Rápido de Pareja */}
       {(scoreKarla !== undefined || scoreJavier !== undefined) && (
         <View style={styles.scoreRow}>
           <View style={styles.playerScoreBlock}>
@@ -58,7 +59,7 @@ export const MatchInfoFooter: React.FC<MatchInfoFooterProps> = ({
             <View>
               <Text style={[styles.playerName, dark && { color: '#f8fafc' }]}>Karlita</Text>
               <Text style={[styles.playerPts, { color: GAMES_THEME.colors.karla.text }]}>
-                {scoreKarla ?? 0} victorias
+                {scoreKarla ?? 0} {scoreKarla === 1 ? 'victoria' : 'victorias'}
               </Text>
             </View>
           </View>
@@ -79,14 +80,14 @@ export const MatchInfoFooter: React.FC<MatchInfoFooterProps> = ({
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={[styles.playerName, dark && { color: '#f8fafc' }]}>Javier</Text>
               <Text style={[styles.playerPts, { color: GAMES_THEME.colors.javier.text }]}>
-                {scoreJavier ?? 0} victorias
+                {scoreJavier ?? 0} {scoreJavier === 1 ? 'victoria' : 'victorias'}
               </Text>
             </View>
           </View>
         </View>
       )}
 
-      {/* Racha o Estadística del Juego */}
+      {/* 2. Racha o Estadística del Juego */}
       {gameStatsText ? (
         <View style={styles.statsPill}>
           <Ionicons name="stats-chart" size={13} color={GAMES_THEME.colors.purple} />
@@ -99,10 +100,10 @@ export const MatchInfoFooter: React.FC<MatchInfoFooterProps> = ({
         </View>
       )}
 
-      {/* Tip Romántico / Regla de Apuesta */}
+      {/* 3. Tip Romántico / Regla de Apuesta (Sin truncamiento de texto) */}
       <View style={styles.tipCard}>
-        <Ionicons name="heart" size={13} color={GAMES_THEME.colors.coral} style={{ marginTop: 2 }} />
-        <Text style={[styles.tipText, dark && { color: '#94a3b8' }]}>
+        <Ionicons name="heart" size={14} color={GAMES_THEME.colors.coral} style={{ marginTop: 2 }} />
+        <Text style={[styles.tipText, dark && { color: '#cbd5e1' }]}>
           {coupleBanter || randomTip}
         </Text>
       </View>
@@ -113,17 +114,17 @@ export const MatchInfoFooter: React.FC<MatchInfoFooterProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1,
-    gap: 10,
-    marginTop: 8,
+    borderRadius: GAMES_THEME.radius.lg,
+    padding: GAMES_THEME.spacing.md,
+    borderWidth: 1.5,
+    gap: GAMES_THEME.spacing.sm + 2,
+    marginTop: GAMES_THEME.spacing.sm,
   },
   scoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 8,
+    paddingBottom: GAMES_THEME.spacing.xs + 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(148, 163, 184, 0.25)',
   },
@@ -133,40 +134,40 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   avatarCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarTxtKarla: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
     color: GAMES_THEME.colors.karla.text,
   },
   avatarTxtJavier: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
     color: GAMES_THEME.colors.javier.text,
   },
   playerName: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#1e293b',
   },
   playerPts: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '800',
   },
   vsBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 8,
     backgroundColor: 'rgba(148, 163, 184, 0.15)',
   },
   vsText: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '900',
     color: '#64748b',
     letterSpacing: 0.5,
@@ -176,26 +177,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(244, 63, 94, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
     alignSelf: 'center',
   },
   statsText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '700',
     color: '#0f172a',
+    textAlign: 'center',
   },
   tipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 4,
+    paddingTop: 2,
   },
   tipText: {
     flex: 1,
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     color: '#475569',
     fontStyle: 'italic',
   },

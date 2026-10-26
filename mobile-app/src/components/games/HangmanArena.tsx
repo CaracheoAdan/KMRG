@@ -5,8 +5,8 @@ import {
   View,
   TouchableOpacity,
   Animated,
+  Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
@@ -24,6 +24,8 @@ interface Props {
   onChallengePartner: () => void;
 }
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
 const QWERTY_ROWS = [
   ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
   ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Ñ'],
@@ -32,8 +34,6 @@ const QWERTY_ROWS = [
 
 export const HangmanArena: React.FC<Props> = ({
   hangman,
-  isFull,
-  primaryColor,
   wrongGuessesCount,
   maxWrong,
   onGuessLetter,
@@ -64,56 +64,37 @@ export const HangmanArena: React.FC<Props> = ({
     onGuessLetter(letter);
   };
 
-  const getCategoryIcon = (cat: string): keyof typeof Ionicons.glyphMap => {
-    switch (cat?.toLowerCase()) {
-      case 'cine':
-        return 'film';
-      case 'animales':
-        return 'paw';
-      case 'geografía':
-      case 'geografia':
-        return 'earth';
-      default:
-        return 'bulb';
-    }
-  };
-
   const isWon = hangman.status === 'won';
   const isLost = hangman.status === 'lost';
 
+  // Letras falladas por el jugador
+  const failedLetters = hangman.guessed.filter(
+    (l) => !hangman.word.toUpperCase().includes(l)
+  );
+
+  // Cálculo dinámico del ancho de casilla para que NUNCA queden letras huérfanas
+  const wordChars = hangman.word.split('');
+  const letterCount = wordChars.filter((c) => c !== ' ').length;
+  const availableWidth = SCREEN_W - 48;
+  const calcSlotWidth = Math.min(
+    38,
+    Math.max(22, Math.floor((availableWidth - letterCount * 6) / letterCount))
+  );
+  const slotHeight = Math.floor(calcSlotWidth * 1.25);
+
   return (
     <View style={styles.container}>
-      {/* Tarjeta de Pista y Cadalso Expresivo */}
-      <View style={styles.stageCard}>
-        {/* Cadalso Expresivo con Figura Animada */}
-        <View style={styles.gallowsBox}>
-          {/* Estructura de Madera */}
-          <View style={styles.gallowsBase} />
-          <View style={styles.gallowsPole} />
-          <View style={styles.gallowsTop} />
-          <View style={styles.gallowsRope} />
+      {/* 1. Tarjeta Principal: Cadalso Ilustrado Grande + Pista y Vidas */}
+      <View style={[styles.stageCard, GAMES_THEME.shadows.card]}>
+        {/* Barra superior de la tarjeta: Vidas y Categoría */}
+        <View style={styles.stageHeader}>
+          {/* Badge de Categoría */}
+          <View style={styles.categoryBadge}>
+            <Ionicons name="bulb" size={13} color="#9333ea" />
+            <Text style={styles.categoryText}>{hangman.category || 'Palabra Oculta'}</Text>
+          </View>
 
-          {/* Muñequito de Pareja Trazo a Trazo */}
-          {wrongGuessesCount >= 1 && (
-            <View style={[styles.hmHead, isLost && styles.hmHeadLost]}>
-              <View style={styles.hmEyesRow}>
-                <View style={styles.hmEye} />
-                <View style={styles.hmEye} />
-              </View>
-              <View style={isLost ? styles.hmMouthLost : styles.hmMouth} />
-            </View>
-          )}
-
-          {wrongGuessesCount >= 2 && <View style={styles.hmBody} />}
-          {wrongGuessesCount >= 3 && <View style={styles.hmArmLeft} />}
-          {wrongGuessesCount >= 4 && <View style={styles.hmArmRight} />}
-          {wrongGuessesCount >= 5 && <View style={styles.hmLegLeft} />}
-          {wrongGuessesCount >= 6 && <View style={styles.hmLegRight} />}
-        </View>
-
-        {/* Tarjeta de Pista Decorativa con Categoría */}
-        <View style={styles.stageInfo}>
-          {/* Fila de Vidas de Corazones */}
+          {/* Vidas de Corazones Palpitantes */}
           <Animated.View style={[styles.livesRow, { transform: [{ scale: heartBeatAnim }] }]}>
             {Array.from({ length: maxWrong }).map((_, i) => {
               const isAlive = i < maxWrong - wrongGuessesCount;
@@ -121,47 +102,91 @@ export const HangmanArena: React.FC<Props> = ({
                 <Ionicons
                   key={i}
                   name={isAlive ? 'heart' : 'heart-dislike'}
-                  size={16}
+                  size={17}
                   color={isAlive ? '#f43f5e' : '#cbd5e1'}
                 />
               );
             })}
           </Animated.View>
+        </View>
 
-          {/* Badge de Categoría */}
-          <View style={styles.categoryBadge}>
-            <Ionicons name={getCategoryIcon(hangman.category)} size={12} color="#9333ea" />
-            <Text style={styles.categoryText}>{hangman.category || 'Palabra Oculta'}</Text>
+        {/* Cadalso Ilustrado Espacioso (150px de alto, bien proporcionado) */}
+        <View style={styles.gallowsContainer}>
+          <View style={styles.gallowsBox}>
+            {/* Horca de Madera */}
+            <View style={styles.gallowsBase} />
+            <View style={styles.gallowsPole} />
+            <View style={styles.gallowsTop} />
+            <View style={styles.gallowsBrace} />
+            <View style={styles.gallowsRope} />
+
+            {/* Muñequito de Pareja Construido Trazo a Trazo */}
+            {wrongGuessesCount >= 1 && (
+              <View style={[styles.hmHead, isLost && styles.hmHeadLost]}>
+                {/* Lazo / Moño romántico o gorra */}
+                <View style={styles.hmAccessory} />
+                <View style={styles.hmEyesRow}>
+                  <Text style={styles.hmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
+                  <Text style={styles.hmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
+                </View>
+                <View style={isLost ? styles.hmMouthLost : styles.hmMouthSmile} />
+              </View>
+            )}
+
+            {wrongGuessesCount >= 2 && <View style={styles.hmBody} />}
+            {wrongGuessesCount >= 3 && <View style={styles.hmArmLeft} />}
+            {wrongGuessesCount >= 4 && <View style={styles.hmArmRight} />}
+            {wrongGuessesCount >= 5 && <View style={styles.hmLegLeft} />}
+            {wrongGuessesCount >= 6 && <View style={styles.hmLegRight} />}
           </View>
 
-          {/* Pista Romántica o de Trivia */}
-          <Text style={styles.hintText} numberOfLines={2}>
-            “{hangman.hint}”
-          </Text>
+          {/* Pista o Estado de Partida */}
+          <View style={styles.hintWrap}>
+            <Text style={styles.hintQuoteText} numberOfLines={3}>
+              “{hangman.hint}”
+            </Text>
+            {isWon && (
+              <View style={styles.statusPillWon}>
+                <Ionicons name="sparkles" size={12} color="#059669" />
+                <Text style={styles.statusTextWon}>¡Adivinaron la palabra!</Text>
+              </View>
+            )}
+            {isLost && (
+              <View style={styles.statusPillLost}>
+                <Ionicons name="skull" size={12} color="#dc2626" />
+                <Text style={styles.statusTextLost}>¡Oh no! Era: {hangman.word}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
-      {/* Casillas de Letras con Relieve y Revelado */}
-      <View style={styles.wordSlotsWrap}>
-        {hangman.word.split('').map((ch, idx) => {
-          if (ch === ' ') return <View key={idx} style={{ width: 8 }} />;
+      {/* 2. Casillas de Letras: Escaladas para caber SIEMPRE en 1 sola fila balanceada */}
+      <View style={styles.wordSlotsRow}>
+        {wordChars.map((ch, idx) => {
+          if (ch === ' ') {
+            return <View key={idx} style={{ width: 8 }} />;
+          }
           const revealed = hangman.guessed.includes(ch) || hangman.status !== 'playing';
 
           return (
             <View
               key={idx}
               style={[
-                styles.slotBox,
-                revealed && styles.slotBoxRevealed,
-                isWon && styles.slotBoxWon,
-                isLost && !hangman.guessed.includes(ch) && styles.slotBoxMissed,
+                styles.letterSlot,
+                {
+                  width: calcSlotWidth,
+                  height: slotHeight,
+                },
+                revealed && styles.letterSlotRevealed,
+                isLost && !hangman.guessed.includes(ch) && styles.letterSlotMissedWord,
               ]}
             >
               <Text
                 style={[
-                  styles.slotChar,
-                  revealed && { color: '#0f172a' },
-                  isWon && { color: '#16a34a' },
+                  styles.slotLetterText,
+                  { fontSize: Math.floor(calcSlotWidth * 0.6) },
+                  revealed && styles.slotLetterTextRevealed,
                   isLost && !hangman.guessed.includes(ch) && { color: '#ef4444' },
                 ]}
               >
@@ -172,30 +197,50 @@ export const HangmanArena: React.FC<Props> = ({
         })}
       </View>
 
-      {/* Teclado Táctil 3D con Colores de Acierto / Fallo */}
+      {/* 3. Bandeja de Letras Falladas */}
+      <View style={styles.failedLettersBar}>
+        <Text style={styles.failedLettersLabel}>Letras falladas:</Text>
+        {failedLetters.length === 0 ? (
+          <Text style={styles.noFailsText}>Ninguna aún ✨</Text>
+        ) : (
+          <View style={styles.failedLettersChips}>
+            {failedLetters.map((l) => (
+              <View key={l} style={styles.failedChip}>
+                <Text style={styles.failedChipText}>{l}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* 4. Teclado QWERTY 3D Táctil */}
       <View style={styles.keyboardContainer}>
-        {QWERTY_ROWS.map((rowLetters, rIdx) => (
+        {QWERTY_ROWS.map((row, rIdx) => (
           <View key={rIdx} style={styles.keyboardRow}>
-            {rowLetters.map((letter) => {
-              const used = hangman.guessed.includes(letter);
-              const hit = used && hangman.word.toUpperCase().includes(letter);
+            {row.map((letter) => {
+              const isGuessed = hangman.guessed.includes(letter);
+              const isHit = isGuessed && hangman.word.toUpperCase().includes(letter);
+              const isMiss = isGuessed && !hangman.word.toUpperCase().includes(letter);
+              const isDisabled = isGuessed || hangman.status !== 'playing';
 
               return (
                 <TouchableOpacity
                   key={letter}
-                  disabled={used || hangman.status !== 'playing'}
+                  disabled={isDisabled}
                   onPress={() => handleKeyPress(letter)}
-                  activeOpacity={0.75}
                   style={[
-                    styles.key3D,
-                    { width: rIdx === 2 ? 37 : 30 },
-                    used && (hit ? styles.keyHit : styles.keyMiss),
+                    styles.keyButton,
+                    isHit && styles.keyHit,
+                    isMiss && styles.keyMiss,
                   ]}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Letra ${letter}`}
                 >
                   <Text
                     style={[
                       styles.keyText,
-                      used && (hit ? styles.keyTextHit : styles.keyTextMiss),
+                      isHit && styles.keyTextHit,
+                      isMiss && styles.keyTextMiss,
                     ]}
                   >
                     {letter}
@@ -207,35 +252,38 @@ export const HangmanArena: React.FC<Props> = ({
         ))}
       </View>
 
-      {/* Botones de Acción: Otra Palabra & Retar Pareja (+400 PTS) */}
+      {/* 5. Acciones: Retar Pareja (+400 pts) y Otra Palabra */}
       <View style={styles.actionsRow}>
-        <View style={{ flex: 1 }}>
-          <GameButton
-            label="Otra Palabra"
-            icon="shuffle"
-            variant="secondary"
-            onPress={onRandomWord}
-          />
-        </View>
+        <TouchableOpacity
+          onPress={() => {
+            void triggerGameHaptic('medium');
+            onRandomWord();
+          }}
+          style={styles.randomWordBtn}
+          accessibilityLabel="Generar otra palabra aleatoria"
+        >
+          <Ionicons name="shuffle" size={15} color="#475569" />
+          <Text style={styles.randomWordBtnText}>Otra Palabra</Text>
+        </TouchableOpacity>
 
-        <View style={{ flex: 1 }}>
-          <GameButton
-            label="Retar Pareja +400"
-            icon="flame"
-            variant="gold"
-            onPress={onChallengePartner}
-          />
-        </View>
+        <TouchableOpacity
+          onPress={() => {
+            void triggerGameHaptic('medium');
+            onChallengePartner();
+          }}
+          style={styles.challengePartnerBtn}
+          accessibilityLabel="Retar a mi pareja con palabra secreta"
+        >
+          <Ionicons name="sparkles" size={15} color="#ffffff" />
+          <Text style={styles.challengePartnerBtnText}>+400 Retar Pareja</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Footer con Racha y Apuesta de Pareja */}
-      {isFull && (
-        <MatchInfoFooter
-          streakCount={wrongGuessesCount === 0 ? 5 : 2}
-          gameStatsText={`Adivina sin cometer ${maxWrong} errores`}
-          coupleBanter="¡Crea una palabra personalizada con tu propia pista secreta tocando 'Retar Pareja'! 💌"
-        />
-      )}
+      {/* 6. Footer con Racha y Tips */}
+      <MatchInfoFooter
+        gameTip="Adivina la palabra secreta antes de agotar los 6 corazones de amor."
+        streakCount={5}
+      />
     </View>
   );
 };
@@ -243,257 +291,349 @@ export const HangmanArena: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 10,
+    gap: GAMES_THEME.spacing.sm + 2,
     width: '100%',
+    paddingHorizontal: GAMES_THEME.spacing.lg,
   },
   stageCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: GAMES_THEME.radius.xl,
+    padding: GAMES_THEME.spacing.md,
+    borderWidth: 1.5,
+    borderColor: 'rgba(244, 63, 94, 0.18)',
+    gap: 8,
+  },
+  stageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    width: '100%',
-    ...GAMES_THEME.shadows.soft,
+    justifyContent: 'space-between',
+    paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f1f5f9',
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 10,
+    backgroundColor: 'rgba(147, 51, 234, 0.1)',
+  },
+  categoryText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#9333ea',
+  },
+  livesRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  gallowsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingTop: 4,
   },
   gallowsBox: {
-    width: 90,
-    height: 100,
+    width: 110,
+    height: 120,
     position: 'relative',
-    marginRight: 10,
   },
   gallowsBase: {
     position: 'absolute',
     bottom: 4,
     left: 4,
-    width: 60,
-    height: 4,
+    width: 50,
+    height: 6,
     backgroundColor: '#78350f',
-    borderRadius: 2,
+    borderRadius: 3,
   },
   gallowsPole: {
     position: 'absolute',
-    bottom: 4,
-    left: 20,
-    width: 4,
-    height: 85,
+    bottom: 8,
+    left: 18,
+    width: 6,
+    height: 104,
     backgroundColor: '#78350f',
-    borderRadius: 2,
+    borderRadius: 3,
   },
   gallowsTop: {
     position: 'absolute',
-    top: 11,
-    left: 20,
-    width: 48,
-    height: 4,
+    top: 8,
+    left: 18,
+    width: 68,
+    height: 6,
     backgroundColor: '#78350f',
-    borderRadius: 2,
+    borderRadius: 3,
+  },
+  gallowsBrace: {
+    position: 'absolute',
+    top: 14,
+    left: 28,
+    width: 20,
+    height: 4,
+    backgroundColor: '#92400e',
+    transform: [{ rotate: '-45deg' }],
   },
   gallowsRope: {
     position: 'absolute',
-    top: 15,
-    left: 64,
-    width: 2,
-    height: 14,
+    top: 14,
+    left: 78,
+    width: 3,
+    height: 20,
     backgroundColor: '#d97706',
+    borderRadius: 1.5,
   },
   hmHead: {
     position: 'absolute',
-    top: 29,
-    left: 54,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: 32,
+    left: 65,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 2.5,
-    borderColor: '#0f172a',
-    backgroundColor: '#fef08a',
+    borderColor: '#db2777',
+    backgroundColor: '#fdf2f8',
     alignItems: 'center',
     justifyContent: 'center',
+    ...GAMES_THEME.shadows.soft,
   },
   hmHeadLost: {
-    backgroundColor: '#fca5a5',
-    borderColor: '#dc2626',
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  hmAccessory: {
+    position: 'absolute',
+    top: -5,
+    right: 2,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#f43f5e',
   },
   hmEyesRow: {
     flexDirection: 'row',
-    gap: 4,
-    marginTop: -2,
+    gap: 5,
   },
-  hmEye: {
-    width: 2.5,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: '#0f172a',
+  hmEyeEmoji: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#db2777',
+    lineHeight: 10,
   },
-  hmMouth: {
-    width: 6,
+  hmMouthSmile: {
+    width: 8,
     height: 3,
     borderBottomWidth: 1.5,
-    borderBottomColor: '#0f172a',
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
-    marginTop: 2,
+    borderBottomColor: '#db2777',
+    borderRadius: 2,
+    marginTop: 1,
   },
   hmMouthLost: {
-    width: 5,
-    height: 1.5,
-    backgroundColor: '#0f172a',
-    marginTop: 2,
+    width: 8,
+    height: 3,
+    borderTopWidth: 1.5,
+    borderTopColor: '#ef4444',
+    borderRadius: 2,
+    marginTop: 1,
   },
   hmBody: {
     position: 'absolute',
-    top: 51,
-    left: 63.5,
-    width: 3,
-    height: 25,
-    backgroundColor: '#0f172a',
-    borderRadius: 1.5,
+    top: 60,
+    left: 77.5,
+    width: 3.5,
+    height: 30,
+    backgroundColor: '#db2777',
+    borderRadius: 2,
   },
   hmArmLeft: {
     position: 'absolute',
-    top: 56,
-    left: 51,
-    width: 14,
+    top: 66,
+    left: 63,
+    width: 18,
     height: 3,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#db2777',
+    borderRadius: 2,
     transform: [{ rotate: '-30deg' }],
-    borderRadius: 1.5,
   },
   hmArmRight: {
     position: 'absolute',
-    top: 56,
-    left: 65,
-    width: 14,
+    top: 66,
+    left: 77,
+    width: 18,
     height: 3,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#db2777',
+    borderRadius: 2,
     transform: [{ rotate: '30deg' }],
-    borderRadius: 1.5,
   },
   hmLegLeft: {
     position: 'absolute',
-    top: 75,
-    left: 54,
-    width: 13,
+    top: 88,
+    left: 67,
+    width: 16,
     height: 3,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#db2777',
+    borderRadius: 2,
     transform: [{ rotate: '-45deg' }],
-    borderRadius: 1.5,
   },
   hmLegRight: {
     position: 'absolute',
-    top: 75,
-    left: 63,
-    width: 13,
+    top: 88,
+    left: 75,
+    width: 16,
     height: 3,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#db2777',
+    borderRadius: 2,
     transform: [{ rotate: '45deg' }],
-    borderRadius: 1.5,
   },
-  stageInfo: {
+  hintWrap: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
-  livesRow: {
-    flexDirection: 'row',
-    gap: 4,
-    marginBottom: 2,
+  hintQuoteText: {
+    fontSize: 12.5,
+    fontStyle: 'italic',
+    color: '#334155',
+    lineHeight: 17,
   },
-  categoryBadge: {
+  statusPillWon: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f3e8ff',
+    backgroundColor: '#d1fae5',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 10,
+    borderRadius: 8,
     alignSelf: 'flex-start',
   },
-  categoryText: {
-    fontSize: 10,
+  statusTextWon: {
+    fontSize: 11,
     fontWeight: '800',
-    color: '#9333ea',
-    textTransform: 'uppercase',
+    color: '#059669',
   },
-  hintText: {
-    fontSize: 12,
-    color: '#334155',
-    fontStyle: 'italic',
-    lineHeight: 16,
-  },
-  wordSlotsWrap: {
+  statusPillLost: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 6,
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
-  slotBox: {
-    width: 30,
-    height: 38,
+  statusTextLost: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#dc2626',
+  },
+  wordSlotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    width: '100%',
+    paddingVertical: 4,
+  },
+  letterSlot: {
+    backgroundColor: '#ffffff',
     borderRadius: 10,
-    backgroundColor: '#f8fafc',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#cbd5e1',
     alignItems: 'center',
     justifyContent: 'center',
     ...GAMES_THEME.shadows.soft,
   },
-  slotBoxRevealed: {
-    backgroundColor: '#ffffff',
-    borderColor: '#38bdf8',
+  letterSlotRevealed: {
+    borderColor: '#9333ea',
+    backgroundColor: '#faf5ff',
   },
-  slotBoxWon: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#22c55e',
-  },
-  slotBoxMissed: {
-    backgroundColor: '#fef2f2',
+  letterSlotMissedWord: {
     borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
   },
-  slotChar: {
-    fontSize: 18,
+  slotLetterText: {
     fontWeight: '900',
+    color: '#1e293b',
+  },
+  slotLetterTextRevealed: {
+    color: '#7c3aed',
+  },
+  failedLettersBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  failedLettersLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  noFailsText: {
+    fontSize: 11,
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  failedLettersChips: {
+    flexDirection: 'row',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  failedChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  failedChipText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#ef4444',
+    textDecorationLine: 'line-through',
   },
   keyboardContainer: {
     width: '100%',
     gap: 5,
+    marginTop: 2,
   },
   keyboardRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 4,
   },
-  key3D: {
-    height: 38,
-    borderRadius: 10,
+  keyButton: {
+    flex: 1,
+    maxWidth: 34,
+    height: 42,
+    borderRadius: 8,
     backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    borderBottomWidth: 3.5,
-    borderBottomColor: '#cbd5e1',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    ...GAMES_THEME.shadows.soft,
   },
   keyHit: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#86efac',
-    borderBottomColor: '#22c55e',
+    backgroundColor: '#10b981',
+    borderColor: '#059669',
   },
   keyMiss: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#f1f5f9',
-    borderBottomColor: '#e2e8f0',
-    opacity: 0.4,
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+    opacity: 0.45,
   },
   keyText: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: '800',
     color: '#1e293b',
   },
   keyTextHit: {
-    color: '#15803d',
-    fontWeight: '900',
+    color: '#ffffff',
   },
   keyTextMiss: {
     color: '#94a3b8',
@@ -501,7 +641,43 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
     width: '100%',
+    marginTop: 2,
+  },
+  randomWordBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    ...GAMES_THEME.shadows.soft,
+  },
+  randomWordBtnText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  challengePartnerBtn: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#9333ea',
+    ...GAMES_THEME.shadows.glowPurple,
+  },
+  challengePartnerBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#ffffff',
   },
 });

@@ -9,6 +9,14 @@ try {
 
 export const GAMES_THEME = {
   colors: {
+    // Fondo de pantalla consistente para todos los juegos (Romántico Suave)
+    screenLightBg: '#fff5f7',
+    screenGradient: ['#fff1f2', '#fdf2f8', '#faf5ff'] as const,
+    cardBg: '#ffffff',
+    subtleBorder: 'rgba(244, 63, 94, 0.18)',
+    textPrimary: '#0f172a',
+    textSecondary: '#64748b',
+
     // Acentos de Pareja
     karla: {
       primary: '#ec4899',
@@ -48,7 +56,7 @@ export const GAMES_THEME = {
     lightSurfaceAlt: '#f8fafc',
     lightBorder: '#e2e8f0',
 
-    // Tableros
+    // Tableros Temáticos (Contenidos como piezas de arte)
     oceanDeep: ['#082f49', '#0c4a6e', '#075985'] as const,
     woodDark: ['#451a03', '#78350f', '#92400e'] as const,
     woodLightSquare: '#fef3c7',
@@ -56,31 +64,48 @@ export const GAMES_THEME = {
     neonCard: ['#1e1b4b', '#312e81', '#1e1b4b'] as const,
   },
 
+  // Escala Estricta de Espaciado (4, 8, 12, 16, 24, 32)
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    xxl: 32,
+  },
+
   gradients: {
     primaryBtn: ['#f43f5e', '#e11d48'] as const,
     secondaryBtn: ['#8b5cf6', '#6d28d9'] as const,
     cyanBtn: ['#06b6d4', '#0284c7'] as const,
     goldBtn: ['#fbbf24', '#f59e0b'] as const,
-    cardGlassLight: ['rgba(255, 255, 255, 0.95)', 'rgba(248, 250, 252, 0.9)'] as const,
+    cardGlassLight: ['rgba(255, 255, 255, 0.98)', 'rgba(253, 242, 248, 0.92)'] as const,
     cardGlassDark: ['rgba(30, 41, 59, 0.95)', 'rgba(15, 23, 42, 0.92)'] as const,
-    tictactoeNeon: ['#18181b', '#27272a'] as const,
-    headerGlow: ['rgba(244, 63, 94, 0.15)', 'rgba(139, 92, 246, 0.05)'] as const,
+    tictactoeNeon: ['#1e1b4b', '#2e1065'] as const,
+    headerGlow: ['rgba(244, 63, 94, 0.12)', 'rgba(139, 92, 246, 0.05)'] as const,
   },
 
   shadows: {
     soft: {
       shadowColor: '#0f172a',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      elevation: 3,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 2,
     },
     card: {
       shadowColor: '#0f172a',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.1,
+      shadowRadius: 16,
+      elevation: 5,
+    },
+    boardDepth: {
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.12,
-      shadowRadius: 20,
-      elevation: 6,
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      elevation: 8,
     },
     glowCoral: {
       shadowColor: '#f43f5e',
@@ -106,10 +131,12 @@ export const GAMES_THEME = {
   },
 
   radius: {
+    xs: 8,
     sm: 12,
-    md: 18,
-    lg: 24,
-    xl: 28,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    xxl: 28,
     pill: 999,
   },
 
@@ -158,24 +185,10 @@ export const triggerGameHaptic = async (
           await ExpoHaptics.notificationAsync(ExpoHaptics.NotificationFeedbackType.Error);
           break;
       }
-      return;
+    } else if (Platform.OS !== 'web') {
+      Vibration.vibrate(type === 'error' ? 80 : 30);
     }
   } catch {
-    // Fallback a vibración del sistema si falla el módulo nativo
-  }
-
-  if (Platform.OS !== 'web') {
-    switch (type) {
-      case 'heavy':
-      case 'error':
-        Vibration.vibrate([0, 40, 40, 60]);
-        break;
-      case 'success':
-        Vibration.vibrate([0, 25, 40, 30]);
-        break;
-      default:
-        Vibration.vibrate(18);
-        break;
-    }
+    // Silently continue if hardware haptics unavailable
   }
 };

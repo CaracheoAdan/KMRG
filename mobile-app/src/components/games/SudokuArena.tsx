@@ -4,8 +4,8 @@ import {
   Text,
   View,
   TouchableOpacity,
-  TextInput,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '../ui/Icon';
 import { UserProfile } from '../../types';
@@ -38,12 +38,12 @@ interface Props {
   isSudokuGameOver: boolean;
 }
 
+const { width: SCREEN_W } = Dimensions.get('window');
 const MAX_SUDOKU_MISTAKES = 3;
 
 export const SudokuArena: React.FC<Props> = ({
   sudoku,
   isFull,
-  sudokuCellPx,
   primaryColor,
   currentProfile,
   isNoteMode,
@@ -55,8 +55,11 @@ export const SudokuArena: React.FC<Props> = ({
   onNewGame,
   isSudokuGameOver,
 }) => {
-  const sudokuInputRef = useRef<any>(null);
   const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // Tablero grande aprovechando el ancho útil con 16px a cada lado
+  const boardSize = Math.min(SCREEN_W - 32, 360);
+  const cellPx = Math.floor((boardSize - 12) / 9);
 
   // Contador de dígitos restantes
   const digitCounts: Record<number, number> = {
@@ -73,11 +76,11 @@ export const SudokuArena: React.FC<Props> = ({
     if (sudoku.mistakes > 0) {
       void triggerGameHaptic('error');
       Animated.sequence([
-        Animated.timing(shakeAnim, { toValue: -6, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 6, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -4, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 4, duration: 60, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -6, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 6, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
       ]).start();
     }
   }, [sudoku.mistakes, shakeAnim]);
@@ -94,25 +97,9 @@ export const SudokuArena: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      {/* Input invisible para teclados de hardware / accesibilidad */}
-      <TextInput
-        ref={sudokuInputRef}
-        value=""
-        keyboardType="number-pad"
-        caretHidden
-        maxLength={1}
-        onChangeText={(txt) => {
-          const digit = parseInt(txt.slice(-1), 10);
-          if (digit >= 1 && digit <= 9) onNumberPress(digit);
-        }}
-        onKeyPress={({ nativeEvent }) => {
-          if (nativeEvent.key === 'Backspace') onNumberPress(0);
-        }}
-        style={styles.hiddenInput}
-      />
-
-      {/* Barra Superior: Selector Segmented de Dificultad + Vidas + Herramientas */}
-      <View style={styles.topControls}>
+      {/* 1. Barra Superior: Selector de Dificultad + Vidas + Herramientas */}
+      <View style={styles.topBar}>
+        {/* Selector Segmented */}
         <View style={styles.segmentedControl}>
           {[
             { key: 'easy', label: 'Fácil' },
@@ -149,7 +136,7 @@ export const SudokuArena: React.FC<Props> = ({
               <Ionicons
                 key={lifeIdx}
                 name={alive ? 'heart' : 'heart-dislike'}
-                size={16}
+                size={18}
                 color={alive ? '#e11d48' : '#cbd5e1'}
               />
             );
@@ -161,14 +148,17 @@ export const SudokuArena: React.FC<Props> = ({
           <TouchableOpacity
             onPress={() => {
               void triggerGameHaptic('selection');
-              setIsNoteMode((n) => !n);
+              setIsNoteMode((prev) => !prev);
             }}
-            style={[styles.toolBtn, isNoteMode && styles.toolBtnActive]}
-            accessibilityLabel="Modo Notas / Lápiz"
+            style={[
+              styles.toolBtn,
+              isNoteMode && styles.toolBtnActive,
+            ]}
+            accessibilityLabel="Activar notas"
           >
             <Ionicons
               name="pencil"
-              size={14}
+              size={16}
               color={isNoteMode ? '#ffffff' : '#475569'}
             />
           </TouchableOpacity>
@@ -179,9 +169,9 @@ export const SudokuArena: React.FC<Props> = ({
               onNumberPress(0);
             }}
             style={styles.toolBtn}
-            accessibilityLabel="Borrar número"
+            accessibilityLabel="Borrar celda"
           >
-            <Ionicons name="backspace-outline" size={15} color="#475569" />
+            <Ionicons name="trash-outline" size={16} color="#475569" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -189,20 +179,25 @@ export const SudokuArena: React.FC<Props> = ({
               void triggerGameHaptic('medium');
               onHint();
             }}
-            style={[styles.toolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}
-            accessibilityLabel="Pista mágica"
+            style={[styles.toolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}
+            accessibilityLabel="Obtener pista mágica"
           >
-            <Ionicons name="bulb" size={15} color="#d97706" />
+            <Ionicons name="bulb" size={16} color="#d97706" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Cuadrícula Nítida 9x9 con Separadores de Caja 3x3 */}
+      {/* 2. Cuadrícula 9x9 con Marco de Porcelana Fina */}
       <Animated.View
         style={[
-          styles.gridOuter,
+          styles.gridContainer,
+          {
+            width: boardSize,
+            height: boardSize,
+            transform: [{ translateX: shakeAnim }],
+          },
           isSudokuGameOver && { opacity: 0.45 },
-          { transform: [{ translateX: shakeAnim }] },
+          GAMES_THEME.shadows.boardDepth,
         ]}
       >
         {sudoku.board.map((row, r) => (
@@ -220,9 +215,10 @@ export const SudokuArena: React.FC<Props> = ({
                     Math.floor(selC / 3) === Math.floor(c / 3)));
 
               const selectedVal =
-                selR !== undefined && selC !== undefined ? sudoku.board[selR][selC] : 0;
+                selR !== undefined && selC !== undefined
+                  ? sudoku.board[selR][selC]
+                  : 0;
               const isSameNumber = val !== 0 && val === selectedVal;
-
               const isFixed = sudoku.fixed[r][c];
               const isWrong = val !== 0 && val !== sudoku.solution[r][c];
               const cellNotes = sudoku.notes[`${r}-${c}`] || [];
@@ -237,8 +233,8 @@ export const SudokuArena: React.FC<Props> = ({
                   style={[
                     styles.cell,
                     {
-                      width: sudokuCellPx,
-                      height: sudokuCellPx,
+                      width: cellPx,
+                      height: cellPx,
                       borderRightWidth: rightThick ? 2.5 : 0.5,
                       borderBottomWidth: bottomThick ? 2.5 : 0.5,
                       borderRightColor: rightThick ? '#0284c7' : '#e2e8f0',
@@ -259,7 +255,7 @@ export const SudokuArena: React.FC<Props> = ({
                     <Text
                       style={[
                         styles.valText,
-                        { fontSize: isFull ? 19 : 14 },
+                        { fontSize: cellPx * 0.54 },
                         isFixed
                           ? styles.fixedDigit
                           : currentProfile === 'Karla'
@@ -282,7 +278,23 @@ export const SudokuArena: React.FC<Props> = ({
         ))}
       </Animated.View>
 
-      {/* Teclado Numérico Táctil con Contador Restante */}
+      {/* 3. Leyenda Pequeña Explicativa de Colores */}
+      <View style={styles.colorLegendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#1e293b' }]} />
+          <Text style={styles.legendText}>Original</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#9333ea' }]} />
+          <Text style={[styles.legendText, { color: '#9333ea' }]}>Karlita</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#0284c7' }]} />
+          <Text style={[styles.legendText, { color: '#0284c7' }]}>Javier</Text>
+        </View>
+      </View>
+
+      {/* 4. Teclado Numérico 1–9 Fijo (Botones Grandes 46px de alto con espacio y badge) */}
       {isSudokuGameOver ? (
         <TouchableOpacity
           onPress={() => onNewGame(sudoku.difficulty)}
@@ -310,7 +322,7 @@ export const SudokuArena: React.FC<Props> = ({
                     styles.numKey,
                     isDone && styles.numKeyDone,
                   ]}
-                  activeOpacity={0.75}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.numKeyDigit, isDone && styles.numKeyDigitDone]}>
                     {num}
@@ -325,14 +337,11 @@ export const SudokuArena: React.FC<Props> = ({
         </View>
       )}
 
-      {/* Footer con Racha y Tips de Pareja */}
-      {isFull && (
-        <MatchInfoFooter
-          streakCount={sudoku.difficulty === 'hard' ? 5 : 3}
-          gameStatsText={`Sudoku ${sudoku.difficulty.toUpperCase()} • Modo Colaborativo`}
-          coupleBanter="Ambos pueden colocar números juntos en tiempo real para resolver el reto ❤️"
-        />
-      )}
+      {/* 5. Footer con Racha y Tips de Pareja */}
+      <MatchInfoFooter
+        gameTip="El Sudoku es colaborativo: las celdas moradas son de Karla y las azules de Javier."
+        streakCount={4}
+      />
     </View>
   );
 };
@@ -340,32 +349,28 @@ export const SudokuArena: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 10,
+    gap: GAMES_THEME.spacing.sm,
     width: '100%',
+    paddingHorizontal: GAMES_THEME.spacing.lg,
   },
-  hiddenInput: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
-  topControls: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   segmentedControl: {
     flexDirection: 'row',
     backgroundColor: '#f1f5f9',
-    borderRadius: 14,
+    borderRadius: GAMES_THEME.radius.sm,
     padding: 3,
+    gap: 2,
   },
   segmentBtn: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   segmentBtnActive: {
     backgroundColor: '#ffffff',
@@ -377,43 +382,44 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   segmentBtnTextActive: {
-    color: '#0f172a',
-    fontWeight: '800',
+    color: '#0284c7',
   },
   livesWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#ffe4e6',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: GAMES_THEME.radius.pill,
+    backgroundColor: 'rgba(244, 63, 94, 0.08)',
   },
   toolsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   toolBtn: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: 10,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    ...GAMES_THEME.shadows.soft,
   },
   toolBtnActive: {
-    backgroundColor: GAMES_THEME.colors.purple,
-    borderColor: GAMES_THEME.colors.purple,
+    backgroundColor: '#0284c7',
+    borderColor: '#0284c7',
   },
-  gridOuter: {
-    borderRadius: 18,
+  gridContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: GAMES_THEME.radius.md,
     borderWidth: 2.5,
     borderColor: '#0284c7',
     overflow: 'hidden',
-    backgroundColor: '#ffffff',
-    ...GAMES_THEME.shadows.card,
+    alignSelf: 'center',
   },
   gridRow: {
     flexDirection: 'row',
@@ -425,20 +431,21 @@ const styles = StyleSheet.create({
   cellSelectedBorder: {
     borderWidth: 2,
     borderColor: '#0284c7',
-    zIndex: 2,
   },
   valText: {
     fontWeight: '800',
   },
   fixedDigit: {
-    color: '#0f172a',
-    fontWeight: '900',
+    color: '#1e293b', // Negro / gris oscuro semibold original
+    fontWeight: '800',
   },
   karlaDigit: {
-    color: GAMES_THEME.colors.karla.text,
+    color: '#9333ea', // Morado para Karla
+    fontWeight: '900',
   },
   javierDigit: {
-    color: GAMES_THEME.colors.javier.text,
+    color: '#0284c7', // Azul para Javier
+    fontWeight: '900',
   },
   wrongDigit: {
     color: '#ef4444',
@@ -450,9 +457,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 9,
   },
+  colorLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 2,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
   numpadContainer: {
     width: '100%',
-    marginTop: 4,
+    marginTop: 2,
   },
   numpadRow: {
     flexDirection: 'row',
@@ -461,9 +490,9 @@ const styles = StyleSheet.create({
   },
   numKey: {
     flex: 1,
+    height: 48, // Mínimo 44px garantizado
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -476,7 +505,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   numKeyDigit: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
     color: '#0f172a',
   },
@@ -484,7 +513,7 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   remainingCountText: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: '800',
     color: '#0284c7',
     marginTop: 1,
@@ -495,7 +524,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: '#e11d48',
-    paddingVertical: 12,
+    height: 48,
     paddingHorizontal: 16,
     borderRadius: 16,
     width: '100%',
