@@ -2211,7 +2211,7 @@ export const GamesScreen: React.FC = () => {
           {/* Arena del Juego Montada con Scroll Adaptable que Centra Verticalmente */}
           <ScrollView
             style={{ flex: 1 }}
-            scrollEnabled={!isDraggingShip}
+            scrollEnabled={activeGame !== 'battleship' && !isDraggingShip}
             contentContainerStyle={styles.gameActiveScrollContent}
             showsVerticalScrollIndicator={false}
           >

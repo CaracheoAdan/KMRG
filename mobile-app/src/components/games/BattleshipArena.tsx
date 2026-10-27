@@ -706,22 +706,6 @@ export const BattleshipArena: React.FC<Props> = ({
     return allCells.size === 17;
   }, [myFleet]);
 
-  // Ref con estado actual para PanResponders
-  const stateRef = useRef({
-    myFleet,
-    selectedSetupShipId,
-    cellSize,
-    coordsHeaderPx,
-  });
-  useEffect(() => {
-    stateRef.current = {
-      myFleet,
-      selectedSetupShipId,
-      cellSize,
-      coordsHeaderPx,
-    };
-  });
-
   // ============================================================================
   // ROTACIÓN INTELIGENTE (Proa, Inward-push, Búsqueda radio 2, Shake y Banner)
   // ============================================================================
@@ -729,6 +713,10 @@ export const BattleshipArena: React.FC<Props> = ({
     (shipId: string) => {
       const ship = myFleet.find((s) => s.id === shipId);
       if (!ship) return;
+
+      if (amIReady) {
+        handleConfirmReady();
+      }
 
       const isHoriz =
         (ship.orientation ||
@@ -821,6 +809,10 @@ export const BattleshipArena: React.FC<Props> = ({
       const ship = myFleet.find((s) => s.id === shipId);
       if (!ship) return;
 
+      if (amIReady) {
+        handleConfirmReady();
+      }
+
       const isHoriz =
         (ship.orientation ||
           (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V')) === 'H';
@@ -896,6 +888,9 @@ export const BattleshipArena: React.FC<Props> = ({
   // REVOLVER ALEATORIAMENTE (Sin desbordes ni choques)
   // ============================================================================
   const handleRandomizeFleet = () => {
+    if (amIReady) {
+      handleConfirmReady();
+    }
     const randomized = createRandomBattleshipFleet();
     setLocalSetupFleet(randomized);
     void triggerGameHaptic('medium');
@@ -915,143 +910,249 @@ export const BattleshipArena: React.FC<Props> = ({
     onFire(idx);
   };
 
+  // Ref con estado actual para PanResponders y handlers
+  const stateRef = useRef({
+    myFleet,
+    selectedSetupShipId,
+    draggedShipId,
+    cellSize,
+    coordsHeaderPx,
+    amIReady,
+    handleSmartRotate,
+    handleConfirmReady,
+    onDragStateChange,
+    showBanner,
+    triggerShake,
+  });
+  useEffect(() => {
+    stateRef.current = {
+      myFleet,
+      selectedSetupShipId,
+      draggedShipId,
+      cellSize,
+      coordsHeaderPx,
+      amIReady,
+      handleSmartRotate,
+      handleConfirmReady,
+      onDragStateChange,
+      showBanner,
+      triggerShake,
+    };
+  });
+
   // Ref para reducir re-renders durante el arrastre (throttling de celda objetivo)
   const lastGhostKeyRef = useRef<string>('');
 
   // ============================================================================
-  // PANRESPONDERS ESTABLES PARA ARRASTRE DE BARCOS
+  // PANRESPONDERS ESTABLES PARA ARRASTRE Y ROTACIÓN DE BARCOS
+  // Se mantienen idénticos entre renders para que React Native nunca aborte el gesto
   // ============================================================================
-  const createShipPanResponder = useCallback((shipId: string) => {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => !amIReady,
-      onStartShouldSetPanResponderCapture: () => !amIReady,
-      onMoveShouldSetPanResponder: (_, gesture) =>
-        !amIReady && (Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3),
-      onMoveShouldSetPanResponderCapture: (_, gesture) =>
-        !amIReady && (Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3),
+  const panRespondersRef = useRef<Record<string, ReturnType<typeof PanResponder.create>>>({});
 
-      onPanResponderGrant: () => {
-        const { myFleet: currentFleet } = stateRef.current;
-        const currentShip = currentFleet.find((s) => s.id === shipId);
-        if (!currentShip) return;
+  const getShipPanResponder = useCallback(
+    (shipId: string) => {
+      if (!panRespondersRef.current[shipId]) {
+        panRespondersRef.current[shipId] = PanResponder.create({
+          onStartShouldSetPanResponder: () => true,
+          onStartShouldSetPanResponderCapture: () => false,
+          onMoveShouldSetPanResponder: (_, gesture) =>
+            Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+          onMoveShouldSetPanResponderCapture: (_, gesture) =>
+            Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
 
-        setDraggedShipId(currentShip.id);
-        setSelectedSetupShipId(currentShip.id);
-        lastGhostKeyRef.current = '';
-        onDragStateChange?.(true);
-        void triggerGameHaptic('selection');
-        dragPan.setValue({ x: 0, y: 0 });
-      },
+          onPanResponderGrant: () => {
+            const {
+              myFleet: currentFleet,
+              amIReady: ready,
+              handleConfirmReady: unlockFleet,
+              onDragStateChange: notifyDrag,
+            } = stateRef.current;
 
-      onPanResponderMove: (_, gesture) => {
-        dragPan.setValue({ x: gesture.dx, y: gesture.dy });
+            if (ready) {
+              unlockFleet();
+            }
 
-        const { myFleet: currentFleet, cellSize: cSize } = stateRef.current;
-        const currentShip = currentFleet.find((s) => s.id === shipId);
-        if (!currentShip) return;
+            const currentShip = currentFleet.find((s) => s.id === shipId);
+            if (!currentShip) return;
 
-        const isHoriz =
-          (currentShip.orientation ||
-            (currentShip.cells.length > 1 &&
-            currentShip.cells[1] - currentShip.cells[0] === 1
-              ? 'H'
-              : 'V')) === 'H';
-
-        const minR = Math.min(...currentShip.cells.map((c) => Math.floor(c / 10)));
-        const minC = Math.min(...currentShip.cells.map((c) => c % 10));
-
-        // Calcular celda destino según el desplazamiento acumulado
-        const dR = Math.round(gesture.dy / cSize);
-        const dC = Math.round(gesture.dx / cSize);
-
-        const targetR = minR + dR;
-        const targetC = minC + dC;
-
-        const maxR = isHoriz ? 9 : 10 - currentShip.size;
-        const maxC = isHoriz ? 10 - currentShip.size : 9;
-
-        const inBounds = targetR >= 0 && targetR <= maxR && targetC >= 0 && targetC <= maxC;
-
-        const targetCells: number[] = [];
-        for (let i = 0; i < currentShip.size; i++) {
-          const nr = isHoriz ? targetR : targetR + i;
-          const nc = isHoriz ? targetC + i : targetC;
-          targetCells.push(nr * 10 + nc);
-        }
-
-        const otherShips = currentFleet.filter((s) => s.id !== currentShip.id);
-        const hasCollision = otherShips.some((s) =>
-          s.cells.some((c) => targetCells.includes(c))
-        );
-
-        const isValidPlacement = inBounds && !hasCollision;
-        const stateKey = `${currentShip.id}_${targetR}_${targetC}_${isValidPlacement}`;
-
-        // Solo actualizar el estado de ghost si cambió de celda o validez (previene re-renders a 60fps)
-        if (stateKey !== lastGhostKeyRef.current) {
-          lastGhostKeyRef.current = stateKey;
-          setGhostPlacement({
-            shipId: currentShip.id,
-            orientation: isHoriz ? 'H' : 'V',
-            cells: targetCells,
-            isValid: isValidPlacement,
-          });
-        }
-      },
-
-      onPanResponderRelease: (_, gesture) => {
-        onDragStateChange?.(false);
-        const { myFleet: currentFleet } = stateRef.current;
-        const currentShip = currentFleet.find((s) => s.id === shipId);
-        if (!currentShip) return;
-
-        const wasTap = Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6;
-
-        if (wasTap) {
-          // Tap SOLO selecciona el barco de forma segura
-          setSelectedSetupShipId(currentShip.id);
-          void triggerGameHaptic('selection');
-          dragPan.setValue({ x: 0, y: 0 });
-          setGhostPlacement(null);
-          setDraggedShipId(null);
-          return;
-        }
-
-        // Arrastre terminado: validar si soltó en celda válida
-        setGhostPlacement((latestGhost) => {
-          if (latestGhost && latestGhost.isValid && latestGhost.shipId === currentShip.id) {
-            // Ajustar barco a la nueva posición con snap
-            const updated = currentFleet.map((s) =>
-              s.id === currentShip.id ? { ...s, cells: latestGhost.cells } : s
-            );
-            setLocalSetupFleet(updated);
-            void triggerGameHaptic('selection');
+            setDraggedShipId(shipId);
+            setSelectedSetupShipId(shipId);
+            lastGhostKeyRef.current = '';
             dragPan.setValue({ x: 0, y: 0 });
-          } else {
-            // Posición inválida o sobre otro barco: animación de rebote y retorno
-            Animated.spring(dragPan, {
-              toValue: { x: 0, y: 0 },
-              friction: 5.5,
-              tension: 45,
-              useNativeDriver: false,
-            }).start();
-            void triggerGameHaptic('error');
-            triggerShake();
-            showBanner('No cabe aquí', true);
-          }
-          setDraggedShipId(null);
-          return null;
-        });
-      },
+            notifyDrag?.(true);
+            void triggerGameHaptic('selection');
+          },
 
-      onPanResponderTerminate: () => {
-        onDragStateChange?.(false);
-        setDraggedShipId(null);
-        setGhostPlacement(null);
-        dragPan.setValue({ x: 0, y: 0 });
-      },
-    });
-  }, [onDragStateChange, dragPan, amIReady]);
+          onPanResponderMove: (_, gesture) => {
+            dragPan.setValue({ x: gesture.dx, y: gesture.dy });
+
+            const { myFleet: currentFleet, cellSize: cSize } = stateRef.current;
+            const currentShip = currentFleet.find((s) => s.id === shipId);
+            if (!currentShip) return;
+
+            const isHoriz =
+              (currentShip.orientation ||
+                (currentShip.cells.length > 1 &&
+                currentShip.cells[1] - currentShip.cells[0] === 1
+                  ? 'H'
+                  : 'V')) === 'H';
+
+            const minR = Math.min(...currentShip.cells.map((c) => Math.floor(c / 10)));
+            const minC = Math.min(...currentShip.cells.map((c) => c % 10));
+
+            const dR = Math.round(gesture.dy / cSize);
+            const dC = Math.round(gesture.dx / cSize);
+
+            const targetR = minR + dR;
+            const targetC = minC + dC;
+
+            const maxR = isHoriz ? 9 : 10 - currentShip.size;
+            const maxC = isHoriz ? 10 - currentShip.size : 9;
+
+            const inBounds = targetR >= 0 && targetR <= maxR && targetC >= 0 && targetC <= maxC;
+
+            const targetCells: number[] = [];
+            for (let i = 0; i < currentShip.size; i++) {
+              const nr = isHoriz ? targetR : targetR + i;
+              const nc = isHoriz ? targetC + i : targetC;
+              targetCells.push(nr * 10 + nc);
+            }
+
+            const otherShips = currentFleet.filter((s) => s.id !== currentShip.id);
+            const hasCollision = otherShips.some((s) =>
+              s.cells.some((c) => targetCells.includes(c))
+            );
+
+            const isValidPlacement = inBounds && !hasCollision;
+            const stateKey = `${currentShip.id}_${targetR}_${targetC}_${isValidPlacement}`;
+
+            if (stateKey !== lastGhostKeyRef.current) {
+              lastGhostKeyRef.current = stateKey;
+              setGhostPlacement({
+                shipId: currentShip.id,
+                orientation: isHoriz ? 'H' : 'V',
+                cells: targetCells,
+                isValid: isValidPlacement,
+              });
+            }
+          },
+
+          onPanResponderRelease: (_, gesture) => {
+            const {
+              myFleet: currentFleet,
+              cellSize: cSize,
+              selectedSetupShipId: currentSelected,
+              handleSmartRotate: rotateShip,
+              onDragStateChange: notifyDrag,
+              showBanner: banner,
+              triggerShake: shake,
+            } = stateRef.current;
+
+            notifyDrag?.(false);
+
+            const currentShip = currentFleet.find((s) => s.id === shipId);
+            if (!currentShip) {
+              setDraggedShipId(null);
+              setGhostPlacement(null);
+              dragPan.setValue({ x: 0, y: 0 });
+              return;
+            }
+
+            const wasTap = Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6;
+
+            if (wasTap) {
+              dragPan.setValue({ x: 0, y: 0 });
+              setGhostPlacement(null);
+              setDraggedShipId(null);
+
+              const now = Date.now();
+              const lastTap = lastTapRef.current;
+              const isDoubleTap = lastTap.shipId === shipId && now - lastTap.time < 350;
+              lastTapRef.current = { time: now, shipId };
+
+              if (currentSelected === shipId || isDoubleTap) {
+                rotateShip(shipId);
+              } else {
+                setSelectedSetupShipId(shipId);
+                void triggerGameHaptic('selection');
+              }
+              return;
+            }
+
+            // Arrastre terminado:
+            const isHoriz =
+              (currentShip.orientation ||
+                (currentShip.cells.length > 1 &&
+                currentShip.cells[1] - currentShip.cells[0] === 1
+                  ? 'H'
+                  : 'V')) === 'H';
+
+            const minR = Math.min(...currentShip.cells.map((c) => Math.floor(c / 10)));
+            const minC = Math.min(...currentShip.cells.map((c) => c % 10));
+
+            const dR = Math.round(gesture.dy / cSize);
+            const dC = Math.round(gesture.dx / cSize);
+
+            const targetR = minR + dR;
+            const targetC = minC + dC;
+
+            const maxR = isHoriz ? 9 : 10 - currentShip.size;
+            const maxC = isHoriz ? 10 - currentShip.size : 9;
+
+            const inBounds = targetR >= 0 && targetR <= maxR && targetC >= 0 && targetC <= maxC;
+
+            const targetCells: number[] = [];
+            for (let i = 0; i < currentShip.size; i++) {
+              const nr = isHoriz ? targetR : targetR + i;
+              const nc = isHoriz ? targetC + i : targetC;
+              targetCells.push(nr * 10 + nc);
+            }
+
+            const otherShips = currentFleet.filter((s) => s.id !== currentShip.id);
+            const hasCollision = otherShips.some((s) =>
+              s.cells.some((c) => targetCells.includes(c))
+            );
+
+            const isValidPlacement = inBounds && !hasCollision;
+
+            if (isValidPlacement) {
+              const updated = currentFleet.map((s) =>
+                s.id === currentShip.id ? { ...s, cells: targetCells } : s
+              );
+              setLocalSetupFleet(updated);
+              dragPan.setValue({ x: 0, y: 0 });
+              setGhostPlacement(null);
+              setDraggedShipId(null);
+              void triggerGameHaptic('selection');
+            } else {
+              void triggerGameHaptic('error');
+              shake();
+              banner('No cabe aquí', true);
+              Animated.spring(dragPan, {
+                toValue: { x: 0, y: 0 },
+                friction: 6,
+                tension: 50,
+                useNativeDriver: false,
+              }).start(() => {
+                setDraggedShipId(null);
+                setGhostPlacement(null);
+              });
+            }
+          },
+
+          onPanResponderTerminate: () => {
+            const { onDragStateChange: notifyDrag } = stateRef.current;
+            notifyDrag?.(false);
+            dragPan.setValue({ x: 0, y: 0 });
+            setDraggedShipId(null);
+            setGhostPlacement(null);
+          },
+        });
+      }
+      return panRespondersRef.current[shipId];
+    },
+    [dragPan]
+  );
 
   return (
     <View style={styles.container}>
@@ -1289,8 +1390,8 @@ export const BattleshipArena: React.FC<Props> = ({
                 );
               })()}
 
-              {/* Capa de Barcos Interactivos con PanResponder y Área táctil >= 44px */}
-              <View style={StyleSheet.absoluteFill} pointerEvents={amIReady ? 'none' : 'box-none'}>
+              {/* Capa de Barcos Interactivos con PanResponder */}
+              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
                 {myFleet.map((ship) => {
                   const isHoriz =
                     (ship.orientation ||
@@ -1309,16 +1410,10 @@ export const BattleshipArena: React.FC<Props> = ({
                   const isSelected = ship.id === selectedSetupShipId;
                   const isBeingDragged = ship.id === draggedShipId;
 
-                  // Garantizar área táctil >= 44px en ambos sentidos
-                  const touchPadH = Math.max(44, visualH);
-                  const touchPadW = Math.max(44, visualW);
-                  const touchTopOffset = (touchPadH - visualH) / 2;
-                  const touchLeftOffset = (touchPadW - visualW) / 2;
-
-                  const panResponder = createShipPanResponder(ship.id);
+                  const panResponder = getShipPanResponder(ship.id);
 
                   // Atenuar barcos no seleccionados cuando hay uno activo
-                  const shipOpacity = isBeingDragged ? 0.9 : selectedSetupShipId ? (isSelected ? 1 : 0.65) : 1;
+                  const shipOpacity = isBeingDragged ? 0.92 : selectedSetupShipId ? (isSelected ? 1 : 0.65) : 1;
 
                   return (
                     <Animated.View
@@ -1327,13 +1422,14 @@ export const BattleshipArena: React.FC<Props> = ({
                       style={[
                         styles.touchableShipBox,
                         {
-                          left: visualLeft - touchLeftOffset,
-                          top: visualTop - touchTopOffset,
-                          width: touchPadW,
-                          height: touchPadH,
+                          left: visualLeft,
+                          top: visualTop,
+                          width: visualW,
+                          height: visualH,
                           zIndex: isBeingDragged ? 50 : isSelected ? 20 : 10,
                           opacity: shipOpacity,
                         },
+                        isSelected && styles.shipSpriteSelectedGlow,
                         isBeingDragged && {
                           transform: [
                             { translateX: dragPan.x },
@@ -1354,27 +1450,13 @@ export const BattleshipArena: React.FC<Props> = ({
                           },
                       ]}
                     >
-                      {/* El barco visual se ubica exactamente centrado en el área táctil */}
-                      <View
-                        style={[
-                          styles.shipSpriteWrapper,
-                          {
-                            left: touchLeftOffset,
-                            top: touchTopOffset,
-                            width: visualW,
-                            height: visualH,
-                          },
-                          isSelected && styles.shipSpriteSelectedGlow,
-                        ]}
-                      >
-                        <NavalShipSprite
-                          shipId={ship.id}
-                          size={ship.size}
-                          orientation={isHoriz ? 'H' : 'V'}
-                          cellSize={cellSize}
-                          isSelected={isSelected}
-                        />
-                      </View>
+                      <NavalShipSprite
+                        shipId={ship.id}
+                        size={ship.size}
+                        orientation={isHoriz ? 'H' : 'V'}
+                        cellSize={cellSize}
+                        isSelected={isSelected}
+                      />
                     </Animated.View>
                   );
                 })}
@@ -1399,9 +1481,11 @@ export const BattleshipArena: React.FC<Props> = ({
                 return (
                   <TouchableOpacity
                     key={s.id}
-                    disabled={amIReady}
                     onPress={() => {
                       void triggerGameHaptic('selection');
+                      if (amIReady) {
+                        handleConfirmReady();
+                      }
                       if (isSel) {
                         handleSmartRotate(s.id);
                       } else {
@@ -1447,7 +1531,7 @@ export const BattleshipArena: React.FC<Props> = ({
             </ScrollView>
           </View>
 
-          {/* Dock Inferior: Confirmar Flota (Botón Primario Unificado) */}
+          {/* Dock Inferior: Confirmar Flota o Modificar Flota */}
           <View style={[styles.setupDockContainer, { width: exactFrameWidth }]}>
             {!amIReady ? (
               <GameButton
@@ -1458,13 +1542,21 @@ export const BattleshipArena: React.FC<Props> = ({
                 onPress={handleConfirmReady}
               />
             ) : (
-              <View style={styles.waitingPartnerBadge}>
-                <Ionicons name="time-outline" size={16} color="#0284c7" />
-                <Text style={styles.waitingPartnerText}>
-                  {isPartnerReady
-                    ? '¡Ambos listos! Iniciando radar naval...'
-                    : 'Esperando a que tu pareja confirme su flota...'}
-                </Text>
+              <View style={{ width: '100%', gap: 8 }}>
+                <View style={styles.waitingPartnerBadge}>
+                  <Ionicons name="time-outline" size={16} color="#0284c7" />
+                  <Text style={styles.waitingPartnerText}>
+                    {isPartnerReady
+                      ? '¡Ambos listos! Iniciando radar naval...'
+                      : 'Esperando a que tu pareja confirme su flota...'}
+                  </Text>
+                </View>
+                <GameButton
+                  label="Modificar Flota"
+                  icon="create-outline"
+                  variant="secondary"
+                  onPress={handleConfirmReady}
+                />
               </View>
             )}
           </View>
