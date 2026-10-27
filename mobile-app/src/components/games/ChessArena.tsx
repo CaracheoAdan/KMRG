@@ -27,7 +27,7 @@ interface Props {
   onReset: () => void;
 }
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 const CHESS_SYMBOLS: Record<string, string> = {
   'w-k': '♚',
@@ -78,7 +78,8 @@ export const ChessArena: React.FC<Props> = ({
   const isWhite = chess.turn === 'w';
 
   // Dimensionamiento simétrico sin recorte en columna 'h' y con margen derecho
-  const maxAvailable = Math.min(SCREEN_W - 32, 360);
+  const maxH = Math.floor(SCREEN_H * 0.44);
+  const maxAvailable = Math.min(SCREEN_W - 24, maxH, 380);
   const coordSize = 16;
   const innerGridAvailable = maxAvailable - (coordSize * 2) - 16;
   const cellSize = Math.floor(innerGridAvailable / 8);
@@ -453,7 +454,8 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 8,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
   },
   checkWarningBadge: {
     flexDirection: 'row',

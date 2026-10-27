@@ -425,7 +425,8 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 10,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
   },
   stageCard: {
     width: '100%',

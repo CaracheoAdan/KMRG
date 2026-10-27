@@ -34,12 +34,15 @@ export const TicTacToeArena: React.FC<Props> = ({
   const isDraw = ticTacToeState.winner === 'Empate';
 
   // Calibración multi-pantalla responsiva (360x640, 390x844 y 412x915)
-  // En 360x640 la altura útil es de ~540px; limitando al 39% de SCREEN_H las 9 celdas siempre son 100% visibles sin scroll
-  const maxBoardH = Math.floor(SCREEN_H * 0.39);
-  const maxBoardW = SCREEN_W - 28;
-  const boardSize = Math.min(maxBoardW, maxBoardH, 340);
-  const cellSize = Math.floor((boardSize - 16) / 3);
-  const exactBoardPx = cellSize * 3 + 16;
+  // Cálculo exacto con descuento de padding y gaps para que nunca se desborde ni se envuelva en 2 columnas
+  const maxBoardH = Math.floor(SCREEN_H * 0.44);
+  const maxBoardW = Math.min(SCREEN_W - 28, 360);
+  const boardSize = Math.min(maxBoardW, maxBoardH);
+  const boardPadding = 10;
+  const cellGap = 8;
+  const innerAvailable = boardSize - (boardPadding * 2) - (cellGap * 2);
+  const cellSize = Math.floor(innerAvailable / 3);
+  const exactBoardPx = (cellSize * 3) + (cellGap * 2) + (boardPadding * 2);
 
   // Animación de pulso para las celdas ganadoras
   const winPulseAnim = useRef(new Animated.Value(1)).current;
@@ -85,22 +88,19 @@ export const TicTacToeArena: React.FC<Props> = ({
   const scoreK = ticTacToeState.scoreKarla || 0;
   const scoreJ = ticTacToeState.scoreJavier || 0;
 
-  // Coordenadas para la línea ganadora animada
+  // Coordenadas milimétricas para la línea ganadora animada
   const getLineCoordinates = () => {
     const line = ticTacToeState.winningLine;
     if (!line || line.length < 3) return null;
 
-    const cellCenters = [
-      { x: cellSize * 0.5 + 8, y: cellSize * 0.5 + 8 },
-      { x: cellSize * 1.5 + 8, y: cellSize * 0.5 + 8 },
-      { x: cellSize * 2.5 + 8, y: cellSize * 0.5 + 8 },
-      { x: cellSize * 0.5 + 8, y: cellSize * 1.5 + 8 },
-      { x: cellSize * 1.5 + 8, y: cellSize * 1.5 + 8 },
-      { x: cellSize * 2.5 + 8, y: cellSize * 1.5 + 8 },
-      { x: cellSize * 0.5 + 8, y: cellSize * 2.5 + 8 },
-      { x: cellSize * 1.5 + 8, y: cellSize * 2.5 + 8 },
-      { x: cellSize * 2.5 + 8, y: cellSize * 2.5 + 8 },
-    ];
+    const cellCenters = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((idx) => {
+      const r = Math.floor(idx / 3);
+      const c = idx % 3;
+      return {
+        x: boardPadding + c * (cellSize + cellGap) + cellSize / 2,
+        y: boardPadding + r * (cellSize + cellGap) + cellSize / 2,
+      };
+    });
 
     const start = cellCenters[line[0]];
     const end = cellCenters[line[2]];
@@ -198,82 +198,91 @@ export const TicTacToeArena: React.FC<Props> = ({
         </View>
       )}
 
-      {/* 3. Tablero Neón Opción A: Vidrio Oscuro + Glow Neón + Línea Ganadora Animada */}
-      <LinearGradient
-        colors={['#1e1b4b', '#2e1065', '#0f172a']}
-        style={[
-          styles.boardWrapper,
-          {
-            width: exactBoardPx,
-            height: exactBoardPx,
-          },
-          GAMES_THEME.shadows.boardDepth,
-        ]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View style={styles.boardGrid}>
-          {ticTacToeState.board.map((cell, idx) => {
-            const isWinningCell = ticTacToeState.winningLine?.includes(idx);
+      {/* 3. Tablero Neón: Vidrio Oscuro + 3 Filas Explícitas (Sin wrap de 2 columnas) */}
+      <View style={styles.boardCenterHolder}>
+        <LinearGradient
+          colors={['#1e1b4b', '#2e1065', '#0f172a']}
+          style={[
+            styles.boardWrapper,
+            {
+              width: exactBoardPx,
+              height: exactBoardPx,
+              padding: boardPadding,
+            },
+            GAMES_THEME.shadows.boardDepth,
+          ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={[styles.boardGrid, { gap: cellGap }]}>
+            {[0, 1, 2].map((r) => (
+              <View key={r} style={[styles.gridRow, { gap: cellGap }]}>
+                {[0, 1, 2].map((c) => {
+                  const idx = r * 3 + c;
+                  const cell = ticTacToeState.board[idx];
+                  const isWinningCell = ticTacToeState.winningLine?.includes(idx);
 
-            return (
-              <TouchableOpacity
-                key={idx}
-                onPress={() => handleCellPress(idx)}
-                activeOpacity={cell || isWinner ? 1 : 0.75}
-                style={[
-                  styles.darkGlassCell,
-                  { width: cellSize, height: cellSize },
-                  isWinningCell && styles.winningGlassCell,
-                ]}
-              >
-                {cell === 'Karla' && (
-                  <Animated.View
-                    style={[
-                      styles.symbolWrap,
-                      isWinningCell && { transform: [{ scale: winPulseAnim }] },
-                    ]}
-                  >
-                    <Text style={[styles.symbolKarla, { fontSize: Math.floor(cellSize * 0.54) }]}>✕</Text>
-                  </Animated.View>
-                )}
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      onPress={() => handleCellPress(idx)}
+                      activeOpacity={cell || isWinner ? 1 : 0.75}
+                      style={[
+                        styles.darkGlassCell,
+                        { width: cellSize, height: cellSize },
+                        isWinningCell && styles.winningGlassCell,
+                      ]}
+                    >
+                      {cell === 'Karla' && (
+                        <Animated.View
+                          style={[
+                            styles.symbolWrap,
+                            isWinningCell && { transform: [{ scale: winPulseAnim }] },
+                          ]}
+                        >
+                          <Text style={[styles.symbolKarla, { fontSize: Math.floor(cellSize * 0.54) }]}>✕</Text>
+                        </Animated.View>
+                      )}
 
-                {cell === 'Javier' && (
-                  <Animated.View
-                    style={[
-                      styles.symbolWrap,
-                      isWinningCell && { transform: [{ scale: winPulseAnim }] },
-                    ]}
-                  >
-                    <Text style={[styles.symbolJavier, { fontSize: Math.floor(cellSize * 0.56) }]}>○</Text>
-                  </Animated.View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                      {cell === 'Javier' && (
+                        <Animated.View
+                          style={[
+                            styles.symbolWrap,
+                            isWinningCell && { transform: [{ scale: winPulseAnim }] },
+                          ]}
+                        >
+                          <Text style={[styles.symbolJavier, { fontSize: Math.floor(cellSize * 0.56) }]}>○</Text>
+                        </Animated.View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
 
-        {/* Línea Ganadora Animada */}
-        {winLineCoords && (
-          <Svg
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          >
-            <Line
-              x1={winLineCoords.x1}
-              y1={winLineCoords.y1}
-              x2={winLineCoords.x2}
-              y2={winLineCoords.y2}
-              stroke="#facc15"
-              strokeWidth={5}
-              strokeLinecap="round"
-            />
-          </Svg>
-        )}
-      </LinearGradient>
+          {/* Línea Ganadora Animada */}
+          {winLineCoords && (
+            <Svg
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            >
+              <Line
+                x1={winLineCoords.x1}
+                y1={winLineCoords.y1}
+                x2={winLineCoords.x2}
+                y2={winLineCoords.y2}
+                stroke="#facc15"
+                strokeWidth={5}
+                strokeLinecap="round"
+              />
+            </Svg>
+          )}
+        </LinearGradient>
+      </View>
 
       {/* 4. Dock Inferior: Botón de Acción Principal Unificado */}
-      <View style={[styles.bottomDock, { width: boardSize }]}>
+      <View style={[styles.bottomDock, { width: exactBoardPx }]}>
         <GameButton
           label={isWinner ? 'Jugar Siguiente Ronda' : 'Reiniciar Ronda'}
           icon={isWinner ? 'play-forward' : 'reload'}
@@ -288,11 +297,12 @@ export const TicTacToeArena: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     width: '100%',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
   },
   unifiedScoreCard: {
     backgroundColor: '#ffffff',
@@ -416,19 +426,28 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '800',
   },
+  boardCenterHolder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
   boardWrapper: {
     borderRadius: 20,
     borderWidth: 2,
     borderColor: 'rgba(216, 180, 254, 0.3)',
-    padding: 8,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   boardGrid: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },

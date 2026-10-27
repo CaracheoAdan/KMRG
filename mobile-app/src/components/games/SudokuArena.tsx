@@ -38,7 +38,7 @@ interface Props {
   isSudokuGameOver: boolean;
 }
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const MAX_SUDOKU_MISTAKES = 3;
 
 export const SudokuArena: React.FC<Props> = ({
@@ -72,7 +72,8 @@ export const SudokuArena: React.FC<Props> = ({
   };
 
   // Cálculo de celda exacto para que las líneas 3x3 lleguen 100% al borde
-  const availableWidth = Math.min(SCREEN_W - 24, 370);
+  const maxAvailableH = Math.floor(SCREEN_H * 0.45);
+  const availableWidth = Math.min(SCREEN_W - 24, maxAvailableH, 380);
   const cellSize = Math.floor((availableWidth - 4) / 9);
   const exactGridSize = cellSize * 9 + 4;
   // Números ~25% más pequeños y semibold
@@ -307,11 +308,11 @@ export const SudokuArena: React.FC<Props> = ({
               void triggerGameHaptic('medium');
               onHint();
             }}
-            style={[styles.dockToolBtn, { backgroundColor: '#fef3c7', borderColor: '#fde047' }]}
+            style={[styles.dockToolBtn, styles.dockToolBtnHint]}
             accessibilityLabel="Obtener pista mágica"
           >
-            <Ionicons name="bulb" size={14} color="#d97706" />
-            <Text style={[styles.dockToolBtnText, { color: '#b45309' }]}>Pista (+50)</Text>
+            <Ionicons name="bulb" size={14} color="#9333ea" />
+            <Text style={[styles.dockToolBtnText, styles.dockToolBtnHintText]}>Pista (+50)</Text>
           </TouchableOpacity>
         </View>
 
@@ -406,7 +407,8 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 8,
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
   },
   topBar: {
     flexDirection: 'row',
@@ -529,6 +531,15 @@ const styles = StyleSheet.create({
   dockToolBtnActive: {
     backgroundColor: '#6366f1',
     borderColor: '#4f46e5',
+  },
+  dockToolBtnHint: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e9d5ff',
+    borderWidth: 1.5,
+  },
+  dockToolBtnHintText: {
+    color: '#6b21a8',
+    fontWeight: '800',
   },
   dockToolBtnText: {
     fontSize: 11,

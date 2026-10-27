@@ -7,6 +7,7 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
@@ -63,18 +64,18 @@ const SHIP_CONFIG: Record<
   carrier: {
     name: 'Portaaviones',
     size: 5,
-    bg: '#f43f5e',
-    darkBg: '#9f1239',
-    lightBg: '#fda4af',
+    bg: '#ef4444',
+    darkBg: '#b91c1c',
+    lightBg: '#fca5a5',
     icon: 'airplane',
     desc: 'Cubierta con pista y cazas',
   },
   battleship: {
     name: 'Acorazado',
     size: 4,
-    bg: '#f59e0b',
-    darkBg: '#92400e',
-    lightBg: '#fde68a',
+    bg: '#f97316',
+    darkBg: '#c2410c',
+    lightBg: '#fed7aa',
     icon: 'shield',
     desc: 'Torretas de artillería pesada',
   },
@@ -82,8 +83,8 @@ const SHIP_CONFIG: Record<
     name: 'Crucero',
     size: 3,
     bg: '#8b5cf6',
-    darkBg: '#5b21b6',
-    lightBg: '#ddd6fe',
+    darkBg: '#6d28d9',
+    lightBg: '#c4b5fd',
     icon: 'boat',
     desc: 'Cañones dobles y chimenea',
   },
@@ -91,8 +92,8 @@ const SHIP_CONFIG: Record<
     name: 'Submarino',
     size: 3,
     bg: '#10b981',
-    darkBg: '#065f46',
-    lightBg: '#a7f3d0',
+    darkBg: '#047857',
+    lightBg: '#6ee7b7',
     icon: 'locate',
     desc: 'Casco hidrodinámico y periscopio',
   },
@@ -100,8 +101,8 @@ const SHIP_CONFIG: Record<
     name: 'Destructor',
     size: 2,
     bg: '#ec4899',
-    darkBg: '#9d174d',
-    lightBg: '#fbcfe8',
+    darkBg: '#be185d',
+    lightBg: '#f472b6',
     icon: 'flame',
     desc: 'Proa afilada y antena radar',
   },
@@ -205,40 +206,14 @@ const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
         />
       )}
 
-      {/* Estela de espuma blanca en la popa */}
+      {/* Espuma suave en popa contenida estrictamente dentro de la silueta (sin salirse a la columna J) */}
       {!isMini && !isGhost && (
-        <G opacity={0.5}>
-          <Path
-            d={`M ${W - 2} ${H * 0.3} Q ${W + 5} ${H * 0.2} ${W + 8} ${H * 0.08}`}
-            stroke="#ffffff"
-            strokeWidth={1.3}
-            fill="none"
-          />
-          <Path
-            d={`M ${W - 2} ${H * 0.7} Q ${W + 5} ${H * 0.8} ${W + 8} ${H * 0.92}`}
-            stroke="#ffffff"
-            strokeWidth={1.3}
-            fill="none"
-          />
-          <Line
-            x1={W - 1}
-            y1={H * 0.42}
-            x2={W + 6}
-            y2={H * 0.42}
-            stroke="#ffffff"
-            strokeWidth={1}
-            strokeDasharray="2,2"
-          />
-          <Line
-            x1={W - 1}
-            y1={H * 0.58}
-            x2={W + 6}
-            y2={H * 0.58}
-            stroke="#ffffff"
-            strokeWidth={1}
-            strokeDasharray="2,2"
-          />
-        </G>
+        <Path
+          d={`M ${W - 4} ${H * 0.35} Q ${W - 1.5} ${H * 0.5} ${W - 4} ${H * 0.65}`}
+          stroke="rgba(255, 255, 255, 0.45)"
+          strokeWidth={1.2}
+          fill="none"
+        />
       )}
 
       {/* Casco principal con degradado temático */}
@@ -948,12 +923,12 @@ export const BattleshipArena: React.FC<Props> = ({
   // ============================================================================
   const createShipPanResponder = useCallback((shipId: string) => {
     return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
+      onStartShouldSetPanResponder: () => !amIReady,
+      onStartShouldSetPanResponderCapture: () => !amIReady,
       onMoveShouldSetPanResponder: (_, gesture) =>
-        Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+        !amIReady && (Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3),
       onMoveShouldSetPanResponderCapture: (_, gesture) =>
-        Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+        !amIReady && (Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3),
 
       onPanResponderGrant: () => {
         const { myFleet: currentFleet } = stateRef.current;
@@ -1076,7 +1051,7 @@ export const BattleshipArena: React.FC<Props> = ({
         dragPan.setValue({ x: 0, y: 0 });
       },
     });
-  }, [onDragStateChange, dragPan]);
+  }, [onDragStateChange, dragPan, amIReady]);
 
   return (
     <View style={styles.container}>
@@ -1250,21 +1225,38 @@ export const BattleshipArena: React.FC<Props> = ({
                             backgroundColor: 'rgba(8, 47, 73, 0.88)',
                           },
                         ]}
-                      >
-                        {/* Onda sutil de agua para darle vida al tablero oceánico */}
-                        <Svg width={cellSize} height={cellSize} pointerEvents="none">
-                          <Path
-                            d={`M 2 ${cellSize * 0.55} Q ${cellSize * 0.5} ${cellSize * 0.38} ${cellSize - 2} ${cellSize * 0.55}`}
-                            stroke="rgba(56, 189, 248, 0.12)"
-                            strokeWidth={1}
-                            fill="none"
-                          />
-                        </Svg>
-                      </TouchableOpacity>
+                      />
                     );
                   })}
                 </View>
               ))}
+
+              {/* Textura de ondas continua y sutil en TODO el tablero */}
+              <Svg
+                style={[StyleSheet.absoluteFill, { left: coordsHeaderPx }]}
+                pointerEvents="none"
+                width={gridWidth}
+                height={gridWidth}
+              >
+                <Path
+                  d={`M 0 ${gridWidth * 0.25} Q ${gridWidth * 0.25} ${gridWidth * 0.22} ${gridWidth * 0.5} ${gridWidth * 0.25} T ${gridWidth} ${gridWidth * 0.25}`}
+                  stroke="rgba(56, 189, 248, 0.12)"
+                  strokeWidth={1.2}
+                  fill="none"
+                />
+                <Path
+                  d={`M 0 ${gridWidth * 0.55} Q ${gridWidth * 0.3} ${gridWidth * 0.58} ${gridWidth * 0.6} ${gridWidth * 0.54} T ${gridWidth} ${gridWidth * 0.55}`}
+                  stroke="rgba(56, 189, 248, 0.10)"
+                  strokeWidth={1.2}
+                  fill="none"
+                />
+                <Path
+                  d={`M 0 ${gridWidth * 0.85} Q ${gridWidth * 0.2} ${gridWidth * 0.82} ${gridWidth * 0.5} ${gridWidth * 0.86} T ${gridWidth} ${gridWidth * 0.85}`}
+                  stroke="rgba(56, 189, 248, 0.11)"
+                  strokeWidth={1.2}
+                  fill="none"
+                />
+              </Svg>
 
               {/* Sombra Fantasma (Ghost Preview) mientras se arrastra */}
               {ghostPlacement && ghostPlacement.cells.length > 0 && (() => {
@@ -1298,7 +1290,7 @@ export const BattleshipArena: React.FC<Props> = ({
               })()}
 
               {/* Capa de Barcos Interactivos con PanResponder y Área táctil >= 44px */}
-              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+              <View style={StyleSheet.absoluteFill} pointerEvents={amIReady ? 'none' : 'box-none'}>
                 {myFleet.map((ship) => {
                   const isHoriz =
                     (ship.orientation ||
@@ -1390,12 +1382,16 @@ export const BattleshipArena: React.FC<Props> = ({
             </View>
           </LinearGradient>
 
-          {/* Panel de Flota: Tarjetas con mini-silueta SVG, nombre, tamaño y estado */}
+          {/* Panel de Flota: Tarjetas con ancho uniforme, nombre arriba, mini silueta y casillas abajo */}
           <View style={[styles.fleetRosterCard, { width: exactFrameWidth }]}>
             <Text style={styles.fleetRosterTitle}>
-              Flota Disponible (Toca para seleccionar o rotar):
+              Flota ({myFleet.length} buques):
             </Text>
-            <View style={styles.fleetCardsGrid}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.fleetCardsScrollContent}
+            >
               {myFleet.map((s) => {
                 const conf = SHIP_CONFIG[s.id] || { name: s.id, size: s.size, bg: '#0284c7' };
                 const isSel = s.id === selectedSetupShipId;
@@ -1403,6 +1399,7 @@ export const BattleshipArena: React.FC<Props> = ({
                 return (
                   <TouchableOpacity
                     key={s.id}
+                    disabled={amIReady}
                     onPress={() => {
                       void triggerGameHaptic('selection');
                       if (isSel) {
@@ -1412,43 +1409,42 @@ export const BattleshipArena: React.FC<Props> = ({
                       }
                     }}
                     style={[
-                      styles.fleetMiniCard,
+                      styles.fleetUniformCard,
                       isSel && styles.fleetMiniCardSelected,
                     ]}
                     activeOpacity={0.8}
                     accessibilityLabel={`Barco ${conf.name}, tamaño ${conf.size}`}
                   >
-                    <View style={styles.fleetMiniCardTopRow}>
-                      <View style={styles.miniShipContainer}>
-                        <NavalShipSprite
-                          shipId={s.id}
-                          size={s.size}
-                          orientation="H"
-                          cellSize={11}
-                          isMini={true}
-                          miniW={s.size * 12}
-                          miniH={12}
-                        />
-                      </View>
-                      <View style={styles.placedStatusBadge}>
-                        <Ionicons name="checkmark-circle" size={11} color="#15803d" />
-                        <Text style={styles.placedStatusText}>Colocado ✓</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.fleetMiniCardBottomRow}>
+                    {/* Nombre arriba + ícono ✓ pequeño */}
+                    <View style={styles.fleetCardHeaderRow}>
                       <Text
-                        style={[styles.fleetMiniCardName, isSel && { color: '#0284c7' }]}
+                        style={[styles.fleetCardNameText, isSel && { color: '#0284c7' }]}
                         numberOfLines={1}
                       >
                         {conf.name}
                       </Text>
-                      <Text style={styles.fleetMiniCardSize}>{conf.size} casillas</Text>
+                      <Ionicons name="checkmark-circle" size={13} color="#16a34a" />
                     </View>
+
+                    {/* Mini silueta legible que ocupa el ancho completo de la tarjeta */}
+                    <View style={styles.miniShipSpriteWrap}>
+                      <NavalShipSprite
+                        shipId={s.id}
+                        size={s.size}
+                        orientation="H"
+                        cellSize={14}
+                        isMini={true}
+                        miniW={s.size * 14}
+                        miniH={14}
+                      />
+                    </View>
+
+                    {/* "X casillas" abajo */}
+                    <Text style={styles.fleetCardSizeText}>{conf.size} casillas</Text>
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
 
           {/* Dock Inferior: Confirmar Flota (Botón Primario Unificado) */}
@@ -1752,8 +1748,9 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    flex: 1,
   },
   cardContainer: {
     width: '100%',
@@ -1935,53 +1932,51 @@ const styles = StyleSheet.create({
     color: '#334155',
     marginBottom: 8,
   },
-  fleetCardsGrid: {
+  fleetCardsScrollContent: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
+    paddingVertical: 2,
   },
-  fleetMiniCard: {
-    flex: 1,
-    minWidth: 96,
+  fleetUniformCard: {
+    width: 104,
     backgroundColor: '#f8fafc',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 8,
     borderWidth: 1.2,
     borderColor: '#e2e8f0',
+    alignItems: 'center',
+    gap: 4,
   },
   fleetMiniCardSelected: {
     backgroundColor: '#f0fdf4',
     borderColor: '#0284c7',
     borderWidth: 1.6,
   },
-  fleetMiniCardTopRow: {
+  fleetCardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    width: '100%',
   },
-  miniShipContainer: {
-    height: 14,
-    justifyContent: 'center',
-  },
-  placedStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: '#dcfce7',
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 6,
-  },
-  placedStatusText: {
-    fontSize: 9,
+  fleetCardNameText: {
+    fontSize: 10.5,
     fontWeight: '800',
-    color: '#15803d',
+    color: '#1e293b',
+    flex: 1,
+    marginRight: 2,
   },
-  fleetMiniCardBottomRow: {
-    flexDirection: 'row',
+  miniShipSpriteWrap: {
+    height: 18,
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    marginVertical: 2,
+  },
+  fleetCardSizeText: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#64748b',
+    alignSelf: 'flex-start',
   },
   fleetMiniCardName: {
     fontSize: 10.5,

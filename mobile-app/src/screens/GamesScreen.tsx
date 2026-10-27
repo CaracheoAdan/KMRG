@@ -1491,7 +1491,7 @@ export const GamesScreen: React.FC = () => {
 
   // Renderizador adaptable del juego activo (En Pantalla Completa se transforma en Consola Pro Independiente)
   const renderActiveGameArena = (isFull: boolean) => {
-    const proMaxBoard = Math.min(SCREEN_W - 36, Math.floor(SCREEN_H * 0.45), 344);
+    const proMaxBoard = Math.min(SCREEN_W - 24, Math.floor(SCREEN_H * 0.48), 380);
     const boardPx = isFull ? proMaxBoard : COMPACT_BOARD_SIZE;
     const chessCellPx = Math.floor((boardPx - 18) / 8);
     const sudokuCellPx = Math.floor((boardPx - 6) / 9);
@@ -1873,8 +1873,8 @@ export const GamesScreen: React.FC = () => {
 
             let miniStats = '';
             if (g.id === 'tictactoe') {
-              const winsK = gamesState.leaderboard?.breakdown?.tictactoe?.winsKarla ?? gamesState.ticTacToe.scoreKarla ?? 0;
-              const winsJ = gamesState.leaderboard?.breakdown?.tictactoe?.winsJavier ?? gamesState.ticTacToe.scoreJavier ?? 0;
+              const winsK = gamesState.ticTacToe.scoreKarla || 0;
+              const winsJ = gamesState.ticTacToe.scoreJavier || 0;
               miniStats = `${winsK} - ${winsJ} rondas`;
             } else if (g.id === 'chess') {
               miniStats = `${chessHistory.length} movimientos`;
@@ -2318,8 +2318,8 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 6,
-    paddingBottom: 8,
-    gap: 10,
+    paddingBottom: 20,
+    gap: 8,
   },
   lobbyGamesGridArea: {
     flex: 1,
@@ -2328,12 +2328,12 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   lobbyGridRowsContainer: {
     flex: 1,
-    gap: 10,
+    gap: 8,
   },
   lobbyGridRow: {
     flex: 1,
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   lobbyCol: {
     flex: 1,
@@ -2349,9 +2349,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 16,
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 12,
-    paddingRight: 32, // Margen derecho para no ser tapado por herramientas o engranes flotantes
+    paddingRight: 40, // Margen derecho generoso para no ser tapado por herramientas o engranes flotantes
     borderWidth: 1.5,
     gap: 10,
     shadowOffset: { width: 0, height: 2 },
@@ -2392,21 +2392,21 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   gameActiveScrollContent: {
     flexGrow: 1,
     width: '100%',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingBottom: 32,
+    paddingVertical: 8,
+    paddingBottom: 24,
   },
   lobbyCardCompact: {
     flex: 1,
     width: '100%',
     borderRadius: 18,
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4, // Reduce aire vertical innecesario
+    gap: 3, // Reduce aire vertical innecesario para un balance compacto
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
