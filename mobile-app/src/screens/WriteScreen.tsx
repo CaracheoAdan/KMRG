@@ -30,7 +30,7 @@ import {
 } from '../services/StorageService';
 import { syncWidgetData } from '../services/WidgetSyncService';
 import { sendPartnerPushNotification } from '../services/NotificationService';
-import { getHomeState } from '../services/CoupleSyncService';
+import { getHomeState, saveHomeState } from '../services/CoupleSyncService';
 
 const SERIF_FONT = Platform.select({
   ios: 'Georgia',
@@ -136,9 +136,15 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
         if (result.success) {
           if (isToday) {
-            void syncWidgetData({
-              noteText: content.trim(),
-              noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
+            void getHomeState().then((home) => {
+              void saveHomeState(profile, {
+                ...home,
+                stickyNote: {
+                  author: profile,
+                  text: content.trim(),
+                  updatedAt: new Date().toISOString(),
+                },
+              });
             });
           }
 
@@ -166,9 +172,15 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
         if (result.success) {
           if (isToday) {
-            void syncWidgetData({
-              noteText: content.trim(),
-              noteSender: profile === 'Karla' ? 'Karlita' : 'Javier',
+            void getHomeState().then((home) => {
+              void saveHomeState(profile, {
+                ...home,
+                stickyNote: {
+                  author: profile,
+                  text: content.trim(),
+                  updatedAt: new Date().toISOString(),
+                },
+              });
             });
           }
 

@@ -176,14 +176,17 @@ export const TodayScreen: React.FC = () => {
       const partnerRole: 'Javier' | 'Karla' = currentProfile === 'Karla' ? 'Javier' : 'Karla';
       const partnerDisplayName = getDisplayName(partnerRole);
 
-      // El widget de este dispositivo muestra la notita que le dejó su pareja (NO la que uno mismo escribió)
+      // El widget muestra exclusivamente la NOTITA que le dejó su pareja (carta del día o stickyNote)
+      // NUNCA consume el estado de ánimo (mood)
       let partnerNote = '';
-      if (syncedHome.stickyNote && syncedHome.stickyNote.author === partnerRole) {
-        partnerNote = (syncedHome.stickyNote.text || '').trim();
-      } else if (syncedHome.moods && syncedHome.moods[partnerRole]?.status) {
-        partnerNote = (syncedHome.moods[partnerRole].status || '').trim();
-      } else if (todayMsg && todayMsg.sender === partnerRole) {
-        partnerNote = (todayMsg.content || '').trim();
+      if (todayMsg && todayMsg.sender === partnerRole && todayMsg.content?.trim()) {
+        partnerNote = todayMsg.content.trim();
+      } else if (
+        syncedHome.stickyNote &&
+        syncedHome.stickyNote.author === partnerRole &&
+        syncedHome.stickyNote.text?.trim()
+      ) {
+        partnerNote = syncedHome.stickyNote.text.trim();
       }
 
       const todayStr = toLocalDateString(new Date());
@@ -215,6 +218,7 @@ export const TodayScreen: React.FC = () => {
   useEffect(() => {
     void loadData();
 
+    // 1. Canal de interacciones y estado general
     const channel = supabase
       .channel('kmrg-live-interactions')
       .on(
@@ -228,17 +232,16 @@ export const TodayScreen: React.FC = () => {
             const incomingHome = newInteraction.payload as Partial<HomeState>;
             setHomeState((prev) => ({ ...prev, ...incomingHome }));
 
-            // Sincronizar en vivo el widget si la pareja actualizó su notita/estado o la próxima cita
             const partnerRole: 'Javier' | 'Karla' = currentProfile === 'Karla' ? 'Javier' : 'Karla';
             const partnerDisplayName = getDisplayName(partnerRole);
 
+            // Sincronizar en vivo el widget SOLO si la pareja actualizó su NOTITA real (NUNCA el estado de ánimo)
             let partnerNote: string | undefined = undefined;
-            if (incomingHome.stickyNote) {
-              if (incomingHome.stickyNote.author === partnerRole) {
-                partnerNote = (incomingHome.stickyNote.text || '').trim();
+            if (incomingHome.stickyNote && incomingHome.stickyNote.author === partnerRole) {
+              const text = (incomingHome.stickyNote.text || '').trim();
+              if (text) {
+                partnerNote = text;
               }
-            } else if (incomingHome.moods && incomingHome.moods[partnerRole]) {
-              partnerNote = (incomingHome.moods[partnerRole]?.status || '').trim();
             }
 
             void syncWidgetData({
@@ -267,8 +270,34 @@ export const TodayScreen: React.FC = () => {
       )
       .subscribe();
 
+    // 2. Canal de cartas/notitas del día en vivo: actualizar el widget inmediatamente al recibir una carta
+    const msgChannel = supabase
+      .channel('kmrg-live-messages')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload: any) => {
+          const newMsg = payload.new;
+          if (!newMsg) return;
+          const partnerRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+          const partnerDisplayName = getDisplayName(partnerRole);
+          const todayStr = toLocalDateString(new Date());
+
+          if (newMsg.sender === partnerRole && toLocalDateString(newMsg.scheduled_date) <= todayStr) {
+            setMessage(newMsg);
+            const cleanText = (newMsg.content || '').trim();
+            void syncWidgetData({
+              noteText: cleanText,
+              noteSender: cleanText ? partnerDisplayName : '',
+            });
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       void supabase.removeChannel(channel);
+      void supabase.removeChannel(msgChannel);
       if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     };
   }, [loadData, currentProfile]);
@@ -476,11 +505,6 @@ export const TodayScreen: React.FC = () => {
           song: tempSong.trim(),
           updatedAt: new Date().toISOString(),
         },
-      },
-      stickyNote: {
-        author: currentProfile,
-        text: finalStatus,
-        updatedAt: new Date().toISOString(),
       },
     };
     await updateAndSyncHome(nextHome);
