@@ -232,6 +232,7 @@ export const GamesScreen: React.FC = () => {
 
   const [activeGame, setActiveGame] = useState<GameTab | null>(null);
   const [pendingGameToLaunch, setPendingGameToLaunch] = useState<GameTab | null>(null);
+  const [isDraggingShip, setIsDraggingShip] = useState<boolean>(false);
   const [gamesState, setGamesState] = useState<GamesState>(DEFAULT_GAMES_STATE);
   const [isFullScreenGame, setIsFullScreenGame] = useState<boolean>(false);
 
@@ -1585,6 +1586,7 @@ export const GamesScreen: React.FC = () => {
             }}
             onFire={(idx) => void handleBattleshipFire(idx)}
             onReset={() => void handleResetBattleship()}
+            onDragStateChange={setIsDraggingShip}
           />
         )}
       </View>
@@ -2206,6 +2208,7 @@ export const GamesScreen: React.FC = () => {
           {/* Arena del Juego Montada con Scroll Adaptable que Centra Verticalmente */}
           <ScrollView
             style={{ flex: 1 }}
+            scrollEnabled={!isDraggingShip}
             contentContainerStyle={styles.gameActiveScrollContent}
             showsVerticalScrollIndicator={false}
           >
