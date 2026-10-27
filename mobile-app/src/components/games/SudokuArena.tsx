@@ -76,7 +76,7 @@ export const SudokuArena: React.FC<Props> = ({
   const cellSize = Math.floor((availableWidth - 4) / 9);
   const exactGridSize = cellSize * 9 + 4;
   // Números ~25% más pequeños y semibold
-  const digitFontSize = Math.floor(cellSize * 0.52);
+  const digitFontSize = Math.floor(cellSize * 0.40);
 
   // Teclado numérico: ancho explícito por tecla (9 teclas + 8 gaps de 4px)
   const numKeyWidth = Math.floor((exactGridSize - (8 * 4)) / 9);
@@ -157,7 +157,7 @@ export const SudokuArena: React.FC<Props> = ({
 
         {/* Vidas Restantes */}
         <View style={styles.mistakesBox}>
-          <Text style={styles.mistakesLabel}>Errores:</Text>
+          <Text style={styles.mistakesLabel}>Vidas:</Text>
           <View style={styles.heartsRow}>
             {Array.from({ length: MAX_SUDOKU_MISTAKES }).map((_, i) => {
               const isLost = i < sudoku.mistakes;
@@ -346,7 +346,7 @@ export const SudokuArena: React.FC<Props> = ({
                     <Text style={[styles.numKeyDigit, isDone && styles.numKeyDigitDone]}>
                       {num}
                     </Text>
-                    <Text style={[styles.remainingCountText, isDone && { color: '#cbd5e1' }]}>
+                    <Text style={[styles.remainingCountText, isDone && styles.remainingCountTextDone]}>
                       {isDone ? '✓' : remaining}
                     </Text>
                   </TouchableOpacity>
@@ -365,7 +365,6 @@ export const SudokuArena: React.FC<Props> = ({
             </View>
 
             <View style={styles.cellCountChip}>
-              <Ionicons name="grid-outline" size={13} color="#0284c7" />
               <Text style={styles.cellCountText}>{filledCellsCount}/81 celdas</Text>
             </View>
           </View>
@@ -487,7 +486,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   fixedDigit: {
-    color: '#1e293b',
+    color: '#334155', // Gris azulado oscuro
   },
   karlaDigit: {
     color: '#9333ea',
@@ -557,10 +556,10 @@ const styles = StyleSheet.create({
     ...GAMES_THEME.shadows.soft,
   },
   numKeyDone: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
     borderBottomWidth: 1,
-    opacity: 0.45,
+    opacity: 0.35,
   },
   numKeyDigit: {
     fontSize: 17,
@@ -575,6 +574,10 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     color: '#64748b',
+  },
+  remainingCountTextDone: {
+    color: '#16a34a',
+    fontWeight: '900',
   },
   sudokuProgressCard: {
     width: '100%',

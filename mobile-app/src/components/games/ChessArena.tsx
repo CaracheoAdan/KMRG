@@ -77,13 +77,13 @@ export const ChessArena: React.FC<Props> = ({
   const isWinner = !!chess.winner;
   const isWhite = chess.turn === 'w';
 
-  // Dimensionamiento simétrico sin recorte en columna 'h'
+  // Dimensionamiento simétrico sin recorte en columna 'h' y con margen derecho
   const maxAvailable = Math.min(SCREEN_W - 32, 360);
   const coordSize = 16;
-  const innerGridAvailable = maxAvailable - (coordSize * 2) - 8;
+  const innerGridAvailable = maxAvailable - (coordSize * 2) - 16;
   const cellSize = Math.floor(innerGridAvailable / 8);
   const gridWidth = cellSize * 8;
-  const frameWidth = gridWidth + (coordSize * 2) + 8;
+  const frameWidth = gridWidth + (coordSize * 2) + 16;
 
   // Animación de pulso para Jaque
   const checkPulseAnim = useRef(new Animated.Value(1)).current;
@@ -235,13 +235,14 @@ export const ChessArena: React.FC<Props> = ({
                   const symbolKey = piece ? `${piece.color}-${piece.type}` : '';
                   const glyph = piece ? CHESS_SYMBOLS[symbolKey] || '♟' : '';
 
-                  let squareBg = isDarkSquare ? '#78350f' : '#fef3c7';
+                  // Textura de madera cálida, brillo y relieve
+                  let squareBg = isDarkSquare ? '#854d0e' : '#fef3c7';
                   if (isSelected) {
-                    squareBg = '#fde047';
+                    squareBg = '#facc15';
                   } else if (isCheckKing) {
-                    squareBg = '#ef4444';
+                    squareBg = '#f87171';
                   } else if (isLastMove) {
-                    squareBg = isDarkSquare ? '#9a5b13' : '#fef08a';
+                    squareBg = isDarkSquare ? '#a16207' : '#fef08a';
                   }
 
                   return (
@@ -271,23 +272,23 @@ export const ChessArena: React.FC<Props> = ({
                         />
                       )}
 
-                      {/* Glifo de la Pieza con Volumen y Sombra Realista (Negras en carbón profundo con halo claro) */}
+                      {/* Glifo de la Pieza con Volumen y Sombra Realista */}
                       {piece && (
                         <Text
                           style={[
                             styles.pieceGlyph,
                             {
-                              fontSize: Math.floor(cellSize * 0.72),
+                              fontSize: Math.floor(cellSize * 0.76),
                               color: pieceColor === 'w' ? '#ffffff' : '#18181b',
                               textShadowColor:
                                 pieceColor === 'w'
-                                  ? 'rgba(0, 0, 0, 0.7)'
-                                  : 'rgba(255, 255, 255, 0.7)',
+                                  ? 'rgba(0, 0, 0, 0.75)'
+                                  : 'rgba(255, 255, 255, 0.75)',
                               textShadowOffset:
                                 pieceColor === 'w'
-                                  ? { width: 0, height: 2 }
-                                  : { width: 0, height: 1 },
-                              textShadowRadius: pieceColor === 'w' ? 3.5 : 2.5,
+                                  ? { width: 0, height: 2.5 }
+                                  : { width: 0, height: 1.5 },
+                              textShadowRadius: 4,
                             },
                           ]}
                         >
@@ -381,6 +382,19 @@ export const ChessArena: React.FC<Props> = ({
           ) : (
             Array.from({ length: Math.ceil(chessHistoryLength / 2) }).map((_, i) => {
               const isCurrentRound = i === Math.ceil(chessHistoryLength / 2) - 1;
+              const hasBlackMove = i * 2 + 1 < chessHistoryLength;
+
+              let moveWhite = 'e4';
+              let moveBlack = hasBlackMove ? 'e5' : '';
+
+              if (isCurrentRound && lastMoveNotation) {
+                if (!isWhite) {
+                  moveWhite = lastMoveNotation;
+                } else {
+                  moveBlack = lastMoveNotation;
+                }
+              }
+
               return (
                 <View
                   key={i}
@@ -389,17 +403,15 @@ export const ChessArena: React.FC<Props> = ({
                     isCurrentRound && styles.movePillActive,
                   ]}
                 >
-                  <Text style={styles.moveNumberText}>{i + 1}.</Text>
-                  <Text style={styles.moveWhiteText}>
-                    {isCurrentRound && lastMoveNotation && !isWhite
-                      ? lastMoveNotation
-                      : 'K'}
+                  <Text style={[styles.moveNumberText, isCurrentRound && styles.moveNumberTextActive]}>
+                    {i + 1}.
                   </Text>
-                  {i * 2 + 1 < chessHistoryLength && (
-                    <Text style={styles.moveBlackText}>
-                      {isCurrentRound && lastMoveNotation && isWhite
-                        ? lastMoveNotation
-                        : 'J'}
+                  <Text style={[styles.moveWhiteText, isCurrentRound && styles.moveWhiteTextActive]}>
+                    {moveWhite}
+                  </Text>
+                  {hasBlackMove && (
+                    <Text style={[styles.moveBlackText, isCurrentRound && styles.moveBlackTextActive]}>
+                      {moveBlack}
                     </Text>
                   )}
                 </View>
@@ -566,7 +578,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#b45309',
-    paddingVertical: 2,
+    paddingVertical: 3,
+    paddingHorizontal: 5,
   },
   coordsRow: {
     flexDirection: 'row',
@@ -581,6 +594,7 @@ const styles = StyleSheet.create({
   coordNumberCell: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 2,
   },
   coordNumberText: {
     color: '#fef3c7',
@@ -671,32 +685,44 @@ const styles = StyleSheet.create({
   movePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 6,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 8,
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   movePillActive: {
     borderColor: '#f59e0b',
-    backgroundColor: '#fffbeb',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1.5,
   },
   moveNumberText: {
     fontSize: 10,
     fontWeight: '800',
     color: '#64748b',
   },
+  moveNumberTextActive: {
+    color: '#b45309',
+  },
   moveWhiteText: {
     fontSize: 10.5,
     fontWeight: '700',
     color: '#9333ea',
   },
+  moveWhiteTextActive: {
+    color: '#7e22ce',
+    fontWeight: '800',
+  },
   moveBlackText: {
     fontSize: 10.5,
     fontWeight: '700',
     color: '#0284c7',
+  },
+  moveBlackTextActive: {
+    color: '#0369a1',
+    fontWeight: '800',
   },
   dockContainer: {
     flexDirection: 'row',

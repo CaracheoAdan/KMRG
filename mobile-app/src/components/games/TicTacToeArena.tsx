@@ -23,7 +23,7 @@ interface Props {
   onNewRound: () => void;
 }
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 export const TicTacToeArena: React.FC<Props> = ({
   onCellPress,
@@ -33,9 +33,13 @@ export const TicTacToeArena: React.FC<Props> = ({
   const isWinner = !!ticTacToeState.winner;
   const isDraw = ticTacToeState.winner === 'Empate';
 
-  // Tablero ampliado para aprovechar el espacio vertical disponible
-  const boardSize = Math.min(SCREEN_W - 28, 350);
+  // Calibración multi-pantalla responsiva (360x640, 390x844 y 412x915)
+  // En 360x640 la altura útil es de ~540px; limitando al 39% de SCREEN_H las 9 celdas siempre son 100% visibles sin scroll
+  const maxBoardH = Math.floor(SCREEN_H * 0.39);
+  const maxBoardW = SCREEN_W - 28;
+  const boardSize = Math.min(maxBoardW, maxBoardH, 340);
   const cellSize = Math.floor((boardSize - 16) / 3);
+  const exactBoardPx = cellSize * 3 + 16;
 
   // Animación de pulso para las celdas ganadoras
   const winPulseAnim = useRef(new Animated.Value(1)).current;
@@ -200,8 +204,8 @@ export const TicTacToeArena: React.FC<Props> = ({
         style={[
           styles.boardWrapper,
           {
-            width: boardSize,
-            height: boardSize,
+            width: exactBoardPx,
+            height: exactBoardPx,
           },
           GAMES_THEME.shadows.boardDepth,
         ]}
@@ -230,7 +234,7 @@ export const TicTacToeArena: React.FC<Props> = ({
                       isWinningCell && { transform: [{ scale: winPulseAnim }] },
                     ]}
                   >
-                    <Text style={styles.symbolKarla}>✕</Text>
+                    <Text style={[styles.symbolKarla, { fontSize: Math.floor(cellSize * 0.54) }]}>✕</Text>
                   </Animated.View>
                 )}
 
@@ -241,7 +245,7 @@ export const TicTacToeArena: React.FC<Props> = ({
                       isWinningCell && { transform: [{ scale: winPulseAnim }] },
                     ]}
                   >
-                    <Text style={styles.symbolJavier}>○</Text>
+                    <Text style={[styles.symbolJavier, { fontSize: Math.floor(cellSize * 0.56) }]}>○</Text>
                   </Animated.View>
                 )}
               </TouchableOpacity>

@@ -940,20 +940,29 @@ export const BattleshipArena: React.FC<Props> = ({
     onFire(idx);
   };
 
+  // Ref para reducir re-renders durante el arrastre (throttling de celda objetivo)
+  const lastGhostKeyRef = useRef<string>('');
+
   // ============================================================================
-  // PANRESPONDERS PARA ARRASTRE DE BARCOS (Gestures + Snap to Grid + Ghost Shadow)
+  // PANRESPONDERS ESTABLES PARA ARRASTRE DE BARCOS
   // ============================================================================
-  const createShipPanResponder = (ship: BattleshipShip) => {
+  const createShipPanResponder = useCallback((shipId: string) => {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
         Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
 
       onPanResponderGrant: () => {
         const { myFleet: currentFleet } = stateRef.current;
-        const currentShip = currentFleet.find((s) => s.id === ship.id) || ship;
+        const currentShip = currentFleet.find((s) => s.id === shipId);
+        if (!currentShip) return;
+
         setDraggedShipId(currentShip.id);
         setSelectedSetupShipId(currentShip.id);
+        lastGhostKeyRef.current = '';
         onDragStateChange?.(true);
         void triggerGameHaptic('selection');
         dragPan.setValue({ x: 0, y: 0 });
@@ -963,7 +972,8 @@ export const BattleshipArena: React.FC<Props> = ({
         dragPan.setValue({ x: gesture.dx, y: gesture.dy });
 
         const { myFleet: currentFleet, cellSize: cSize } = stateRef.current;
-        const currentShip = currentFleet.find((s) => s.id === ship.id) || ship;
+        const currentShip = currentFleet.find((s) => s.id === shipId);
+        if (!currentShip) return;
 
         const isHoriz =
           (currentShip.orientation ||
@@ -999,35 +1009,33 @@ export const BattleshipArena: React.FC<Props> = ({
           s.cells.some((c) => targetCells.includes(c))
         );
 
-        setGhostPlacement({
-          shipId: currentShip.id,
-          orientation: isHoriz ? 'H' : 'V',
-          cells: targetCells,
-          isValid: inBounds && !hasCollision,
-        });
+        const isValidPlacement = inBounds && !hasCollision;
+        const stateKey = `${currentShip.id}_${targetR}_${targetC}_${isValidPlacement}`;
+
+        // Solo actualizar el estado de ghost si cambió de celda o validez (previene re-renders a 60fps)
+        if (stateKey !== lastGhostKeyRef.current) {
+          lastGhostKeyRef.current = stateKey;
+          setGhostPlacement({
+            shipId: currentShip.id,
+            orientation: isHoriz ? 'H' : 'V',
+            cells: targetCells,
+            isValid: isValidPlacement,
+          });
+        }
       },
 
       onPanResponderRelease: (_, gesture) => {
         onDragStateChange?.(false);
         const { myFleet: currentFleet } = stateRef.current;
-        const currentShip = currentFleet.find((s) => s.id === ship.id) || ship;
+        const currentShip = currentFleet.find((s) => s.id === shipId);
+        if (!currentShip) return;
 
         const wasTap = Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6;
 
         if (wasTap) {
-          // Detectar toque / doble toque o selección
-          const now = Date.now();
-          const lastTap = lastTapRef.current;
-          const isDoubleTap = now - lastTap.time < 320 && lastTap.shipId === currentShip.id;
-
-          if (isDoubleTap || stateRef.current.selectedSetupShipId === currentShip.id) {
-            handleSmartRotate(currentShip.id);
-          } else {
-            setSelectedSetupShipId(currentShip.id);
-            void triggerGameHaptic('selection');
-          }
-
-          lastTapRef.current = { time: now, shipId: currentShip.id };
+          // Tap SOLO selecciona el barco de forma segura
+          setSelectedSetupShipId(currentShip.id);
+          void triggerGameHaptic('selection');
           dragPan.setValue({ x: 0, y: 0 });
           setGhostPlacement(null);
           setDraggedShipId(null);
@@ -1045,7 +1053,7 @@ export const BattleshipArena: React.FC<Props> = ({
             void triggerGameHaptic('selection');
             dragPan.setValue({ x: 0, y: 0 });
           } else {
-            // Posición inválida: animación de rebote y retorno
+            // Posición inválida o sobre otro barco: animación de rebote y retorno
             Animated.spring(dragPan, {
               toValue: { x: 0, y: 0 },
               friction: 5.5,
@@ -1068,7 +1076,7 @@ export const BattleshipArena: React.FC<Props> = ({
         dragPan.setValue({ x: 0, y: 0 });
       },
     });
-  };
+  }, [onDragStateChange, dragPan]);
 
   return (
     <View style={styles.container}>
@@ -1315,7 +1323,7 @@ export const BattleshipArena: React.FC<Props> = ({
                   const touchTopOffset = (touchPadH - visualH) / 2;
                   const touchLeftOffset = (touchPadW - visualW) / 2;
 
-                  const panResponder = createShipPanResponder(ship);
+                  const panResponder = createShipPanResponder(ship.id);
 
                   // Atenuar barcos no seleccionados cuando hay uno activo
                   const shipOpacity = isBeingDragged ? 0.9 : selectedSetupShipId ? (isSelected ? 1 : 0.65) : 1;

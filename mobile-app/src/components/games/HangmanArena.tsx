@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -67,6 +67,23 @@ export const HangmanArena: React.FC<Props> = ({
   const isWon = hangman.status === 'won';
   const isLost = hangman.status === 'lost';
 
+  // Animación al revelar parte del cuerpo por cada error
+  const partAppearAnim = useRef(new Animated.Value(1)).current;
+  const lastWrongRef = useRef(wrongGuessesCount);
+
+  useEffect(() => {
+    if (wrongGuessesCount > lastWrongRef.current) {
+      partAppearAnim.setValue(0);
+      Animated.spring(partAppearAnim, {
+        toValue: 1,
+        friction: 4,
+        tension: 65,
+        useNativeDriver: true,
+      }).start();
+    }
+    lastWrongRef.current = wrongGuessesCount;
+  }, [wrongGuessesCount, partAppearAnim]);
+
   // Letras falladas por el jugador
   const failedLetters = hangman.guessed.filter(
     (l) => !hangman.word.toUpperCase().includes(l)
@@ -84,17 +101,58 @@ export const HangmanArena: React.FC<Props> = ({
   const keyWidth = Math.floor((containerWidth - (9 * 4)) / 10);
   const keyHeight = 44;
 
-  // Tamaño dinámico de casillas según longitud de la palabra
-  let dynamicSlotWidth = 38;
-  if (totalLettersNoSpaces <= 5) {
-    dynamicSlotWidth = 44;
-  } else if (totalLettersNoSpaces <= 8) {
-    dynamicSlotWidth = 36;
-  } else if (totalLettersNoSpaces <= 12) {
-    dynamicSlotWidth = 30;
-  } else {
-    dynamicSlotWidth = 26;
-  }
+  // Partición balanceada de casillas: si totalLettersNoSpaces > 8, divide en dos filas balanceadas (ej. 6+5)
+  const letterRows: Array<Array<{ word: string }>> = useMemo(() => {
+    if (words.length === 1) {
+      const w = words[0];
+      if (w.length > 8) {
+        const mid = Math.ceil(w.length / 2);
+        return [
+          [{ word: w.slice(0, mid) }],
+          [{ word: w.slice(mid) }],
+        ];
+      }
+      return [[{ word: w }]];
+    }
+
+    if (totalLettersNoSpaces > 8) {
+      const row1: Array<{ word: string }> = [];
+      const row2: Array<{ word: string }> = [];
+      let c1 = 0;
+      let c2 = 0;
+      for (const w of words) {
+        if (c1 === 0 || (c1 + w.length <= 8 && c1 <= c2)) {
+          row1.push({ word: w });
+          c1 += w.length;
+        } else {
+          row2.push({ word: w });
+          c2 += w.length;
+        }
+      }
+      return [row1, row2];
+    }
+
+    return [words.map((w) => ({ word: w }))];
+  }, [words, totalLettersNoSpaces]);
+
+  // Cálculo de ancho adaptado con margen lateral de 16px
+  const maxLettersInAnyRow = useMemo(() => {
+    return Math.max(
+      1,
+      ...letterRows.map((r: Array<{ word: string }>) =>
+        r.reduce((acc: number, it: { word: string }) => acc + it.word.length, 0)
+      )
+    );
+  }, [letterRows]);
+
+  const availableWidthForSlots = containerWidth - 32; // 16px de margen lateral
+  const dynamicSlotWidth = Math.max(
+    30,
+    Math.min(
+      44,
+      Math.floor((availableWidthForSlots - (maxLettersInAnyRow - 1) * 6) / maxLettersInAnyRow)
+    )
+  );
   const dynamicSlotHeight = Math.floor(dynamicSlotWidth * 1.25);
   const dynamicFontSize = Math.floor(dynamicSlotWidth * 0.7);
 
@@ -125,26 +183,26 @@ export const HangmanArena: React.FC<Props> = ({
         </View>
 
         {/* Escenario Ilustrado Grande Centrado (~45% del alto de la tarjeta) */}
-        {/* Patíbulo en Madera Clara / Crema con Brillo, Cuerda, Suelo y Luna */}
+        {/* Patíbulo en Madera Clara con Base sobre el Suelo, Luna Llena y Brillo */}
         <LinearGradient
           colors={['#1e1b4b', '#312e81', '#1e1b4b']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.gallowsSceneStage}
         >
-          {/* Luna brillante */}
+          {/* Luna brillante con halo de luz */}
           <View style={styles.sceneMoon}>
-            <Ionicons name="moon" size={24} color="#fde047" />
+            <Ionicons name="moon" size={28} color="#fef08a" />
           </View>
           <View style={[styles.sceneStar, { top: 12, left: 24 }]} />
           <View style={[styles.sceneStar, { top: 28, left: 60, width: 2, height: 2 }]} />
-          <View style={[styles.sceneStar, { top: 16, right: 64, width: 2, height: 2 }]} />
-          <View style={[styles.sceneStar, { top: 38, right: 38 }]} />
+          <View style={[styles.sceneStar, { top: 16, right: 70, width: 2, height: 2 }]} />
+          <View style={[styles.sceneStar, { top: 38, right: 44 }]} />
 
           {/* Suelo / Plataforma del patíbulo */}
           <View style={styles.groundBeam} />
 
-          {/* Ilustración Grande y Centrada del Patíbulo en Madera Crema Noble */}
+          {/* Ilustración Grande y Centrada del Patíbulo en Madera Noble */}
           <View style={styles.grandGallowsBox}>
             <View style={styles.grandGallowsBase} />
             <View style={styles.grandGallowsPole} />
@@ -152,27 +210,66 @@ export const HangmanArena: React.FC<Props> = ({
             <View style={styles.grandGallowsBrace} />
             <View style={styles.grandGallowsRope} />
 
-            {/* Muñequito de Pareja Dibujado Trazo a Trazo */}
+            {/* Muñequito de Pareja Dibujado Trazo a Trazo con Animación en Cada Error */}
             {wrongGuessesCount >= 1 && (
-              <View style={[styles.grandHmHead, isLost && styles.hmHeadLost]}>
+              <Animated.View
+                style={[
+                  styles.grandHmHead,
+                  isLost && styles.hmHeadLost,
+                  wrongGuessesCount === 1 && { transform: [{ scale: partAppearAnim }] },
+                ]}
+              >
                 <View style={styles.grandHmBow} />
                 <View style={styles.hmEyesRow}>
                   <Text style={styles.grandHmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
                   <Text style={styles.grandHmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
                 </View>
                 <View style={isLost ? styles.hmMouthLost : styles.hmMouthSmile} />
-              </View>
+              </Animated.View>
             )}
 
             {wrongGuessesCount >= 2 && (
-              <View style={styles.grandHmBody}>
+              <Animated.View
+                style={[
+                  styles.grandHmBody,
+                  wrongGuessesCount === 2 && { transform: [{ scale: partAppearAnim }] },
+                ]}
+              >
                 <Ionicons name="heart" size={8} color="#ffffff" style={{ opacity: 0.9 }} />
-              </View>
+              </Animated.View>
             )}
-            {wrongGuessesCount >= 3 && <View style={styles.grandHmArmLeft} />}
-            {wrongGuessesCount >= 4 && <View style={styles.grandHmArmRight} />}
-            {wrongGuessesCount >= 5 && <View style={styles.grandHmLegLeft} />}
-            {wrongGuessesCount >= 6 && <View style={styles.grandHmLegRight} />}
+            {wrongGuessesCount >= 3 && (
+              <Animated.View
+                style={[
+                  styles.grandHmArmLeft,
+                  wrongGuessesCount === 3 && { transform: [{ scale: partAppearAnim }] },
+                ]}
+              />
+            )}
+            {wrongGuessesCount >= 4 && (
+              <Animated.View
+                style={[
+                  styles.grandHmArmRight,
+                  wrongGuessesCount === 4 && { transform: [{ scale: partAppearAnim }] },
+                ]}
+              />
+            )}
+            {wrongGuessesCount >= 5 && (
+              <Animated.View
+                style={[
+                  styles.grandHmLegLeft,
+                  wrongGuessesCount === 5 && { transform: [{ scale: partAppearAnim }] },
+                ]}
+              />
+            )}
+            {wrongGuessesCount >= 6 && (
+              <Animated.View
+                style={[
+                  styles.grandHmLegRight,
+                  wrongGuessesCount === 6 && { transform: [{ scale: partAppearAnim }] },
+                ]}
+              />
+            )}
           </View>
         </LinearGradient>
 
@@ -200,39 +297,43 @@ export const HangmanArena: React.FC<Props> = ({
         </View>
       </View>
 
-      {/* 2. Casillas de Letras: Dinámicamente agrupadas por palabras con espaciado real */}
+      {/* 2. Casillas de Letras: Divididas en dos filas balanceadas si > 8 letras, con margen de 16px */}
       <View style={styles.wordGroupsContainer}>
-        {words.map((word, wIdx) => (
-          <View key={wIdx} style={styles.singleWordRow}>
-            {word.split('').map((ch, cIdx) => {
-              const revealed = hangman.guessed.includes(ch) || hangman.status !== 'playing';
+        {letterRows.map((row, rIdx) => (
+          <View key={rIdx} style={styles.balancedSlotRow}>
+            {row.map((group, gIdx) => (
+              <View key={gIdx} style={styles.singleWordRow}>
+                {group.word.split('').map((ch, cIdx) => {
+                  const revealed = hangman.guessed.includes(ch) || hangman.status !== 'playing';
 
-              return (
-                <View
-                  key={cIdx}
-                  style={[
-                    styles.letterSlot,
-                    {
-                      width: dynamicSlotWidth,
-                      height: dynamicSlotHeight,
-                    },
-                    revealed && styles.letterSlotRevealed,
-                    isLost && !hangman.guessed.includes(ch) && styles.letterSlotMissedWord,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.slotLetterText,
-                      { fontSize: dynamicFontSize },
-                      revealed && styles.slotLetterTextRevealed,
-                      isLost && !hangman.guessed.includes(ch) && { color: '#ef4444' },
-                    ]}
-                  >
-                    {revealed ? ch : ''}
-                  </Text>
-                </View>
-              );
-            })}
+                  return (
+                    <View
+                      key={cIdx}
+                      style={[
+                        styles.letterSlot,
+                        {
+                          width: dynamicSlotWidth,
+                          height: dynamicSlotHeight,
+                        },
+                        revealed && styles.letterSlotRevealed,
+                        isLost && !hangman.guessed.includes(ch) && styles.letterSlotMissedWord,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.slotLetterText,
+                          { fontSize: dynamicFontSize },
+                          revealed && styles.slotLetterTextRevealed,
+                          isLost && !hangman.guessed.includes(ch) && { color: '#ef4444' },
+                        ]}
+                      >
+                        {revealed ? ch : ''}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         ))}
       </View>
@@ -362,8 +463,8 @@ const styles = StyleSheet.create({
   // Escenario Nocturno Monumental Centrado (~45% del alto de la tarjeta)
   gallowsSceneStage: {
     width: '100%' as const,
-    height: 165,
-    borderRadius: 14,
+    height: 180,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -373,6 +474,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 14,
+    shadowColor: '#fef08a',
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    elevation: 4,
   },
   sceneStar: {
     position: 'absolute',
@@ -385,28 +490,33 @@ const styles = StyleSheet.create({
   groundBeam: {
     position: 'absolute',
     bottom: 8,
-    left: '10%',
-    right: '10%',
-    height: 4,
-    backgroundColor: '#fde68a',
-    borderRadius: 2,
-    opacity: 0.8,
+    left: 12,
+    right: 12,
+    height: 7,
+    backgroundColor: '#b45309',
+    borderRadius: 3.5,
+    borderWidth: 1.5,
+    borderColor: '#d97706',
+    shadowColor: '#d97706',
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 2,
   },
 
-  // Patíbulo Grande en Madera Crema / Clara con Borde Cálido y Glow
+  // Patíbulo Grande en Madera Crema / Clara con Borde Cálido que Apoya en el Suelo
   grandGallowsBox: {
-    width: 150,
-    height: 145,
+    width: 170,
+    height: 160,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   grandGallowsBase: {
     position: 'absolute',
-    bottom: 6,
-    left: 10,
-    width: 72,
-    height: 8,
+    bottom: 15, // Apoya directamente sobre el suelo (groundBeam)
+    left: 12,
+    width: 80,
+    height: 9,
     backgroundColor: '#fef3c7',
     borderWidth: 1.5,
     borderColor: '#d97706',
@@ -418,10 +528,10 @@ const styles = StyleSheet.create({
   },
   grandGallowsPole: {
     position: 'absolute',
-    bottom: 12,
-    left: 28,
-    width: 8,
-    height: 120,
+    bottom: 22,
+    left: 32,
+    width: 9,
+    height: 128,
     backgroundColor: '#fef3c7',
     borderWidth: 1.5,
     borderColor: '#d97706',
@@ -433,9 +543,9 @@ const styles = StyleSheet.create({
   grandGallowsTop: {
     position: 'absolute',
     top: 8,
-    left: 28,
-    width: 86,
-    height: 8,
+    left: 32,
+    width: 96,
+    height: 9,
     backgroundColor: '#fef3c7',
     borderWidth: 1.5,
     borderColor: '#d97706',
@@ -446,23 +556,26 @@ const styles = StyleSheet.create({
   },
   grandGallowsBrace: {
     position: 'absolute',
-    top: 15,
-    left: 38,
-    width: 22,
-    height: 5,
+    top: 16,
+    left: 42,
+    width: 24,
+    height: 6,
     backgroundColor: '#fde68a',
     borderWidth: 1,
     borderColor: '#b45309',
+    borderRadius: 3,
     transform: [{ rotate: '-45deg' }],
   },
   grandGallowsRope: {
     position: 'absolute',
-    top: 15,
-    left: 104,
+    top: 16,
+    left: 108,
     width: 3.5,
-    height: 20,
+    height: 24,
     backgroundColor: '#f59e0b',
     borderRadius: 2,
+    borderWidth: 0.5,
+    borderColor: '#92400e',
   },
 
   // Muñequito de Pareja Detallado
@@ -625,15 +738,20 @@ const styles = StyleSheet.create({
     color: '#dc2626',
   },
 
-  // Casillas de letras agrupadas por palabras
+  // Casillas de letras agrupadas en filas balanceadas si > 8 letras
   wordGroupsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 6,
     width: '100%',
-    paddingVertical: 3,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  balancedSlotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   singleWordRow: {
     flexDirection: 'row',

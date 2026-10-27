@@ -84,7 +84,7 @@ const ALL_GAMES: Array<{
   { id: 'tictactoe', label: '3 en Raya', icon: 'grid', description: 'Clásico duelo en parejas', bgTint: '#ede9fe', iconColor: '#7c3aed' },
   { id: 'sudoku', label: 'Sudoku', icon: 'apps', description: 'Rompecabezas colaborativo', bgTint: '#e0f2fe', iconColor: '#0284c7' },
   { id: 'chess', label: 'Ajedrez', icon: 'trophy', description: 'Estrategia y jaque mate', bgTint: '#fef3c7', iconColor: '#d97706' },
-  { id: 'battleship', label: 'Battleship', icon: 'boat', description: 'Guerra naval en 10x10', bgTint: '#cffafe', iconColor: '#0891b2' },
+  { id: 'battleship', label: 'Battleship', icon: 'boat', description: 'Hunde la flota enemiga', bgTint: '#cffafe', iconColor: '#0891b2' },
   { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle', description: 'Adivina la palabra oculta', bgTint: '#ffe4e6', iconColor: '#e11d48' },
 ];
 
@@ -1873,13 +1873,16 @@ export const GamesScreen: React.FC = () => {
 
             let miniStats = '';
             if (g.id === 'tictactoe') {
-              miniStats = `${lb.pointsKarla} - ${lb.pointsJavier} rondas`;
+              const winsK = gamesState.leaderboard?.breakdown?.tictactoe?.winsKarla ?? gamesState.ticTacToe.scoreKarla ?? 0;
+              const winsJ = gamesState.leaderboard?.breakdown?.tictactoe?.winsJavier ?? gamesState.ticTacToe.scoreJavier ?? 0;
+              miniStats = `${winsK} - ${winsJ} rondas`;
             } else if (g.id === 'chess') {
               miniStats = `${chessHistory.length} movimientos`;
             } else if (g.id === 'battleship') {
               miniStats = 'Combate naval 10x10';
             } else if (g.id === 'sudoku') {
-              miniStats = `Nivel ${sudoku.difficulty}`;
+              const diffMap: Record<string, string> = { easy: 'fácil', medium: 'medio', hard: 'difícil' };
+              miniStats = `Nivel ${diffMap[sudoku.difficulty] || sudoku.difficulty}`;
             } else if (g.id === 'hangman') {
               miniStats = `${6 - wrongGuessesCount} vidas`;
             }
@@ -2345,20 +2348,22 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingRight: 32, // Margen derecho para no ser tapado por herramientas o engranes flotantes
     borderWidth: 1.5,
-    gap: 12,
+    gap: 10,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
+    marginBottom: 4,
   },
   lobbyBannerIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2372,12 +2377,12 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   lobbyBannerTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     fontFamily: SERIF_FONT,
   },
   lobbyBannerDesc: {
-    fontSize: 12,
+    fontSize: 11.5,
   },
   lobbyCardMiniStats: {
     fontSize: 11,
@@ -2395,44 +2400,44 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   lobbyCardCompact: {
     flex: 1,
     width: '100%',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 4, // Reduce aire vertical innecesario
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
   },
   lobbyCardIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
   },
   lobbyCardTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
     fontFamily: SERIF_FONT,
     textAlign: 'center',
   },
   lobbyCardDesc: {
-    fontSize: 13,
+    fontSize: 11.5,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
     paddingHorizontal: 4,
   },
   turnBadgePill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
     borderWidth: 1,
   },
   lobbyBadgeText: {
