@@ -7,6 +7,7 @@ import {
   resetCurrentProfile as clearProfile,
 } from '../services/StorageService';
 import { getHomeState, saveHomeState } from '../services/CoupleSyncService';
+import { SupabaseMediaService } from '../services/SupabaseMediaService';
 import { supabase } from '../config/supabase';
 
 const PARTNER_PROFILES_STORAGE_KEY = '@kmrg_partner_profiles_v1';
@@ -17,8 +18,8 @@ export type PartnerProfilesMap = {
 };
 
 const DEFAULT_PARTNER_PROFILES: PartnerProfilesMap = {
-  Karla: { id: 'Karla', displayName: 'Karlita', avatarUri: null },
-  Javier: { id: 'Javier', displayName: 'Javier', avatarUri: null },
+  Karla: { id: 'Karla', displayName: 'Karlita', avatarUri: null, updatedAt: '1970-01-01T00:00:00.000Z' },
+  Javier: { id: 'Javier', displayName: 'Javier', avatarUri: null, updatedAt: '1970-01-01T00:00:00.000Z' },
 };
 
 interface ProfileContextType {
@@ -71,38 +72,49 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
             id: 'Karla',
             displayName: parsed.Karla?.displayName?.trim() || 'Karlita',
             avatarUri: parsed.Karla?.avatarUri || null,
+            updatedAt: parsed.Karla?.updatedAt || '1970-01-01T00:00:00.000Z',
           },
           Javier: {
             id: 'Javier',
             displayName: parsed.Javier?.displayName?.trim() || 'Javier',
             avatarUri: parsed.Javier?.avatarUri || null,
+            updatedAt: parsed.Javier?.updatedAt || '1970-01-01T00:00:00.000Z',
           },
         };
       }
       const home = await getHomeState();
       if (home.partnerProfiles) {
+        const karlaRemoteTime = new Date(home.partnerProfiles.Karla?.updatedAt || 0).getTime();
+        const karlaLocalTime = new Date(localMap.Karla?.updatedAt || 0).getTime();
+        const javierRemoteTime = new Date(home.partnerProfiles.Javier?.updatedAt || 0).getTime();
+        const javierLocalTime = new Date(localMap.Javier?.updatedAt || 0).getTime();
+
+        const pickKarla =
+          karlaRemoteTime >= karlaLocalTime ? home.partnerProfiles.Karla : localMap.Karla;
+        const pickJavier =
+          javierRemoteTime >= javierLocalTime ? home.partnerProfiles.Javier : localMap.Javier;
+
         localMap = {
           Karla: {
             id: 'Karla',
             displayName:
-              home.partnerProfiles.Karla?.displayName?.trim() ||
-              localMap.Karla.displayName ||
-              'Karlita',
-            avatarUri:
-              home.partnerProfiles.Karla?.avatarUri || localMap.Karla.avatarUri || null,
+              pickKarla?.displayName?.trim() || localMap.Karla.displayName || 'Karlita',
+            avatarUri: pickKarla?.avatarUri ?? localMap.Karla.avatarUri ?? null,
+            updatedAt:
+              pickKarla?.updatedAt || localMap.Karla.updatedAt || '1970-01-01T00:00:00.000Z',
           },
           Javier: {
             id: 'Javier',
             displayName:
-              home.partnerProfiles.Javier?.displayName?.trim() ||
-              localMap.Javier.displayName ||
-              'Javier',
-            avatarUri:
-              home.partnerProfiles.Javier?.avatarUri || localMap.Javier.avatarUri || null,
+              pickJavier?.displayName?.trim() || localMap.Javier.displayName || 'Javier',
+            avatarUri: pickJavier?.avatarUri ?? localMap.Javier.avatarUri ?? null,
+            updatedAt:
+              pickJavier?.updatedAt || localMap.Javier.updatedAt || '1970-01-01T00:00:00.000Z',
           },
         };
       }
       setPartnerProfiles(localMap);
+      await AsyncStorage.setItem(PARTNER_PROFILES_STORAGE_KEY, JSON.stringify(localMap));
     } catch {
       // Fallback to defaults
     }
@@ -172,6 +184,18 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }) => {
       const { myRole, myDisplayName, myAvatarUri, partnerRole, partnerDisplayName } = params;
 
+      // 1. Si se seleccionó una foto nueva (base64 o file://), subir a Supabase Storage
+      let finalAvatar = myAvatarUri;
+      if (myAvatarUri && (myAvatarUri.startsWith('data:image/') || myAvatarUri.startsWith('file://'))) {
+        try {
+          finalAvatar = await SupabaseMediaService.uploadPhoto(myAvatarUri, 'avatars');
+        } catch (uploadErr) {
+          console.warn('[ProfileContext] Error subiendo avatar a Supabase Storage:', uploadErr);
+        }
+      }
+
+      // 2. Obtener el estado remoto más fresco de Supabase
+      const home = await getHomeState();
       let baseMap: PartnerProfilesMap = { ...partnerProfiles };
       try {
         const raw = await AsyncStorage.getItem(PARTNER_PROFILES_STORAGE_KEY);
@@ -181,44 +205,66 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
             Karla: {
               id: 'Karla',
               displayName: parsed.Karla?.displayName?.trim() || baseMap.Karla.displayName || 'Karlita',
-              avatarUri: parsed.Karla?.avatarUri || baseMap.Karla.avatarUri || null,
+              avatarUri: parsed.Karla?.avatarUri ?? baseMap.Karla.avatarUri ?? null,
+              updatedAt: parsed.Karla?.updatedAt || baseMap.Karla.updatedAt,
             },
             Javier: {
               id: 'Javier',
               displayName: parsed.Javier?.displayName?.trim() || baseMap.Javier.displayName || 'Javier',
-              avatarUri: parsed.Javier?.avatarUri || baseMap.Javier.avatarUri || null,
+              avatarUri: parsed.Javier?.avatarUri ?? baseMap.Javier.avatarUri ?? null,
+              updatedAt: parsed.Javier?.updatedAt || baseMap.Javier.updatedAt,
             },
           };
         }
       } catch {}
 
       const myFallback = myRole === 'Karla' ? 'Karlita' : 'Javier';
-      const finalAvatar =
-        myAvatarUri !== undefined ? myAvatarUri : (baseMap[myRole]?.avatarUri ?? null);
+      const actualPartnerRole: UserProfile =
+        partnerRole || (myRole === 'Karla' ? 'Javier' : 'Karla');
+      const partnerFallback = actualPartnerRole === 'Karla' ? 'Karlita' : 'Javier';
+
+      // 3. Determinar el perfil del compañero según la fuente MÁS RECIENTE
+      const partnerRemote = home.partnerProfiles?.[actualPartnerRole];
+      const partnerLocal = baseMap[actualPartnerRole];
+      const partnerRemoteTime = new Date(partnerRemote?.updatedAt || 0).getTime();
+      const partnerLocalTime = new Date(partnerLocal?.updatedAt || 0).getTime();
+
+      const latestPartner =
+        partnerRemoteTime >= partnerLocalTime && partnerRemote
+          ? partnerRemote
+          : partnerLocal;
+
+      // EL AVATAR DEL COMPAÑERO NUNCA SE MODIFICA AL GUARDAR MI PROPIO PERFIL
+      const partnerAvatarToKeep = latestPartner?.avatarUri ?? null;
+      const partnerNameToKeep =
+        partnerDisplayName && partnerDisplayName.trim()
+          ? partnerDisplayName.trim()
+          : (latestPartner?.displayName || partnerFallback);
+
+      const now = new Date().toISOString();
 
       const updatedMap: PartnerProfilesMap = {
-        ...baseMap,
         [myRole]: {
           id: myRole,
           displayName: myDisplayName.trim() || myFallback,
-          avatarUri: finalAvatar,
+          avatarUri:
+            finalAvatar !== undefined
+              ? finalAvatar
+              : (baseMap[myRole]?.avatarUri ?? null),
+          updatedAt: now,
         },
-      };
-
-      if (partnerRole && partnerDisplayName && partnerDisplayName.trim()) {
-        const partnerFallback = partnerRole === 'Karla' ? 'Karlita' : 'Javier';
-        updatedMap[partnerRole] = {
-          ...updatedMap[partnerRole],
-          id: partnerRole,
-          displayName: partnerDisplayName.trim() || partnerFallback,
-        };
-      }
+        [actualPartnerRole]: {
+          id: actualPartnerRole,
+          displayName: partnerNameToKeep,
+          avatarUri: partnerAvatarToKeep,
+          updatedAt: latestPartner?.updatedAt || now,
+        },
+      } as PartnerProfilesMap;
 
       setPartnerProfiles(updatedMap);
       await AsyncStorage.setItem(PARTNER_PROFILES_STORAGE_KEY, JSON.stringify(updatedMap));
 
       try {
-        const home = await getHomeState();
         await saveHomeState(myRole, {
           ...home,
           partnerProfiles: updatedMap,

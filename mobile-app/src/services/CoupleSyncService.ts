@@ -84,10 +84,14 @@ export const DEFAULT_HOME_STATE: HomeState = {
     Karla: {
       id: 'Karla',
       displayName: 'Karlita',
+      avatarUri: null,
+      updatedAt: '1970-01-01T00:00:00.000Z',
     },
     Javier: {
       id: 'Javier',
       displayName: 'Javier',
+      avatarUri: null,
+      updatedAt: '1970-01-01T00:00:00.000Z',
     },
   },
 };
@@ -441,13 +445,15 @@ function normalizeHomeState(state: HomeState): HomeState {
         id: 'Karla',
         displayName:
           sanitizeInput(state.partnerProfiles?.Karla?.displayName || 'Karlita', 24) || 'Karlita',
-        avatarUri: state.partnerProfiles?.Karla?.avatarUri || null,
+        avatarUri: state.partnerProfiles?.Karla?.avatarUri ?? null,
+        updatedAt: state.partnerProfiles?.Karla?.updatedAt,
       },
       Javier: {
         id: 'Javier',
         displayName:
           sanitizeInput(state.partnerProfiles?.Javier?.displayName || 'Javier', 24) || 'Javier',
-        avatarUri: state.partnerProfiles?.Javier?.avatarUri || null,
+        avatarUri: state.partnerProfiles?.Javier?.avatarUri ?? null,
+        updatedAt: state.partnerProfiles?.Javier?.updatedAt,
       },
     },
   };
@@ -521,31 +527,60 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
     unlockedAccessories: unlockedAccs,
   };
 
-  // Perfiles de pareja: conservar avatares y nombres personalizados
+  // Perfiles de pareja: conservar avatares y nombres según timestamp individual de cada uno
+  const karlaProfileBaseTime = new Date(normBase.partnerProfiles?.Karla?.updatedAt || 0).getTime();
+  const karlaProfileIncTime = new Date(normIncoming.partnerProfiles?.Karla?.updatedAt || 0).getTime();
+  const javierProfileBaseTime = new Date(normBase.partnerProfiles?.Javier?.updatedAt || 0).getTime();
+  const javierProfileIncTime = new Date(normIncoming.partnerProfiles?.Javier?.updatedAt || 0).getTime();
+
+  // Si incoming es más reciente o igual, gana incoming para Karla; si no, base
+  const karlaWinner =
+    karlaProfileIncTime >= karlaProfileBaseTime
+      ? normIncoming.partnerProfiles?.Karla || normBase.partnerProfiles?.Karla
+      : normBase.partnerProfiles?.Karla || normIncoming.partnerProfiles?.Karla;
+
+  // Si incoming es más reciente o igual, gana incoming para Javier; si no, base
+  const javierWinner =
+    javierProfileIncTime >= javierProfileBaseTime
+      ? normIncoming.partnerProfiles?.Javier || normBase.partnerProfiles?.Javier
+      : normBase.partnerProfiles?.Javier || normIncoming.partnerProfiles?.Javier;
+
+  // Si ambos timestamps eran 0 (datos legados sin updatedAt):
+  // conservar el avatar no nulo para evitar regresión
+  const karlaAvatar =
+    karlaProfileIncTime !== 0 || karlaProfileBaseTime !== 0
+      ? (karlaWinner?.avatarUri ?? null)
+      : (normIncoming.partnerProfiles?.Karla?.avatarUri ||
+         normBase.partnerProfiles?.Karla?.avatarUri ||
+         null);
+
+  const javierAvatar =
+    javierProfileIncTime !== 0 || javierProfileBaseTime !== 0
+      ? (javierWinner?.avatarUri ?? null)
+      : (normIncoming.partnerProfiles?.Javier?.avatarUri ||
+         normBase.partnerProfiles?.Javier?.avatarUri ||
+         null);
+
   const partnerProfiles = {
     Karla: {
       id: 'Karla' as const,
-      displayName:
-        normIncoming.partnerProfiles?.Karla?.displayName &&
-        normIncoming.partnerProfiles?.Karla?.displayName !== 'Karlita'
-          ? normIncoming.partnerProfiles.Karla.displayName
-          : (normBase.partnerProfiles?.Karla?.displayName || 'Karlita'),
-      avatarUri:
-        normIncoming.partnerProfiles?.Karla?.avatarUri ||
-        normBase.partnerProfiles?.Karla?.avatarUri ||
-        null,
+      displayName: karlaWinner?.displayName?.trim() || 'Karlita',
+      avatarUri: karlaAvatar,
+      updatedAt:
+        karlaWinner?.updatedAt ||
+        (karlaProfileIncTime >= karlaProfileBaseTime
+          ? normIncoming.partnerProfiles?.Karla?.updatedAt
+          : normBase.partnerProfiles?.Karla?.updatedAt),
     },
     Javier: {
       id: 'Javier' as const,
-      displayName:
-        normIncoming.partnerProfiles?.Javier?.displayName &&
-        normIncoming.partnerProfiles?.Javier?.displayName !== 'Javier'
-          ? normIncoming.partnerProfiles.Javier.displayName
-          : (normBase.partnerProfiles?.Javier?.displayName || 'Javier'),
-      avatarUri:
-        normIncoming.partnerProfiles?.Javier?.avatarUri ||
-        normBase.partnerProfiles?.Javier?.avatarUri ||
-        null,
+      displayName: javierWinner?.displayName?.trim() || 'Javier',
+      avatarUri: javierAvatar,
+      updatedAt:
+        javierWinner?.updatedAt ||
+        (javierProfileIncTime >= javierProfileBaseTime
+          ? normIncoming.partnerProfiles?.Javier?.updatedAt
+          : normBase.partnerProfiles?.Javier?.updatedAt),
     },
   };
 

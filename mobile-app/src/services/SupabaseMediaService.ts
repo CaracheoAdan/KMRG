@@ -1,5 +1,12 @@
 import { supabase } from '../config/supabase';
 
+let FileSystemModule: any = null;
+try {
+  FileSystemModule = require('expo-file-system/legacy');
+} catch {
+  FileSystemModule = null;
+}
+
 /**
  * Convierte un Base64 string o data-uri a ArrayBuffer/Uint8Array
  * de forma nativa en JS sin dependencias externas pesadas.
@@ -54,8 +61,16 @@ export const SupabaseMediaService = {
 
       if (photoUriOrBase64.startsWith('data:image/')) {
         fileBytes = base64ToUint8Array(photoUriOrBase64);
+      } else if (
+        (photoUriOrBase64.startsWith('file://') || photoUriOrBase64.startsWith('/')) &&
+        FileSystemModule
+      ) {
+        const base64Data = await FileSystemModule.readAsStringAsync(photoUriOrBase64, {
+          encoding: FileSystemModule.EncodingType?.Base64 || 'base64',
+        });
+        fileBytes = base64ToUint8Array(base64Data);
       } else {
-        // En caso de ser URI local 'file://', si no viene en base64 retornamos la uri
+        // En caso de no poder convertir, retornamos la uri original de forma segura
         return photoUriOrBase64;
       }
 

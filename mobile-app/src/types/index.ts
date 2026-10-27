@@ -32,6 +32,7 @@ export interface PartnerProfileInfo {
   id: UserProfile;
   displayName: string;
   avatarUri?: string | null;
+  updatedAt?: string;
 }
 
 export interface CouplePetState {
