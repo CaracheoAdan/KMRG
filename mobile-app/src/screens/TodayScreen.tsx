@@ -360,16 +360,49 @@ export const TodayScreen: React.FC = () => {
 
   const hasValidNextEvent = daysUntilNextEvent !== null;
 
-  // Mascota de pareja (estilo Pou: se mantiene feliz cuando se mandan corazones)
+  // Mascota de pareja (estilo Pou: se mantiene feliz, seria o triste según los corazones recibidos)
   const petInfo = useMemo(() => {
     const rawPet = homeState.couplePet || DEFAULT_HOME_STATE.couplePet!;
     const lastFedMs = new Date(rawPet.lastFedAt || Date.now()).getTime();
     const hoursSinceFed = Math.max(0, (Date.now() - lastFedMs) / (1000 * 60 * 60));
     const decay = Math.floor(hoursSinceFed * 2);
     const effectiveHappiness = Math.max(15, Math.min(100, (rawPet.happiness ?? 92) - decay));
+
+    // Tres estados emocionales según su amor:
+    // - Feliz: felicidad >= 65
+    // - Seria: 35 <= felicidad < 65
+    // - Triste: felicidad < 35
+    const mood: 'feliz' | 'seria' | 'triste' =
+      effectiveHappiness >= 65
+        ? 'feliz'
+        : effectiveHappiness >= 35
+        ? 'seria'
+        : 'triste';
+
+    const heartsKarla = Number(rawPet.heartsFedKarla ?? 0);
+    const heartsJavier = Number(rawPet.heartsFedJavier ?? 0);
+    const totalFed = Math.max(rawPet.heartsFedTotal || 0, heartsKarla + heartsJavier);
+
+    let leader: 'Karla' | 'Javier' | 'Empate' = 'Empate';
+    if (heartsKarla > heartsJavier) leader = 'Karla';
+    else if (heartsJavier > heartsKarla) leader = 'Javier';
+
+    const diffHearts = Math.abs(heartsKarla - heartsJavier);
+    const sumHearts = heartsKarla + heartsJavier;
+    const karlaPercent = sumHearts > 0 ? Math.round((heartsKarla / sumHearts) * 100) : 50;
+    const javierPercent = sumHearts > 0 ? Math.round((heartsJavier / sumHearts) * 100) : 50;
+
     return {
       ...rawPet,
       effectiveHappiness,
+      mood,
+      heartsFedTotal: totalFed,
+      heartsFedKarla: heartsKarla,
+      heartsFedJavier: heartsJavier,
+      leader,
+      diffHearts,
+      karlaPercent,
+      javierPercent,
     };
   }, [homeState.couplePet]);
 
@@ -378,8 +411,17 @@ export const TodayScreen: React.FC = () => {
     const nextHome: HomeState = {
       ...homeState,
       couplePet: {
-        ...petInfo,
         name: clean,
+        happiness: petInfo.happiness,
+        xp: petInfo.xp,
+        level: petInfo.level,
+        heartsFedTotal: petInfo.heartsFedTotal,
+        heartsFedKarla: petInfo.heartsFedKarla,
+        heartsFedJavier: petInfo.heartsFedJavier,
+        lastFedAt: petInfo.lastFedAt,
+        lastFedBy: petInfo.lastFedBy,
+        accessory: petInfo.accessory || 'none',
+        unlockedAccessories: petInfo.unlockedAccessories || ['none'],
       },
     };
     setHomeState(nextHome);
@@ -411,6 +453,11 @@ export const TodayScreen: React.FC = () => {
     const nextHappiness = Math.min(100, petInfo.effectiveHappiness + 25);
     const nextXp = (petInfo.xp || 0) + 25;
     const nextLevel = Math.floor(nextXp / 100) + 1;
+    const currentKarla = Number(petInfo.heartsFedKarla || 0);
+    const currentJavier = Number(petInfo.heartsFedJavier || 0);
+    const nextKarla = currentProfile === 'Karla' ? currentKarla + 1 : currentKarla;
+    const nextJavier = currentProfile === 'Javier' ? currentJavier + 1 : currentJavier;
+    const nextTotal = (petInfo.heartsFedTotal || 0) + 1;
 
     const nextHome: HomeState = {
       ...homeState,
@@ -424,9 +471,13 @@ export const TodayScreen: React.FC = () => {
         happiness: nextHappiness,
         xp: nextXp,
         level: nextLevel,
-        heartsFedTotal: (petInfo.heartsFedTotal || 0) + 1,
+        heartsFedTotal: nextTotal,
+        heartsFedKarla: nextKarla,
+        heartsFedJavier: nextJavier,
         lastFedAt: new Date().toISOString(),
         lastFedBy: currentProfile,
+        accessory: petInfo.accessory || 'none',
+        unlockedAccessories: petInfo.unlockedAccessories || ['none'],
       },
     };
     void updateAndSyncHome(nextHome);
@@ -862,26 +913,89 @@ export const TodayScreen: React.FC = () => {
             style={styles.dsPetCardHorizontal}
             accessibilityLabel={petInfo.name || 'Pochito'}
           >
-            <View style={[styles.dsQuickIcon, { backgroundColor: '#fde68a', marginRight: 12, marginBottom: 0 }]}>
+            <View
+              style={[
+                styles.dsQuickIcon,
+                {
+                  backgroundColor:
+                    petInfo.mood === 'feliz'
+                      ? '#fde68a'
+                      : petInfo.mood === 'seria'
+                      ? '#fed7aa'
+                      : '#e2e8f0',
+                  borderColor:
+                    petInfo.mood === 'feliz'
+                      ? '#f59e0b'
+                      : petInfo.mood === 'seria'
+                      ? '#fb923c'
+                      : '#94a3b8',
+                  borderWidth: 1.5,
+                  marginRight: 12,
+                  marginBottom: 0,
+                },
+              ]}
+            >
               <View style={styles.pouMiniAvatarUnified}>
                 <View style={styles.pouMiniEyesRow}>
                   <View style={styles.pouMiniEye} />
                   <View style={styles.pouMiniEye} />
                 </View>
-                <View style={styles.pouMiniSmile} />
+                {petInfo.mood === 'feliz' && <View style={styles.pouMiniSmile} />}
+                {petInfo.mood === 'seria' && <View style={styles.pouMiniSerious} />}
+                {petInfo.mood === 'triste' && <View style={styles.pouMiniSad} />}
               </View>
             </View>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <Text style={styles.dsQuickTitle} numberOfLines={1}>
                   {petInfo.name || 'Pochito'}
                 </Text>
+                <View
+                  style={[
+                    styles.petLevelTag,
+                    {
+                      backgroundColor:
+                        petInfo.mood === 'feliz'
+                          ? '#ecfdf5'
+                          : petInfo.mood === 'seria'
+                          ? '#fffbeb'
+                          : '#f1f5f9',
+                      borderColor:
+                        petInfo.mood === 'feliz'
+                          ? '#a7f3d0'
+                          : petInfo.mood === 'seria'
+                          ? '#fde68a'
+                          : '#cbd5e1',
+                      borderWidth: 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.petLevelTagText,
+                      {
+                        color:
+                          petInfo.mood === 'feliz'
+                            ? '#059669'
+                            : petInfo.mood === 'seria'
+                            ? '#b45309'
+                            : '#475569',
+                      },
+                    ]}
+                  >
+                    {petInfo.mood === 'feliz' ? '😊 Feliz' : petInfo.mood === 'seria' ? '😐 Serio' : '🥺 Triste'}
+                  </Text>
+                </View>
                 <View style={[styles.petLevelTag, { backgroundColor: `${colors.primary}18` }]}>
                   <Text style={[styles.petLevelTagText, { color: colors.primary }]}>Nv. {petInfo.level}</Text>
                 </View>
               </View>
               <Text style={styles.dsQuickSub} numberOfLines={1}>
-                Felicidad: {petInfo.effectiveHappiness}% · Toca para cuidarlo
+                {petInfo.leader === 'Empate'
+                  ? `Amor parejo (${petInfo.heartsFedKarla} 💕 c/u) · ${petInfo.effectiveHappiness}% de amor`
+                  : `👑 Más mimado por ${petInfo.leader === 'Karla' ? 'Karlita' : 'Javier'} (${
+                      petInfo.leader === 'Karla' ? petInfo.heartsFedKarla : petInfo.heartsFedJavier
+                    } 💕) · ${petInfo.effectiveHappiness}% de amor`}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
@@ -897,7 +1011,7 @@ export const TodayScreen: React.FC = () => {
         onRequestClose={() => setIsPetModalOpen(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
                 {isEditingPetName ? (
@@ -937,205 +1051,428 @@ export const TodayScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubtitle}>
-              Nuestra mascota de pareja • Se alimenta cada vez que se mandan un corazón
-            </Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+              <Text style={styles.modalSubtitle}>
+                Nuestra mascota de pareja • Se alimenta cada vez que se mandan un corazón
+              </Text>
 
-            {/* Habitación de la Mascota tipo Pou */}
-            <View style={[styles.pouRoomCard, { backgroundColor: `${primaryColor}10` }]}>
-              <View style={styles.pouStatsTopRow}>
-                <View style={[styles.pouBadgePill, { backgroundColor: '#ffffff' }]}>
-                  <Ionicons name="star" size={12} color="#f59e0b" />
-                  <Text style={styles.pouBadgeText}>Nivel {petInfo.level}</Text>
-                </View>
-                <View style={[styles.pouBadgePill, { backgroundColor: '#ffffff' }]}>
-                  <Ionicons name="heart" size={12} color={primaryColor} />
-                  <Text style={styles.pouBadgeText}>
-                    {petInfo.heartsFedTotal} corazones recibidos
-                  </Text>
-                </View>
-              </View>
-
-              {/* Personaje Pou Animado */}
-              <Animated.View
+              {/* Habitación de la Mascota tipo Pou */}
+              <View
                 style={[
-                  styles.pouBodyLarge,
+                  styles.pouRoomCard,
                   {
-                    transform: [{ translateY: petBounce }, { scale: heartScale }],
                     backgroundColor:
-                      petInfo.effectiveHappiness >= 75
-                        ? '#fde68a'
-                        : petInfo.effectiveHappiness >= 45
-                        ? '#fed7aa'
-                        : '#e2e8f0',
+                      petInfo.mood === 'feliz'
+                        ? `${primaryColor}10`
+                        : petInfo.mood === 'seria'
+                        ? '#fffbeb'
+                        : '#f1f5f9',
                   },
                 ]}
               >
-                {/* Accesorios de Pochito 2.0 */}
-                {petInfo.accessory === 'crown' && (
-                  <View style={[styles.pouTopHat, { backgroundColor: '#f59e0b' }]}>
-                    <Text style={{ fontSize: 18 }}>👑</Text>
+                <View style={styles.pouStatsTopRow}>
+                  <View style={[styles.pouBadgePill, { backgroundColor: '#ffffff' }]}>
+                    <Ionicons name="star" size={12} color="#f59e0b" />
+                    <Text style={styles.pouBadgeText}>Nivel {petInfo.level}</Text>
                   </View>
-                )}
-                {petInfo.accessory === 'party_hat' && (
-                  <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
-                    <Text style={{ fontSize: 18 }}>🥳</Text>
-                  </View>
-                )}
-                {petInfo.accessory === 'flower' && (
-                  <View style={[styles.pouTopHat, { backgroundColor: '#ec4899', right: 10 }]}>
-                    <Text style={{ fontSize: 18 }}>🌸</Text>
-                  </View>
-                )}
-                {petInfo.accessory === 'sunglasses' && (
-                  <View style={[styles.pouTopHat, { top: 35, backgroundColor: 'transparent' }]}>
-                    <Text style={{ fontSize: 24 }}>🕶️</Text>
-                  </View>
-                )}
-                {(!petInfo.accessory || petInfo.accessory === 'none') && (
-                  <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
-                    <Ionicons name="heart" size={14} color="#ffffff" />
-                  </View>
-                )}
-
-                {/* Ojos expresivos estilo Pou */}
-                <View style={styles.pouEyesRow}>
-                  <View style={styles.pouEyeWhite}>
-                    <View style={styles.pouEyePupil} />
-                    <View style={styles.pouEyeSparkle} />
-                  </View>
-                  <View style={styles.pouEyeWhite}>
-                    <View style={styles.pouEyePupil} />
-                    <View style={styles.pouEyeSparkle} />
-                  </View>
-                </View>
-
-                {/* Mejillas sonrojadas */}
-                <View style={styles.pouCheeksRow}>
-                  <View style={[styles.pouCheek, { backgroundColor: `${primaryColor}55` }]} />
-                  <View style={[styles.pouCheek, { backgroundColor: `${primaryColor}55` }]} />
-                </View>
-
-                {/* Boca según nivel de felicidad */}
-                {petInfo.effectiveHappiness >= 50 ? (
-                  <View style={styles.pouSmileHappy} />
-                ) : (
-                  <View style={styles.pouMouthSad} />
-                )}
-              </Animated.View>
-
-              {/* Estado de ánimo de la mascota */}
-              <Text style={styles.pouMoodComment}>
-                {petInfo.effectiveHappiness >= 80
-                  ? `¡${petInfo.name} está radiante de amor gracias a sus latidos!`
-                  : petInfo.effectiveHappiness >= 50
-                  ? `${petInfo.name} está contento, ¡mándense un corazón para darle energía!`
-                  : `${petInfo.name} los extraña... ¡envíale un corazón a tu pareja para cuidarlo!`}
-              </Text>
-
-              {/* Barra de Felicidad */}
-              <View style={styles.pouBarContainer}>
-                <View style={styles.pouBarHeader}>
-                  <Text style={styles.pouBarLabel}> Amor y Bienestar</Text>
-                  <Text style={[styles.pouBarPercent, { color: primaryColor }]}>
-                    {petInfo.effectiveHappiness}%
-                  </Text>
-                </View>
-                <View style={styles.pouBarTrack}>
                   <View
                     style={[
-                      styles.pouBarFill,
+                      styles.pouBadgePill,
                       {
-                        width: `${petInfo.effectiveHappiness}%`,
                         backgroundColor:
-                          petInfo.effectiveHappiness >= 50 ? primaryColor : '#f59e0b',
+                          petInfo.mood === 'feliz'
+                            ? '#ecfdf5'
+                            : petInfo.mood === 'seria'
+                            ? '#fffbeb'
+                            : '#f8fafc',
+                        borderColor:
+                          petInfo.mood === 'feliz'
+                            ? '#a7f3d0'
+                            : petInfo.mood === 'seria'
+                            ? '#fde68a'
+                            : '#cbd5e1',
                       },
                     ]}
-                  />
+                  >
+                    <Text
+                      style={[
+                        styles.pouBadgeText,
+                        {
+                          color:
+                            petInfo.mood === 'feliz'
+                              ? '#059669'
+                              : petInfo.mood === 'seria'
+                              ? '#b45309'
+                              : '#475569',
+                        },
+                      ]}
+                    >
+                      {petInfo.mood === 'feliz'
+                        ? '😊 ¡Feliz!'
+                        : petInfo.mood === 'seria'
+                        ? '😐 Serio'
+                        : '🥺 Triste'}
+                    </Text>
+                  </View>
+                  <View style={[styles.pouBadgePill, { backgroundColor: '#ffffff' }]}>
+                    <Ionicons name="heart" size={12} color={primaryColor} />
+                    <Text style={styles.pouBadgeText}>
+                      {petInfo.heartsFedTotal} corazones
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Personaje Pou Animado con 3 estados: Feliz, Serio, Triste */}
+                <Animated.View
+                  style={[
+                    styles.pouBodyLarge,
+                    {
+                      transform: [{ translateY: petBounce }, { scale: heartScale }],
+                      backgroundColor:
+                        petInfo.mood === 'feliz'
+                          ? '#fde68a'
+                          : petInfo.mood === 'seria'
+                          ? '#fed7aa'
+                          : '#e2e8f0',
+                      borderColor:
+                        petInfo.mood === 'feliz'
+                          ? '#d97706'
+                          : petInfo.mood === 'seria'
+                          ? '#ea580c'
+                          : '#64748b',
+                      shadowColor:
+                        petInfo.mood === 'feliz'
+                          ? '#d97706'
+                          : petInfo.mood === 'seria'
+                          ? '#ea580c'
+                          : '#64748b',
+                    },
+                  ]}
+                >
+                  {/* Accesorios de Pochito 2.0 */}
+                  {petInfo.accessory === 'crown' && (
+                    <View style={[styles.pouTopHat, { backgroundColor: '#f59e0b' }]}>
+                      <Text style={{ fontSize: 18 }}>👑</Text>
+                    </View>
+                  )}
+                  {petInfo.accessory === 'party_hat' && (
+                    <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
+                      <Text style={{ fontSize: 18 }}>🥳</Text>
+                    </View>
+                  )}
+                  {petInfo.accessory === 'flower' && (
+                    <View style={[styles.pouTopHat, { backgroundColor: '#ec4899', right: 10 }]}>
+                      <Text style={{ fontSize: 18 }}>🌸</Text>
+                    </View>
+                  )}
+                  {petInfo.accessory === 'sunglasses' && (
+                    <View style={[styles.pouTopHat, { top: 35, backgroundColor: 'transparent' }]}>
+                      <Text style={{ fontSize: 24 }}>🕶️</Text>
+                    </View>
+                  )}
+                  {(!petInfo.accessory || petInfo.accessory === 'none') && (
+                    <View style={[styles.pouTopHat, { backgroundColor: primaryColor }]}>
+                      <Ionicons name="heart" size={14} color="#ffffff" />
+                    </View>
+                  )}
+
+                  {/* Ojos expresivos estilo Pou */}
+                  <View style={styles.pouEyesRow}>
+                    <View style={styles.pouEyeWhite}>
+                      <View
+                        style={[
+                          styles.pouEyePupil,
+                          petInfo.mood === 'seria' && styles.pouEyePupilSerious,
+                          petInfo.mood === 'triste' && styles.pouEyePupilSad,
+                        ]}
+                      />
+                      {petInfo.mood === 'feliz' && <View style={styles.pouEyeSparkle} />}
+                      {petInfo.mood === 'triste' && (
+                        <View style={styles.pouTeardrop}>
+                          <Ionicons name="water" size={11} color="#38bdf8" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.pouEyeWhite}>
+                      <View
+                        style={[
+                          styles.pouEyePupil,
+                          petInfo.mood === 'seria' && styles.pouEyePupilSerious,
+                          petInfo.mood === 'triste' && styles.pouEyePupilSad,
+                        ]}
+                      />
+                      {petInfo.mood === 'feliz' && <View style={styles.pouEyeSparkle} />}
+                    </View>
+                  </View>
+
+                  {/* Mejillas sonrojadas según estado de ánimo */}
+                  <View style={styles.pouCheeksRow}>
+                    <View
+                      style={[
+                        styles.pouCheek,
+                        {
+                          backgroundColor:
+                            petInfo.mood === 'feliz'
+                              ? `${primaryColor}55`
+                              : petInfo.mood === 'seria'
+                              ? '#ea580c25'
+                              : '#94a3b825',
+                        },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.pouCheek,
+                        {
+                          backgroundColor:
+                            petInfo.mood === 'feliz'
+                              ? `${primaryColor}55`
+                              : petInfo.mood === 'seria'
+                              ? '#ea580c25'
+                              : '#94a3b825',
+                        },
+                      ]}
+                    />
+                  </View>
+
+                  {/* Boca según nivel de felicidad (Feliz, Serio o Triste) */}
+                  {petInfo.mood === 'feliz' && <View style={styles.pouSmileHappy} />}
+                  {petInfo.mood === 'seria' && <View style={styles.pouMouthSerious} />}
+                  {petInfo.mood === 'triste' && <View style={styles.pouMouthSad} />}
+                </Animated.View>
+
+                {/* Estado de ánimo de la mascota */}
+                <Text style={styles.pouMoodComment}>
+                  {petInfo.mood === 'feliz'
+                    ? `¡${petInfo.name} está súper feliz y rebosante de amor! Brinca de alegría cada vez que se mandan corazones.`
+                    : petInfo.mood === 'seria'
+                    ? `${petInfo.name} está serio y pensativo... Necesita cariñitos para volver a sonreír.`
+                    : `${petInfo.name} está triste y los extraña mucho... ¡Mándense un corazón ahora para devolverle el ánimo!`}
+                </Text>
+
+                {/* Barra de Felicidad */}
+                <View style={styles.pouBarContainer}>
+                  <View style={styles.pouBarHeader}>
+                    <Text style={styles.pouBarLabel}>Amor y Bienestar</Text>
+                    <Text
+                      style={[
+                        styles.pouBarPercent,
+                        {
+                          color:
+                            petInfo.mood === 'feliz'
+                              ? '#10b981'
+                              : petInfo.mood === 'seria'
+                              ? '#f59e0b'
+                              : '#64748b',
+                        },
+                      ]}
+                    >
+                      {petInfo.effectiveHappiness}%
+                    </Text>
+                  </View>
+                  <View style={styles.pouBarTrack}>
+                    <View
+                      style={[
+                        styles.pouBarFill,
+                        {
+                          width: `${petInfo.effectiveHappiness}%`,
+                          backgroundColor:
+                            petInfo.mood === 'feliz'
+                              ? '#10b981'
+                              : petInfo.mood === 'seria'
+                              ? '#f59e0b'
+                              : '#64748b',
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                {/* Conexión Semanal */}
+                <HeartbeatHeatmap
+                  streakCount={homeState.streakCount || 1}
+                  lastInteractionDate={homeState.lastInteractionDate}
+                  primaryColor={primaryColor}
+                />
+              </View>
+
+              {/* RANKING DE AMOR: ¿Quién le da más corazones a la mascota? */}
+              <View style={styles.petLoveLeaderCard}>
+                <View style={styles.petLoveLeaderHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 16 }}>👑</Text>
+                    <Text style={styles.petLoveLeaderTitle}>¿Quién da más amor a {petInfo.name}?</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.petLeaderBadge,
+                      {
+                        backgroundColor:
+                          petInfo.leader === 'Karla'
+                            ? '#ffe4e6'
+                            : petInfo.leader === 'Javier'
+                            ? '#e0f2fe'
+                            : '#f3e8ff',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.petLeaderBadgeText,
+                        {
+                          color:
+                            petInfo.leader === 'Karla'
+                              ? '#e11d48'
+                              : petInfo.leader === 'Javier'
+                              ? '#0284c7'
+                              : '#9333ea',
+                        },
+                      ]}
+                    >
+                      {petInfo.leader === 'Empate'
+                        ? '🤝 ¡Amor sincronizado!'
+                        : petInfo.leader === 'Karla'
+                        ? `👑 Karlita va ganando (+${petInfo.diffHearts})`
+                        : `👑 Javier va ganando (+${petInfo.diffHearts})`}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Tarjetas comparativas lado a lado */}
+                <View style={styles.petLoveRow}>
+                  {/* Karlita */}
+                  <View
+                    style={[
+                      styles.petPartnerCard,
+                      petInfo.leader === 'Karla' && styles.petPartnerCardLeader,
+                      { borderColor: petInfo.leader === 'Karla' ? '#f43f5e' : '#fecdd3' },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <View style={[styles.petPartnerAvatarSmall, { backgroundColor: '#f43f5e' }]}>
+                        <Text style={styles.petPartnerAvatarText}>K</Text>
+                      </View>
+                      <Text style={styles.petPartnerName} numberOfLines={1}>Karlita</Text>
+                      {petInfo.leader === 'Karla' && <Text style={{ fontSize: 13 }}>👑</Text>}
+                    </View>
+                    <Text style={[styles.petPartnerHearts, { color: '#e11d48' }]}>
+                      {petInfo.heartsFedKarla} 💕
+                    </Text>
+                    <Text style={styles.petPartnerPercent}>{petInfo.karlaPercent}% del amor</Text>
+                  </View>
+
+                  {/* Javier */}
+                  <View
+                    style={[
+                      styles.petPartnerCard,
+                      petInfo.leader === 'Javier' && styles.petPartnerCardLeader,
+                      { borderColor: petInfo.leader === 'Javier' ? '#0284c7' : '#bae6fd' },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <View style={[styles.petPartnerAvatarSmall, { backgroundColor: '#0284c7' }]}>
+                        <Text style={styles.petPartnerAvatarText}>J</Text>
+                      </View>
+                      <Text style={styles.petPartnerName} numberOfLines={1}>Javier</Text>
+                      {petInfo.leader === 'Javier' && <Text style={{ fontSize: 13 }}>👑</Text>}
+                    </View>
+                    <Text style={[styles.petPartnerHearts, { color: '#0369a1' }]}>
+                      {petInfo.heartsFedJavier} 💕
+                    </Text>
+                    <Text style={styles.petPartnerPercent}>{petInfo.javierPercent}% del amor</Text>
+                  </View>
+                </View>
+
+                {/* Barra de proporción (Duelo de corazones) */}
+                <View style={styles.petRatioTrack}>
+                  <View style={[styles.petRatioFillLeft, { width: `${petInfo.karlaPercent}%` }]} />
+                  <View style={[styles.petRatioFillRight, { width: `${petInfo.javierPercent}%` }]} />
                 </View>
               </View>
 
-              {/* Conexión Semanal */}
-              <HeartbeatHeatmap
-                streakCount={homeState.streakCount || 1}
-                lastInteractionDate={homeState.lastInteractionDate}
-                primaryColor={primaryColor}
-              />
-            </View>
+              {/* Armario de Pochito */}
+              <View style={{ marginTop: 10, marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b', marginBottom: 8 }}>
+                  Armario de {petInfo.name}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  {[
+                    { id: 'none', label: 'Sin gorro', emoji: '✨', minLvl: 1, minHearts: 0 },
+                    { id: 'crown', label: 'Corona Real', emoji: '👑', minLvl: 2, minHearts: 3 },
+                    { id: 'flower', label: 'Florecita', emoji: '🌸', minLvl: 3, minHearts: 8 },
+                    { id: 'sunglasses', label: 'Gafas Cool', emoji: '🕶️', minLvl: 4, minHearts: 15 },
+                    { id: 'party_hat', label: 'Fiesta', emoji: '🥳', minLvl: 5, minHearts: 25 },
+                  ].map((item) => {
+                    const isUnlocked = petInfo.level >= item.minLvl || (petInfo.heartsFedTotal || 0) >= item.minHearts;
+                    const isEquipped = (petInfo.accessory || 'none') === item.id;
 
-            {/* Armario de Pochito */}
-            <View style={{ marginTop: 10, marginBottom: 12 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b', marginBottom: 8 }}>
-                Armario de {petInfo.name}
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {[
-                  { id: 'none', label: 'Sin gorro', emoji: '✨', minLvl: 1, minHearts: 0 },
-                  { id: 'crown', label: 'Corona Real', emoji: '👑', minLvl: 2, minHearts: 3 },
-                  { id: 'flower', label: 'Florecita', emoji: '🌸', minLvl: 3, minHearts: 8 },
-                  { id: 'sunglasses', label: 'Gafas Cool', emoji: '🕶️', minLvl: 4, minHearts: 15 },
-                  { id: 'party_hat', label: 'Fiesta', emoji: '🥳', minLvl: 5, minHearts: 25 },
-                ].map((item) => {
-                  const isUnlocked = petInfo.level >= item.minLvl || (petInfo.heartsFedTotal || 0) >= item.minHearts;
-                  const isEquipped = (petInfo.accessory || 'none') === item.id;
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        onPress={() => {
+                          if (!isUnlocked) {
+                            Alert.alert(
+                              'Accesorio Bloqueado 🔒',
+                              `Para desbloquear ${item.label}, ${petInfo.name} necesita alcanzar el Nivel ${item.minLvl} o recibir ${item.minHearts} corazones.`
+                            );
+                            return;
+                          }
+                          const updated: HomeState = {
+                            ...homeState,
+                            couplePet: {
+                              name: petInfo.name || 'Pochito',
+                              happiness: petInfo.happiness,
+                              xp: petInfo.xp,
+                              level: petInfo.level,
+                              heartsFedTotal: petInfo.heartsFedTotal,
+                              heartsFedKarla: petInfo.heartsFedKarla,
+                              heartsFedJavier: petInfo.heartsFedJavier,
+                              lastFedAt: petInfo.lastFedAt,
+                              lastFedBy: petInfo.lastFedBy,
+                              accessory: item.id as any,
+                              unlockedAccessories: petInfo.unlockedAccessories || ['none'],
+                            },
+                          };
+                          void updateAndSyncHome(updated);
+                        }}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 14,
+                          backgroundColor: isEquipped ? `${primaryColor}20` : '#f8fafc',
+                          borderWidth: 1.5,
+                          borderColor: isEquipped ? primaryColor : '#e2e8f0',
+                          alignItems: 'center',
+                          gap: 2,
+                          minWidth: 70,
+                          opacity: isUnlocked ? 1 : 0.6,
+                        }}
+                      >
+                        <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: isEquipped ? primaryColor : '#475569' }}>
+                          {item.label}
+                        </Text>
+                        {!isUnlocked && (
+                          <Text style={{ fontSize: 8, color: '#94a3b8' }}>Nv.{item.minLvl}</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      onPress={() => {
-                        if (!isUnlocked) {
-                          Alert.alert(
-                            'Accesorio Bloqueado 🔒',
-                            `Para desbloquear ${item.label}, ${petInfo.name} necesita alcanzar el Nivel ${item.minLvl} o recibir ${item.minHearts} corazones.`
-                          );
-                          return;
-                        }
-                        const updated: HomeState = {
-                          ...homeState,
-                          couplePet: {
-                            ...petInfo,
-                            accessory: item.id as any,
-                          },
-                        };
-                        void updateAndSyncHome(updated);
-                      }}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        borderRadius: 14,
-                        backgroundColor: isEquipped ? `${primaryColor}20` : '#f8fafc',
-                        borderWidth: 1.5,
-                        borderColor: isEquipped ? primaryColor : '#e2e8f0',
-                        alignItems: 'center',
-                        gap: 2,
-                        minWidth: 70,
-                        opacity: isUnlocked ? 1 : 0.6,
-                      }}
-                    >
-                      <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
-                      <Text style={{ fontSize: 10, fontWeight: '600', color: isEquipped ? primaryColor : '#475569' }}>
-                        {item.label}
-                      </Text>
-                      {!isUnlocked && (
-                        <Text style={{ fontSize: 8, color: '#94a3b8' }}>Nv.{item.minLvl}</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            {/* Botón para Mandar Corazón y Alimentar */}
-            <TouchableOpacity
-              onPress={() => void handleHeartPress()}
-              style={[styles.primaryBtn, { backgroundColor: primaryColor }]}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="heart" size={18} color="#ffffff" />
-              <Text style={styles.primaryBtnText}>
-                Mandar Corazón a {getDisplayName(currentProfile === 'Karla' ? 'Javier' : 'Karla')} (+25% Amor)
-              </Text>
-            </TouchableOpacity>
+              {/* Botón para Mandar Corazón y Alimentar */}
+              <TouchableOpacity
+                onPress={() => void handleHeartPress()}
+                style={[styles.primaryBtn, { backgroundColor: primaryColor }]}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="heart" size={18} color="#ffffff" />
+                <Text style={styles.primaryBtnText}>
+                  Mandar Corazón a {getDisplayName(currentProfile === 'Karla' ? 'Javier' : 'Karla')} (+25% Amor)
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1729,6 +2066,22 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     borderColor: '#1e293b',
     marginTop: 2,
   },
+  pouMiniSerious: {
+    width: 7,
+    height: 1.5,
+    borderRadius: 1,
+    backgroundColor: '#1e293b',
+    marginTop: 3,
+  },
+  pouMiniSad: {
+    width: 8,
+    height: 4,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    borderTopWidth: 1.5,
+    borderColor: '#475569',
+    marginTop: 3,
+  },
   pouRoomCard: {
     borderRadius: 20,
     padding: 16,
@@ -1819,6 +2172,22 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     borderRadius: 2,
     backgroundColor: c.surface,
   },
+  pouEyePupilSerious: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  pouEyePupilSad: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 3,
+  },
+  pouTeardrop: {
+    position: 'absolute',
+    bottom: -6,
+    left: -4,
+  },
   pouCheeksRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1850,6 +2219,13 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#475569',
     marginTop: 4,
+  },
+  pouMouthSerious: {
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#1e293b',
+    marginTop: 7,
   },
   pouMoodComment: {
     fontSize: 12,
@@ -1887,6 +2263,101 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   pouBarFill: {
     height: '100%',
     borderRadius: 5,
+  },
+  petLoveLeaderCard: {
+    backgroundColor: c.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: 12,
+    marginVertical: 10,
+    width: '100%',
+  },
+  petLoveLeaderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  petLoveLeaderTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: c.text,
+  },
+  petLeaderBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  petLeaderBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  petLoveRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  petPartnerCard: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    padding: 10,
+    alignItems: 'center',
+  },
+  petPartnerCardLeader: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  petPartnerAvatarSmall: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  petPartnerAvatarText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  petPartnerName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: c.text,
+  },
+  petPartnerHearts: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginVertical: 2,
+  },
+  petPartnerPercent: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: c.textSecondary,
+  },
+  petRatioTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e2e8f0',
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  petRatioFillLeft: {
+    height: '100%',
+    backgroundColor: '#f43f5e',
+  },
+  petRatioFillRight: {
+    height: '100%',
+    backgroundColor: '#0284c7',
   },
   modalOverlay: {
     flex: 1,

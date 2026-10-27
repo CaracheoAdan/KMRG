@@ -41,6 +41,8 @@ export interface CouplePetState {
   xp: number; // 0..100
   level: number;
   heartsFedTotal: number;
+  heartsFedKarla?: number;
+  heartsFedJavier?: number;
   lastFedAt: string; // ISO string
   lastFedBy?: UserProfile;
   accessory?: 'none' | 'crown' | 'party_hat' | 'flower' | 'sunglasses';

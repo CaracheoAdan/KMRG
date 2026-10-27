@@ -77,6 +77,8 @@ export const DEFAULT_HOME_STATE: HomeState = {
     xp: 0,
     level: 1,
     heartsFedTotal: 0,
+    heartsFedKarla: 0,
+    heartsFedJavier: 0,
     lastFedAt: new Date().toISOString(),
     lastFedBy: 'Javier',
   },
@@ -439,6 +441,9 @@ function normalizeHomeState(state: HomeState): HomeState {
       ...DEFAULT_HOME_STATE.couplePet!,
       ...(state.couplePet || {}),
       name: sanitizeInput(state.couplePet?.name || 'Pochito', 24) || 'Pochito',
+      heartsFedTotal: Number(state.couplePet?.heartsFedTotal) || 0,
+      heartsFedKarla: Number(state.couplePet?.heartsFedKarla) || 0,
+      heartsFedJavier: Number(state.couplePet?.heartsFedJavier) || 0,
     },
     partnerProfiles: {
       Karla: {
@@ -515,6 +520,8 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
     xp: Math.max(basePet.xp || 0, incPet.xp || 0),
     happiness: Math.max(basePet.happiness || 50, incPet.happiness || 50),
     heartsFedTotal: Math.max(basePet.heartsFedTotal || 0, incPet.heartsFedTotal || 0),
+    heartsFedKarla: Math.max(basePet.heartsFedKarla || 0, incPet.heartsFedKarla || 0),
+    heartsFedJavier: Math.max(basePet.heartsFedJavier || 0, incPet.heartsFedJavier || 0),
     lastFedAt:
       new Date(incPet.lastFedAt || 0).getTime() >= new Date(basePet.lastFedAt || 0).getTime()
         ? incPet.lastFedAt
