@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
+import { GameButton } from './common/GameButton';
 
 interface Props {
   chess: GamesState['chess'];
@@ -108,14 +109,6 @@ export const ChessArena: React.FC<Props> = ({
     onCellPress(r, c);
   };
 
-  const statusBg = isWinner ? '#ecfdf5' : isWhite ? '#fdf2f8' : '#f0f9ff';
-  const statusBorder = isWinner ? '#a7f3d0' : isWhite ? '#fbcfe8' : '#bae6fd';
-  const statusColor = isWinner
-    ? '#059669'
-    : isWhite
-    ? GAMES_THEME.colors.karla.text
-    : GAMES_THEME.colors.javier.text;
-
   // Piezas capturadas y cálculo de ventaja material
   const capturedByKarla = chess.capturedByW || [];
   const capturedByJavier = chess.capturedByB || [];
@@ -136,29 +129,18 @@ export const ChessArena: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      {/* 1. Pill de Turno y Alerta de Jaque */}
-      <View style={[styles.turnPill, { backgroundColor: statusBg, borderColor: statusBorder }]}>
-        <Ionicons
-          name={isWinner ? 'trophy' : isKingInCheck ? 'alert-circle' : 'shield-checkmark'}
-          size={14}
-          color={statusColor}
-        />
-        <Text style={[styles.turnText, { color: statusColor }]}>
-          {isWinner
-            ? `¡VICTORIA DE ${chess.winner === 'w' ? 'KARLITA' : 'JAVIER'}!`
-            : `TURNO: ${isWhite ? 'KARLITA (BLANCAS) 👑' : 'JAVIER (NEGRAS) ⚔️'}`}
-        </Text>
-        {isKingInCheck && !isWinner && (
-          <Animated.View
-            style={[
-              styles.checkWarningBadge,
-              { transform: [{ scale: checkPulseAnim }] },
-            ]}
-          >
-            <Text style={styles.checkWarningText}>¡JAQUE!</Text>
-          </Animated.View>
-        )}
-      </View>
+      {/* 1. Alerta de Jaque (Solo visible cuando hay jaque, sin redundancia de turno) */}
+      {isKingInCheck && !isWinner && (
+        <Animated.View
+          style={[
+            styles.checkWarningBadge,
+            { transform: [{ scale: checkPulseAnim }] },
+          ]}
+        >
+          <Ionicons name="alert-circle" size={13} color="#ffffff" />
+          <Text style={styles.checkWarningText}>¡REY EN JAQUE!</Text>
+        </Animated.View>
+      )}
 
       {/* 2. Barra Superior: Javier (Negras) con Avatar, Nombre, Ventaja Material y Capturas */}
       <View
@@ -173,10 +155,7 @@ export const ChessArena: React.FC<Props> = ({
             <Text style={[styles.playerAvatarText, { color: '#0369a1' }]}>J</Text>
           </View>
           <View style={styles.playerNameColumn}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={styles.playerName}>Javier</Text>
-              {!isWhite && !isWinner && <View style={styles.turnActiveDotJavier} />}
-            </View>
+            <Text style={styles.playerName}>Javier</Text>
             <Text style={styles.playerRole}>Negras ⚔️</Text>
           </View>
           {diffJavier > 0 && (
@@ -322,8 +301,7 @@ export const ChessArena: React.FC<Props> = ({
                 {/* Coordenada Numérica Derecha Simétrica (Previene recorte) */}
                 <View style={[styles.coordNumberCell, { height: cellSize, width: coordSize }]}>
                   <Text style={[styles.coordNumberText, { opacity: 0.5 }]}>
-                    {ROWS_NUMBERS[r]}
-                  </Text>
+                    {ROWS_NUMBERS[r]}</Text>
                 </View>
               </View>
             ))}
@@ -355,10 +333,7 @@ export const ChessArena: React.FC<Props> = ({
             <Text style={[styles.playerAvatarText, { color: '#be185d' }]}>K</Text>
           </View>
           <View style={styles.playerNameColumn}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={styles.playerName}>Karlita</Text>
-              {isWhite && !isWinner && <View style={styles.turnActiveDotKarla} />}
-            </View>
+            <Text style={styles.playerName}>Karlita</Text>
             <Text style={styles.playerRole}>Blancas 👑</Text>
           </View>
           {diffKarla > 0 && (
@@ -434,45 +409,26 @@ export const ChessArena: React.FC<Props> = ({
         </ScrollView>
       </View>
 
-      {/* 6. Dock Inferior: Deshacer y Reiniciar */}
+      {/* 6. Dock Inferior: Deshacer y Reiniciar con Botones Unificados */}
       <View style={[styles.dockContainer, { width: frameWidth }]}>
-        <TouchableOpacity
-          onPress={() => {
-            void triggerGameHaptic('medium');
-            onUndo();
-          }}
-          disabled={chessHistoryLength === 0}
-          style={[styles.dockSecondaryBtn, chessHistoryLength === 0 && styles.btnDisabled]}
-          activeOpacity={0.8}
-          accessibilityLabel="Deshacer jugada"
-        >
-          <Ionicons
-            name="arrow-undo"
-            size={16}
-            color={chessHistoryLength === 0 ? '#94a3b8' : '#334155'}
+        <View style={{ flex: 1 }}>
+          <GameButton
+            label={`Deshacer (${chessHistoryLength})`}
+            icon="arrow-undo"
+            variant="secondary"
+            disabled={chessHistoryLength === 0}
+            onPress={onUndo}
           />
-          <Text
-            style={[
-              styles.dockSecondaryBtnText,
-              chessHistoryLength === 0 && { color: '#94a3b8' },
-            ]}
-          >
-            Deshacer ({chessHistoryLength})
-          </Text>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          onPress={() => {
-            void triggerGameHaptic('medium');
-            onReset();
-          }}
-          style={styles.dockResetBtn}
-          activeOpacity={0.8}
-          accessibilityLabel="Reiniciar tablero de ajedrez"
-        >
-          <Ionicons name="reload" size={16} color="#78350f" />
-          <Text style={styles.dockResetBtnText}>Reiniciar</Text>
-        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <GameButton
+            label="Reiniciar"
+            icon="reload"
+            variant="destructive"
+            onPress={onReset}
+          />
+        </View>
       </View>
     </View>
   );
@@ -483,36 +439,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     width: '100%',
-    paddingHorizontal: GAMES_THEME.spacing.lg,
-  },
-  turnPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  turnText: {
-    fontSize: 11.5,
-    fontWeight: '800',
+    paddingHorizontal: 8,
+    flex: 1,
+    justifyContent: 'center',
   },
   checkWarningBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#ef4444',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+    ...GAMES_THEME.shadows.soft,
   },
   checkWarningText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
-
-  // Barras de Jugador y Capturas (Arriba y Abajo)
   playerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -563,18 +509,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
   },
-  turnActiveDotKarla: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#ec4899',
-  },
-  turnActiveDotJavier: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#0284c7',
-  },
   materialAdvantageBadgeKarla: {
     backgroundColor: '#ec4899',
     paddingHorizontal: 6,
@@ -619,8 +553,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 1.5,
   },
-
-  // Marco de Madera Biselada Noble
   woodOuterBevel: {
     backgroundColor: '#451a03',
     borderRadius: 14,
@@ -688,8 +620,6 @@ const styles = StyleSheet.create({
   pieceGlyph: {
     fontWeight: '700',
   },
-
-  // Historial de Jugadas en Chips Horizontales
   movesHistoryCard: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -768,50 +698,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0284c7',
   },
-
-  // Dock Inferior
   dockContainer: {
     flexDirection: 'row',
     gap: 8,
     paddingTop: 2,
-  },
-  dockSecondaryBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    ...GAMES_THEME.shadows.soft,
-  },
-  btnDisabled: {
-    opacity: 0.45,
-  },
-  dockSecondaryBtnText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  dockResetBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#fef3c7',
-    borderWidth: 1.5,
-    borderColor: '#fde047',
-    ...GAMES_THEME.shadows.soft,
-  },
-  dockResetBtnText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#78350f',
   },
 });

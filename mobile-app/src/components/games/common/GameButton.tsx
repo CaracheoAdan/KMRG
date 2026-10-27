@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   ViewStyle,
-  TextStyle,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +16,7 @@ interface ButtonProps {
   onPress: () => void;
   disabled?: boolean;
   style?: ViewStyle;
-  variant?: 'primary' | 'secondary' | 'cyan' | 'gold' | 'danger';
+  variant?: 'primary' | 'secondary' | 'destructive' | 'danger' | 'cyan' | 'gold';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -32,23 +31,8 @@ export const GameButton: React.FC<ButtonProps> = ({
 }) => {
   const handlePress = () => {
     if (disabled) return;
-    void triggerGameHaptic('medium');
+    void triggerGameHaptic(variant === 'destructive' || variant === 'danger' ? 'warning' : 'medium');
     onPress();
-  };
-
-  const getGradient = () => {
-    switch (variant) {
-      case 'cyan':
-        return GAMES_THEME.gradients.cyanBtn;
-      case 'gold':
-        return GAMES_THEME.gradients.goldBtn;
-      case 'secondary':
-        return GAMES_THEME.gradients.secondaryBtn;
-      case 'danger':
-        return ['#ef4444', '#b91c1c'] as const;
-      default:
-        return GAMES_THEME.gradients.primaryBtn;
-    }
   };
 
   const padV = size === 'sm' ? 8 : size === 'lg' ? 14 : 11;
@@ -56,6 +40,7 @@ export const GameButton: React.FC<ButtonProps> = ({
   const fontSize = size === 'sm' ? 12 : size === 'lg' ? 15 : 13.5;
   const iconSize = size === 'sm' ? 14 : size === 'lg' ? 18 : 16;
 
+  // 1. Variante Secondary: Fondo blanco con borde lila suave
   if (variant === 'secondary') {
     return (
       <TouchableOpacity
@@ -76,7 +61,7 @@ export const GameButton: React.FC<ButtonProps> = ({
           <Ionicons
             name={icon}
             size={iconSize}
-            color={GAMES_THEME.colors.purple}
+            color="#6b21a8"
             style={{ marginRight: 6 }}
           />
         )}
@@ -85,6 +70,37 @@ export const GameButton: React.FC<ButtonProps> = ({
     );
   }
 
+  // 2. Variante Destructive / Reiniciar: Outline rosa
+  if (variant === 'destructive' || variant === 'danger') {
+    return (
+      <TouchableOpacity
+        onPress={handlePress}
+        disabled={disabled}
+        activeOpacity={0.8}
+        style={[
+          styles.destructiveBase,
+          {
+            paddingVertical: padV,
+            paddingHorizontal: padH,
+            opacity: disabled ? 0.45 : 1,
+          },
+          style,
+        ]}
+      >
+        {icon && (
+          <Ionicons
+            name={icon}
+            size={iconSize}
+            color="#e11d48"
+            style={{ marginRight: 6 }}
+          />
+        )}
+        <Text style={[styles.destructiveText, { fontSize }]}>{label}</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  // 3. Variante Primary: Degradado rosa -> coral, texto blanco y sombra
   return (
     <TouchableOpacity
       onPress={handlePress}
@@ -98,9 +114,9 @@ export const GameButton: React.FC<ButtonProps> = ({
       ]}
     >
       <LinearGradient
-        colors={getGradient() as any}
+        colors={['#ec4899', '#f43f5e']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        end={{ x: 1, y: 0 }}
         style={[
           styles.gradientInner,
           {
@@ -134,7 +150,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   primaryText: {
     color: '#ffffff',
@@ -147,11 +163,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderColor: '#e9d5ff',
+    backgroundColor: '#ffffff',
+    ...GAMES_THEME.shadows.soft,
   },
   secondaryText: {
-    color: GAMES_THEME.colors.purple,
+    color: '#6b21a8',
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  destructiveBase: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#f43f5e',
+    backgroundColor: '#fff1f2',
+    ...GAMES_THEME.shadows.soft,
+  },
+  destructiveText: {
+    color: '#e11d48',
     fontWeight: '800',
     letterSpacing: 0.3,
   },

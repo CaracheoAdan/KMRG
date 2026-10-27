@@ -38,13 +38,13 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 900,
+          toValue: 1.12,
+          duration: 800,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 900,
+          duration: 800,
           useNativeDriver: true,
         }),
       ])
@@ -112,22 +112,26 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
         </View>
       </View>
 
-      {/* Derecha: Avatares SEPARADOS (K y J con borde blanco y halo de turno) + Botón Reiniciar */}
+      {/* Derecha: Avatares K y J de 40px con Nombre Debajo + Botón Reiniciar */}
       <View style={styles.rightSection}>
         <View style={styles.avatarsRow}>
-          {/* Avatar Karla */}
+          {/* Avatar Karlita */}
           <TouchableOpacity
             onPress={() => {
               void triggerGameHaptic('light');
               onPressScore?.('Karla');
             }}
             activeOpacity={0.75}
+            style={styles.avatarUnit}
             accessibilityLabel="Ver desglose de Karlita"
           >
             <Animated.View
               style={[
-                styles.miniAvatar,
-                { backgroundColor: '#fdf2f8', borderColor: isKarlaTurn ? '#ec4899' : '#ffffff' },
+                styles.avatarCircle40,
+                {
+                  backgroundColor: '#fdf2f8',
+                  borderColor: isKarlaTurn ? '#ec4899' : '#ffffff',
+                },
                 isKarlaTurn && {
                   borderWidth: 2.5,
                   transform: [{ scale: pulseAnim }],
@@ -135,23 +139,30 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
                 },
               ]}
             >
-              <Text style={[styles.avatarLetterKarla, isKarlaTurn && { fontWeight: '900' }]}>K</Text>
+              <Text style={styles.avatarLetterKarla}>K</Text>
             </Animated.View>
+            <Text style={[styles.avatarSubName, isKarlaTurn && styles.avatarSubNameActive]}>
+              Karlita
+            </Text>
           </TouchableOpacity>
 
-          {/* Avatar Javier (Separado, sin superponerse) */}
+          {/* Avatar Javier */}
           <TouchableOpacity
             onPress={() => {
               void triggerGameHaptic('light');
               onPressScore?.('Javier');
             }}
             activeOpacity={0.75}
+            style={styles.avatarUnit}
             accessibilityLabel="Ver desglose de Javier"
           >
             <Animated.View
               style={[
-                styles.miniAvatar,
-                { backgroundColor: '#f0f9ff', borderColor: isJavierTurn ? '#0ea5e9' : '#ffffff' },
+                styles.avatarCircle40,
+                {
+                  backgroundColor: '#f0f9ff',
+                  borderColor: isJavierTurn ? '#0ea5e9' : '#ffffff',
+                },
                 isJavierTurn && {
                   borderWidth: 2.5,
                   transform: [{ scale: pulseAnim }],
@@ -159,8 +170,11 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
                 },
               ]}
             >
-              <Text style={[styles.avatarLetterJavier, isJavierTurn && { fontWeight: '900' }]}>J</Text>
+              <Text style={styles.avatarLetterJavier}>J</Text>
             </Animated.View>
+            <Text style={[styles.avatarSubName, isJavierTurn && styles.avatarSubNameActive]}>
+              Javier
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -186,8 +200,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: GAMES_THEME.spacing.lg,
-    paddingVertical: GAMES_THEME.spacing.sm + 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(244, 63, 94, 0.15)',
@@ -206,7 +220,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   backBtnText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#334155',
   },
@@ -217,7 +231,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   iconHalo: {
     width: 22,
@@ -228,28 +242,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   gameTitleText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: 0.2,
-    fontFamily: GAMES_THEME.fonts.display,
+    color: '#1e293b',
   },
   turnPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 2.5,
-    borderRadius: GAMES_THEME.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
     borderWidth: 1,
   },
   turnPillMyTurn: {
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   turnPillPartner: {
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderColor: 'rgba(245, 158, 11, 0.3)',
   },
   turnDot: {
     width: 6,
@@ -257,45 +269,61 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   turnLabelText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: GAMES_THEME.spacing.sm,
+    gap: 8,
   },
   avatarsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6, // Separados limpiamente sin montarse
+    gap: 8,
+    alignItems: 'flex-start',
   },
-  miniAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
+  avatarUnit: {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarCircle40: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...GAMES_THEME.shadows.soft,
+  },
   avatarLetterKarla: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#db2777',
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#be185d',
   },
   avatarLetterJavier: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0284c7',
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0369a1',
+  },
+  avatarSubName: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#64748b',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  avatarSubNameActive: {
+    fontWeight: '900',
+    color: '#0f172a',
   },
   circleBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

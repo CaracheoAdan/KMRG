@@ -29,6 +29,7 @@ import { HangmanArena } from '../components/games/HangmanArena';
 import { BattleshipArena } from '../components/games/BattleshipArena';
 import { MoodMascot } from '../components/MoodMascot';
 import { GameHeader } from '../components/games/common/GameHeader';
+import { GameButton } from '../components/games/common/GameButton';
 import { CelebrationOverlay } from '../components/games/common/CelebrationOverlay';
 import { GameScoreBreakdownModal } from '../components/games/common/GameScoreBreakdownModal';
 import { GAMES_THEME, triggerGameHaptic } from '../theme/gamesTheme';
@@ -2054,14 +2055,16 @@ export const GamesScreen: React.FC = () => {
             return (
               <View style={[styles.launchModalCard, { backgroundColor: colors.surface, borderColor: `${gameInfo.iconColor}40` }]}>
                 {/* Ícono Grande con Degradado Temático */}
-                <LinearGradient
-                  colors={[gameInfo.iconColor, `${gameInfo.iconColor}b3`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.launchModalIconBox}
-                >
-                  <Ionicons name={gameInfo.icon as any} size={40} color="#ffffff" />
-                </LinearGradient>
+                <View style={styles.launchModalIconWrap}>
+                  <LinearGradient
+                    colors={[gameInfo.iconColor, `${gameInfo.iconColor}dd`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.launchModalIconBox}
+                  >
+                    <Ionicons name={gameInfo.icon as any} size={38} color="#ffffff" />
+                  </LinearGradient>
+                </View>
 
                 <Text style={[styles.launchModalTitle, { color: colors.text }]}>
                   {gameInfo.label}
@@ -2086,9 +2089,11 @@ export const GamesScreen: React.FC = () => {
                           <Text style={[styles.launchMiniAvatarText, { color: '#be185d' }]}>K</Text>
                         </View>
                         <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
-                          {getDisplayName('Karla')}
+                          Karlita
                         </Text>
-                        <Text style={styles.launchModalPlayerWins}>{winsK} vict.</Text>
+                        <Text style={styles.launchModalPlayerWins}>
+                          {winsK === 1 ? '1 victoria' : `${winsK} victorias`}
+                        </Text>
                         <Text style={styles.launchModalPlayerPts}>{ptsK} pts</Text>
                       </View>
 
@@ -2104,9 +2109,11 @@ export const GamesScreen: React.FC = () => {
                           <Text style={[styles.launchMiniAvatarText, { color: '#0369a1' }]}>J</Text>
                         </View>
                         <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
-                          {getDisplayName('Javier')}
+                          Javier
                         </Text>
-                        <Text style={styles.launchModalPlayerWins}>{winsJ} vict.</Text>
+                        <Text style={styles.launchModalPlayerWins}>
+                          {winsJ === 1 ? '1 victoria' : `${winsJ} victorias`}
+                        </Text>
                         <Text style={styles.launchModalPlayerPts}>{ptsJ} pts</Text>
                       </View>
                     </View>
@@ -2138,40 +2145,26 @@ export const GamesScreen: React.FC = () => {
                   </Text>
                 </View>
 
-                {/* Botón Primario Unificado con Haptic Feedback */}
-                <TouchableOpacity
-                  onPress={() => {
-                    void triggerGameHaptic('medium');
-                    const toLaunch = pendingGameToLaunch;
-                    setPendingGameToLaunch(null);
-                    setActiveGame(toLaunch);
-                  }}
-                  style={{ width: '100%' }}
-                  activeOpacity={0.88}
-                >
-                  <LinearGradient
-                    colors={[gameInfo.iconColor, `${gameInfo.iconColor}dd`]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.launchPrimaryBtn}
-                  >
-                    <Ionicons name="play" size={18} color="#ffffff" />
-                    <Text style={styles.launchPrimaryBtnText}>Iniciar Partida</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    void triggerGameHaptic('light');
-                    setPendingGameToLaunch(null);
-                  }}
-                  style={styles.launchCancelBtn}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.launchCancelBtnText, { color: colors.textSecondary }]}>
-                    Volver al Lobby
-                  </Text>
-                </TouchableOpacity>
+                {/* Botones de acción del Modal Unificados */}
+                <View style={styles.launchActionsRow}>
+                  <GameButton
+                    label="Iniciar Partida"
+                    icon="play"
+                    variant="primary"
+                    onPress={() => {
+                      const toLaunch = pendingGameToLaunch;
+                      setPendingGameToLaunch(null);
+                      setActiveGame(toLaunch);
+                    }}
+                  />
+                  <GameButton
+                    label="Volver al Lobby"
+                    variant="secondary"
+                    onPress={() => {
+                      setPendingGameToLaunch(null);
+                    }}
+                  />
+                </View>
               </View>
             );
           })()}
@@ -2463,18 +2456,22 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
   },
+  launchModalIconWrap: {
+    marginBottom: 12,
+    borderRadius: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   launchModalIconBox: {
     width: 72,
     height: 72,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    overflow: 'hidden',
   },
   launchModalTitle: {
     fontSize: 24,
@@ -2562,33 +2559,9 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
   },
-  launchPrimaryBtn: {
-    width: '100%' as const,
-    height: 48,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  launchPrimaryBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  launchCancelBtn: {
-    marginTop: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-  },
-  launchCancelBtnText: {
-    fontSize: 12.5,
-    fontWeight: '700',
+  launchActionsRow: {
+    width: '100%',
+    gap: 10,
   },
   lobbyScoreboard: {
     flexDirection: 'row',

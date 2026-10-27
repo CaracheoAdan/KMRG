@@ -11,6 +11,7 @@ import { Ionicons } from '../ui/Icon';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
+import { GameButton } from './common/GameButton';
 
 interface Props {
   hangman: GamesState['hangman'];
@@ -71,7 +72,7 @@ export const HangmanArena: React.FC<Props> = ({
     (l) => !hangman.word.toUpperCase().includes(l)
   );
 
-  // Limpieza y partición de la palabra en grupos de palabras reales
+  // Limpieza y partición de la palabra en grupos reales de palabras
   const cleanWord = (hangman.word || '').trim().toUpperCase();
   const words = cleanWord.split(' ').filter(Boolean);
   const totalLettersNoSpaces = cleanWord.replace(/\s+/g, '').length;
@@ -79,7 +80,7 @@ export const HangmanArena: React.FC<Props> = ({
   // Ancho del contenedor disponible
   const containerWidth = Math.min(SCREEN_W - 20, 390);
 
-  // Dimensiones del teclado QWERTY: 10 teclas por fila + 9 espacios de 4px
+  // Dimensiones del teclado QWERTY
   const keyWidth = Math.floor((containerWidth - (9 * 4)) / 10);
   const keyHeight = 44;
 
@@ -101,10 +102,9 @@ export const HangmanArena: React.FC<Props> = ({
     <View style={styles.container}>
       {/* 1. Tarjeta Escénica: Ilustración Grande Centrada + Vidas y Pista */}
       <View style={[styles.stageCard, GAMES_THEME.shadows.card]}>
-        {/* Barra superior de la tarjeta: Vidas y Categoría */}
+        {/* Barra superior de la tarjeta: Vidas y Categoría (Sin ícono duplicado) */}
         <View style={styles.stageHeader}>
           <View style={styles.categoryBadge}>
-            <Ionicons name="bulb" size={13} color="#9333ea" />
             <Text style={styles.categoryText}>{hangman.category || 'Palabra Oculta'}</Text>
           </View>
 
@@ -124,32 +124,35 @@ export const HangmanArena: React.FC<Props> = ({
           </Animated.View>
         </View>
 
-        {/* Escenario Ilustrado Grande Centrado (~45% del alto de la tarjeta) con Noche, Luna y Patíbulo */}
+        {/* Escenario Ilustrado Grande Centrado (~45% del alto de la tarjeta) */}
+        {/* Patíbulo en Madera Clara / Crema con Brillo, Cuerda, Suelo y Luna */}
         <LinearGradient
           colors={['#1e1b4b', '#312e81', '#1e1b4b']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.gallowsSceneStage}
         >
-          {/* Elementos celestes decorativos de atmósfera nocturna romántica */}
+          {/* Luna brillante */}
           <View style={styles.sceneMoon}>
-            <Ionicons name="moon" size={18} color="#fde047" />
+            <Ionicons name="moon" size={24} color="#fde047" />
           </View>
           <View style={[styles.sceneStar, { top: 12, left: 24 }]} />
           <View style={[styles.sceneStar, { top: 28, left: 60, width: 2, height: 2 }]} />
-          <View style={[styles.sceneStar, { top: 16, right: 54, width: 2, height: 2 }]} />
-          <View style={[styles.sceneStar, { top: 38, right: 28 }]} />
+          <View style={[styles.sceneStar, { top: 16, right: 64, width: 2, height: 2 }]} />
+          <View style={[styles.sceneStar, { top: 38, right: 38 }]} />
 
-          {/* Ilustración Monumental y Centrada del Patíbulo */}
+          {/* Suelo / Plataforma del patíbulo */}
+          <View style={styles.groundBeam} />
+
+          {/* Ilustración Grande y Centrada del Patíbulo en Madera Crema Noble */}
           <View style={styles.grandGallowsBox}>
-            {/* Horca de Madera Robusta */}
             <View style={styles.grandGallowsBase} />
             <View style={styles.grandGallowsPole} />
             <View style={styles.grandGallowsTop} />
             <View style={styles.grandGallowsBrace} />
             <View style={styles.grandGallowsRope} />
 
-            {/* Muñequito de Pareja Dibujado Trazo a Trazo en Cada Error */}
+            {/* Muñequito de Pareja Dibujado Trazo a Trazo */}
             {wrongGuessesCount >= 1 && (
               <View style={[styles.grandHmHead, isLost && styles.hmHeadLost]}>
                 <View style={styles.grandHmBow} />
@@ -163,7 +166,6 @@ export const HangmanArena: React.FC<Props> = ({
 
             {wrongGuessesCount >= 2 && (
               <View style={styles.grandHmBody}>
-                {/* Pequeño Corazón en el Pecho */}
                 <Ionicons name="heart" size={8} color="#ffffff" style={{ opacity: 0.9 }} />
               </View>
             )}
@@ -174,10 +176,10 @@ export const HangmanArena: React.FC<Props> = ({
           </View>
         </LinearGradient>
 
-        {/* Pista y Estado debidamente colocados DEBAJO de la ilustración */}
+        {/* Pista y Estado DEBAJO de la ilustración con ÚNICO ícono de información */}
         <View style={styles.hintWrapUnderGallows}>
           <View style={styles.hintQuoteRow}>
-            <Ionicons name="chatbubble-ellipses-outline" size={15} color="#9333ea" />
+            <Ionicons name="bulb" size={15} color="#9333ea" />
             <Text style={styles.hintQuoteText} numberOfLines={3}>
               “{hangman.hint}”
             </Text>
@@ -291,33 +293,25 @@ export const HangmanArena: React.FC<Props> = ({
         ))}
       </View>
 
-      {/* 5. Dock Inferior: Retar Pareja (+400 pts) y Otra Palabra */}
+      {/* 5. Dock Inferior: Botones Unificados (Primary + Secondary) */}
       <View style={styles.dockActionsRow}>
-        <TouchableOpacity
-          onPress={() => {
-            void triggerGameHaptic('medium');
-            onRandomWord();
-          }}
-          style={styles.dockSecondaryBtn}
-          activeOpacity={0.8}
-          accessibilityLabel="Generar otra palabra aleatoria"
-        >
-          <Ionicons name="shuffle" size={16} color="#475569" />
-          <Text style={styles.dockSecondaryBtnText}>Otra Palabra</Text>
-        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <GameButton
+            label="Otra Palabra"
+            icon="shuffle"
+            variant="secondary"
+            onPress={onRandomWord}
+          />
+        </View>
 
-        <TouchableOpacity
-          onPress={() => {
-            void triggerGameHaptic('medium');
-            onChallengePartner();
-          }}
-          style={styles.dockChallengeBtn}
-          activeOpacity={0.85}
-          accessibilityLabel="Retar a mi pareja con palabra secreta"
-        >
-          <Ionicons name="sparkles" size={16} color="#ffffff" />
-          <Text style={styles.dockChallengeBtnText}>+400 Retar Pareja</Text>
-        </TouchableOpacity>
+        <View style={{ flex: 1.3 }}>
+          <GameButton
+            label="+400 Retar Pareja"
+            icon="sparkles"
+            variant="primary"
+            onPress={onChallengePartner}
+          />
+        </View>
       </View>
     </View>
   );
@@ -329,6 +323,8 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
     paddingHorizontal: 10,
+    flex: 1,
+    justifyContent: 'center',
   },
   stageCard: {
     width: '100%',
@@ -348,10 +344,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
   },
   categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 3.5,
     borderRadius: 8,
     backgroundColor: 'rgba(147, 51, 234, 0.12)',
@@ -389,8 +382,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     opacity: 0.8,
   },
+  groundBeam: {
+    position: 'absolute',
+    bottom: 8,
+    left: '10%',
+    right: '10%',
+    height: 4,
+    backgroundColor: '#fde68a',
+    borderRadius: 2,
+    opacity: 0.8,
+  },
 
-  // Patíbulo Grande Centrado
+  // Patíbulo Grande en Madera Crema / Clara con Borde Cálido y Glow
   grandGallowsBox: {
     width: 150,
     height: 145,
@@ -402,45 +405,63 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     left: 10,
-    width: 70,
-    height: 7,
-    backgroundColor: '#854d0e',
-    borderRadius: 3.5,
+    width: 72,
+    height: 8,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1.5,
+    borderColor: '#d97706',
+    borderRadius: 4,
+    shadowColor: '#fde047',
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 3,
   },
   grandGallowsPole: {
     position: 'absolute',
     bottom: 12,
     left: 28,
-    width: 7.5,
+    width: 8,
     height: 120,
-    backgroundColor: '#78350f',
-    borderRadius: 3.5,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1.5,
+    borderColor: '#d97706',
+    borderRadius: 4,
+    shadowColor: '#fde047',
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
   },
   grandGallowsTop: {
     position: 'absolute',
     top: 8,
     left: 28,
-    width: 84,
-    height: 7.5,
-    backgroundColor: '#78350f',
-    borderRadius: 3.5,
+    width: 86,
+    height: 8,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1.5,
+    borderColor: '#d97706',
+    borderRadius: 4,
+    shadowColor: '#fde047',
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
   },
   grandGallowsBrace: {
     position: 'absolute',
     top: 15,
     left: 38,
     width: 22,
-    height: 4.5,
-    backgroundColor: '#92400e',
+    height: 5,
+    backgroundColor: '#fde68a',
+    borderWidth: 1,
+    borderColor: '#b45309',
     transform: [{ rotate: '-45deg' }],
   },
   grandGallowsRope: {
     position: 'absolute',
     top: 15,
-    left: 102,
+    left: 104,
     width: 3.5,
     height: 20,
-    backgroundColor: '#d97706',
+    backgroundColor: '#f59e0b',
     borderRadius: 2,
   },
 
@@ -448,7 +469,7 @@ const styles = StyleSheet.create({
   grandHmHead: {
     position: 'absolute',
     top: 34,
-    left: 86,
+    left: 88,
     width: 35,
     height: 35,
     borderRadius: 17.5,
@@ -501,7 +522,7 @@ const styles = StyleSheet.create({
   grandHmBody: {
     position: 'absolute',
     top: 68,
-    left: 101.5,
+    left: 103.5,
     width: 4.5,
     height: 34,
     backgroundColor: '#db2777',
@@ -512,7 +533,7 @@ const styles = StyleSheet.create({
   grandHmArmLeft: {
     position: 'absolute',
     top: 76,
-    left: 84,
+    left: 86,
     width: 20,
     height: 3.5,
     backgroundColor: '#db2777',
@@ -522,7 +543,7 @@ const styles = StyleSheet.create({
   grandHmArmRight: {
     position: 'absolute',
     top: 76,
-    left: 103,
+    left: 105,
     width: 20,
     height: 3.5,
     backgroundColor: '#db2777',
@@ -532,7 +553,7 @@ const styles = StyleSheet.create({
   grandHmLegLeft: {
     position: 'absolute',
     top: 100,
-    left: 88,
+    left: 90,
     width: 18,
     height: 3.5,
     backgroundColor: '#db2777',
@@ -542,7 +563,7 @@ const styles = StyleSheet.create({
   grandHmLegRight: {
     position: 'absolute',
     top: 100,
-    left: 101,
+    left: 103,
     width: 18,
     height: 3.5,
     backgroundColor: '#db2777',
@@ -550,7 +571,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '40deg' }],
   },
 
-  // Pista debajo de la ilustración
+  // Pista debajo de la ilustración con ÚNICO ícono
   hintWrapUnderGallows: {
     width: '100%',
     backgroundColor: '#fdf4ff',
@@ -742,39 +763,5 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
     marginTop: 2,
-  },
-  dockSecondaryBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    ...GAMES_THEME.shadows.soft,
-  },
-  dockSecondaryBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  dockChallengeBtn: {
-    flex: 1.25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#9333ea',
-    ...GAMES_THEME.shadows.glowPurple,
-  },
-  dockChallengeBtnText: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: '#ffffff',
   },
 });

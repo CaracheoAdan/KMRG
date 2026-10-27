@@ -149,7 +149,7 @@ export const createRandomBattleshipFleet = (): BattleshipShip[] => {
         const nr = horizontal ? r : r + i;
         const nc = horizontal ? c + i : c;
         const idx = nr * 10 + nc;
-        if (occupied.has(idx)) {
+        if (nr < 0 || nr >= 10 || nc < 0 || nc >= 10 || idx < 0 || idx >= 100 || occupied.has(idx)) {
           collision = true;
           break;
         }
