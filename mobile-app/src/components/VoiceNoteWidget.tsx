@@ -14,11 +14,7 @@ import {
 let AudioModule: any = null;
 let FileSystemModule: any = null;
 
-try {
-  AudioModule = require('expo-av')?.Audio;
-} catch {
-  AudioModule = null;
-}
+AudioModule = null;
 
 try {
   FileSystemModule = require('expo-file-system/legacy');
