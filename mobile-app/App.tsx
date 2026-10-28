@@ -77,9 +77,54 @@ function MainNavigator() {
   );
 }
 
+
+import { Text, TouchableOpacity } from 'react-native';
+
+class RootErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: any }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('[RootErrorBoundary] Error atrapado en raíz:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#ffffff' }}>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginBottom: 10, textAlign: 'center' }}>
+            KMRG Amor
+          </Text>
+          <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24 }}>
+            La sesión se ha protegido. Toca el botón para reiniciar la pantalla.
+          </Text>
+          <TouchableOpacity
+            onPress={() => this.setState({ hasError: false, error: null })}
+            style={{ backgroundColor: '#ec4899', paddingHorizontal: 28, paddingVertical: 14, borderRadius: 16 }}
+            activeOpacity={0.85}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <RootErrorBoundary>
+      <SafeAreaProvider>
       <ProfileProvider>
         <ThemeProvider>
           <CustomAlertProvider>
@@ -89,5 +134,6 @@ export default function App() {
         </ThemeProvider>
       </ProfileProvider>
     </SafeAreaProvider>
+    </RootErrorBoundary>
   );
 }

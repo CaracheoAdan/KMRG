@@ -321,7 +321,7 @@ export const pruneOldInteractions = async (): Promise<void> => {
         .range(5, 50);
 
       if (data && data.length > 0) {
-        const idsToDelete = data.map((row) => row.id);
+        const idsToDelete = (data as Array<{ id: string }>).map((row) => row.id);
         await supabase.from('interactions').delete().in('id', idsToDelete);
       }
     }
