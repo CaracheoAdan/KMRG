@@ -16,7 +16,7 @@ export const hexColorSchema = z
 
 export const createMessageSchema = z.object({
   sender: z.string().trim().min(1).max(50).optional().default('Javier'),
-  recipient: z.string().trim().min(1).max(50).optional().default('Ella'),
+  recipient: z.string().trim().min(1).max(50).optional().default('Karla'),
   content: z.string().trim().min(1, 'El contenido del mensaje no puede estar vacío').max(5000),
   scheduled_date: dateOnlySchema,
   theme_color: hexColorSchema,

@@ -99,7 +99,7 @@ export const HangmanArena: React.FC<Props> = ({
 
   // Dimensiones del teclado QWERTY
   const keyWidth = Math.floor((containerWidth - (9 * 4)) / 10);
-  const keyHeight = 44;
+  const keyHeight = 46;
 
   // Partición balanceada de casillas: si totalLettersNoSpaces > 8, divide en dos filas balanceadas (ej. 6+5)
   const letterRows: Array<Array<{ word: string }>> = useMemo(() => {
@@ -147,14 +147,14 @@ export const HangmanArena: React.FC<Props> = ({
 
   const availableWidthForSlots = containerWidth - 32; // 16px de margen lateral
   const dynamicSlotWidth = Math.max(
-    30,
+    24,
     Math.min(
-      44,
+      33,
       Math.floor((availableWidthForSlots - (maxLettersInAnyRow - 1) * 6) / maxLettersInAnyRow)
     )
   );
-  const dynamicSlotHeight = Math.floor(dynamicSlotWidth * 1.25);
-  const dynamicFontSize = Math.floor(dynamicSlotWidth * 0.7);
+  const dynamicSlotHeight = Math.floor(dynamicSlotWidth * 1.15);
+  const dynamicFontSize = Math.floor(dynamicSlotWidth * 0.72);
 
   return (
     <View style={styles.container}>
@@ -338,21 +338,7 @@ export const HangmanArena: React.FC<Props> = ({
         ))}
       </View>
 
-      {/* 3. Bandeja de Letras Falladas: Chips Rojos Compactos */}
-      <View style={styles.failedLettersBar}>
-        <Text style={styles.failedLettersLabel}>Letras falladas:</Text>
-        {failedLetters.length === 0 ? (
-          <Text style={styles.noFailsText}>Ninguna aún ✨</Text>
-        ) : (
-          <View style={styles.failedLettersChips}>
-            {failedLetters.map((l) => (
-              <View key={l} style={styles.failedChip}>
-                <Text style={styles.failedChipText}>{l}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
+
 
       {/* 4. Teclado QWERTY 3D con Estados Visuales Precisos (Verde, Rojo Tachado, Blanco 3D) */}
       <View style={styles.keyboardContainer}>
@@ -760,20 +746,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   letterSlot: {
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    borderWidth: 1.8,
-    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderBottomWidth: 3,
+    borderColor: '#e2e8f0',
+    borderBottomColor: '#94a3b8',
     alignItems: 'center',
     justifyContent: 'center',
     ...GAMES_THEME.shadows.soft,
   },
   letterSlotRevealed: {
-    borderColor: '#9333ea',
+    borderBottomColor: '#9333ea',
+    borderColor: '#d8b4fe',
     backgroundColor: '#faf5ff',
   },
   letterSlotMissedWord: {
-    borderColor: '#ef4444',
+    borderBottomColor: '#ef4444',
+    borderColor: '#fca5a5',
     backgroundColor: '#fef2f2',
   },
   slotLetterText: {
@@ -839,6 +829,7 @@ const styles = StyleSheet.create({
   },
   keyButton: {
     borderRadius: 8,
+    minHeight: 46,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',

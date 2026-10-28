@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,23 +16,32 @@ import {
   DEFAULT_HOME_STATE,
   DEFAULT_MOVIES_STATE,
   DEFAULT_GAMES_STATE,
+  DEFAULT_PLACES_STATE,
 } from '../services/CoupleSyncService';
-import { getCachedMilestones } from '../services/StorageService';
+import { getCachedMilestones, calculateTimeTogether } from '../services/StorageService';
 import { FONTS } from '../theme/designSystem';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   primaryColor: string;
+  daysTogether?: number;
+  streakCount?: number;
+  anniversaryDate?: string;
 }
 
 export const CoupleWrappedModal: React.FC<Props> = ({
   visible,
   onClose,
   primaryColor,
+  daysTogether = 0,
+  streakCount = 1,
+  anniversaryDate,
 }) => {
-  const [totalDays, setTotalDays] = useState(0);
-  const [streak, setStreak] = useState(1);
+  const { colors } = useTheme();
+  const [totalDays, setTotalDays] = useState(daysTogether);
+  const [streak, setStreak] = useState(streakCount);
   const [watchedMovies, setWatchedMovies] = useState(0);
   const [pendingMovies, setPendingMovies] = useState(0);
   const [avgMovieScore, setAvgMovieScore] = useState('5.0');
@@ -45,25 +54,36 @@ export const CoupleWrappedModal: React.FC<Props> = ({
   useEffect(() => {
     if (!visible) return;
 
-    Promise.all([
+    // Sincronizar inmediatamente con los props iniciales disponibles
+    if (daysTogether > 0) setTotalDays(daysTogether);
+    if (streakCount > 0) setStreak(streakCount);
+
+    Promise.allSettled([
       getHomeState(),
       getMoviesState(),
       getGamesState(),
       getSpecialPlacesState(),
       getCachedMilestones(),
     ])
-      .then(([home, moviesSt, gamesSt, placesSt, milestones]) => {
-        const h = home || DEFAULT_HOME_STATE;
-        const m = moviesSt || DEFAULT_MOVIES_STATE;
-        const g = gamesSt || DEFAULT_GAMES_STATE;
+      .then(([homeRes, moviesRes, gamesRes, placesRes, milestonesRes]) => {
+        const h = homeRes.status === 'fulfilled' ? homeRes.value : null;
+        const m = moviesRes.status === 'fulfilled' ? moviesRes.value : DEFAULT_MOVIES_STATE;
+        const g = gamesRes.status === 'fulfilled' ? gamesRes.value : DEFAULT_GAMES_STATE;
+        const placesSt = placesRes.status === 'fulfilled' ? placesRes.value : DEFAULT_PLACES_STATE;
+        const milestones = milestonesRes.status === 'fulfilled' ? milestonesRes.value : [];
 
-        const start = new Date(`${h.anniversaryDate}T00:00:00`);
-        const days = Math.max(
-          1,
-          Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
-        );
-        setTotalDays(days);
-        setStreak(h.streakCount || 1);
+        // Calcular días juntos reales con precisión de calendario
+        const activeAnniv = anniversaryDate || h?.anniversaryDate;
+        const calculated = calculateTimeTogether(activeAnniv);
+        const finalDays = daysTogether > 0 ? daysTogether : calculated.totalDays;
+        if (finalDays > 0) {
+          setTotalDays(finalDays);
+        }
+
+        const finalStreak = h?.streakCount || streakCount || 1;
+        if (finalStreak > 0) {
+          setStreak(finalStreak);
+        }
 
         const watched = m.movies.filter((item) => item.watched);
         const pending = m.movies.filter((item) => !item.watched);
@@ -79,18 +99,31 @@ export const CoupleWrappedModal: React.FC<Props> = ({
           setAvgMovieScore((sum / watched.length).toFixed(1));
         }
 
-        setPlacesCount(placesSt.places.length);
+        setPlacesCount(placesSt.places?.length || 0);
         setPhotosCount(milestones.length);
-        setPointsKarla(g.leaderboard.pointsKarla || 0);
-        setPointsJavier(g.leaderboard.pointsJavier || 0);
+        setPointsKarla(g.leaderboard?.pointsKarla || 0);
+        setPointsJavier(g.leaderboard?.pointsJavier || 0);
         setTrophiesTotal(
-          (g.leaderboard.trophiesKarla || 0) + (g.leaderboard.trophiesJavier || 0)
+          (g.leaderboard?.trophiesKarla || 0) + (g.leaderboard?.trophiesJavier || 0)
         );
       })
-      .catch(() => {});
-  }, [visible]);
+      .catch((err) => {
+        console.warn('[CoupleWrappedModal] Error cargando métricas:', err);
+      });
+  }, [visible, daysTogether, streakCount, anniversaryDate]);
 
-  const totalHours = totalDays * 24;
+  const calcFromAnniv = useMemo(
+    () => (anniversaryDate ? calculateTimeTogether(anniversaryDate) : null),
+    [anniversaryDate]
+  );
+  const effectiveDays =
+    totalDays > 0
+      ? totalDays
+      : daysTogether > 0
+      ? daysTogether
+      : calcFromAnniv?.totalDays || 0;
+  const effectiveStreak = streak > 0 ? streak : streakCount > 0 ? streakCount : 1;
+  const totalHours = effectiveDays * 24;
   const gameLeader =
     pointsKarla > pointsJavier
       ? 'Karlita lidera la temporada'
@@ -106,7 +139,7 @@ export const CoupleWrappedModal: React.FC<Props> = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
           {/* Encabezado */}
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
@@ -114,8 +147,8 @@ export const CoupleWrappedModal: React.FC<Props> = ({
                 <Ionicons name="stats-chart" size={18} color={primaryColor} />
               </View>
               <View>
-                <Text style={styles.title}>Nuestro Resumen KMRG</Text>
-                <Text style={styles.subtitle}>Estadísticas en vivo de nuestra historia</Text>
+                <Text style={[styles.title, { color: colors.text }]}>Nuestro Resumen KMRG</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Estadísticas en vivo de nuestra historia</Text>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -127,48 +160,48 @@ export const CoupleWrappedModal: React.FC<Props> = ({
             {/* Hero Card */}
             <View style={[styles.heroBanner, { backgroundColor: primaryColor }]}>
               <Text style={styles.heroOverline}>TIEMPO COMPARTIDO</Text>
-              <Text style={styles.heroBigValue}>{totalDays} Días Juntos</Text>
+              <Text style={styles.heroBigValue}>{effectiveDays} Días Juntos</Text>
               <Text style={styles.heroSubValue}>
-                Equivalente a {totalHours.toLocaleString()} horas construyendo nuestra historia • Racha activa de {streak} días
+                Equivalente a {totalHours.toLocaleString()} horas construyendo nuestra historia • Racha activa de {effectiveStreak} días
               </Text>
             </View>
 
             {/* Grid de Métricas */}
             <View style={styles.metricsGrid}>
-              <View style={styles.metricBox}>
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
                 <Ionicons name="film-outline" size={20} color={primaryColor} />
-                <Text style={styles.metricNumber}>{watchedMovies}</Text>
-                <Text style={styles.metricLabel}>Películas Vistas</Text>
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{watchedMovies}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Películas Vistas</Text>
                 <Text style={styles.metricSub}>{pendingMovies} en lista por ver</Text>
               </View>
 
-              <View style={styles.metricBox}>
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
                 <Ionicons name="star-outline" size={20} color={primaryColor} />
-                <Text style={styles.metricNumber}>{avgMovieScore}</Text>
-                <Text style={styles.metricLabel}>Promedio Cine</Text>
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{avgMovieScore}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Promedio Cine</Text>
                 <Text style={styles.metricSub}>Calificación de pareja</Text>
               </View>
 
-              <View style={styles.metricBox}>
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
                 <Ionicons name="map-outline" size={20} color={primaryColor} />
-                <Text style={styles.metricNumber}>{placesCount}</Text>
-                <Text style={styles.metricLabel}>Lugares en Mapa</Text>
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{placesCount}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Lugares en Mapa</Text>
                 <Text style={styles.metricSub}>Pines de citas y viajes</Text>
               </View>
 
-              <View style={styles.metricBox}>
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
                 <Ionicons name="images-outline" size={20} color={primaryColor} />
-                <Text style={styles.metricNumber}>{photosCount}</Text>
-                <Text style={styles.metricLabel}>Recuerdos</Text>
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{photosCount}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Recuerdos</Text>
                 <Text style={styles.metricSub}>Guardados en álbum</Text>
               </View>
             </View>
 
             {/* Resumen de Arcade */}
-            <View style={styles.arcadeSummaryBox}>
+            <View style={[styles.arcadeSummaryBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
               <View style={styles.arcadeTopRow}>
                 <Ionicons name="trophy-outline" size={18} color={primaryColor} />
-                <Text style={styles.arcadeTitle}>Temporada de Juegos</Text>
+                <Text style={[styles.arcadeTitle, { color: colors.text }]}>Temporada de Juegos</Text>
               </View>
               <Text style={[styles.arcadeLeaderText, { color: primaryColor }]}>
                 {gameLeader}
@@ -202,18 +235,22 @@ export const CoupleWrappedModal: React.FC<Props> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 18,
   },
   card: {
     width: '100%',
-    maxWidth: 390,
-    maxHeight: '88%',
+    maxHeight: '90%',
     backgroundColor: '#ffffff',
-    borderRadius: 26,
+    borderRadius: 24,
     padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
   },
   headerRow: {
     flexDirection: 'row',
@@ -225,129 +262,140 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
   },
   badgeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontSize: 17,
     fontFamily: FONTS.serif,
+    fontWeight: '800',
+    color: '#0f172a',
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748b',
-    fontFamily: FONTS.sans,
+    marginTop: 1,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: '#f1f5f9',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   heroBanner: {
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 18,
-    marginBottom: 14,
+    marginBottom: 16,
+    alignItems: 'center',
   },
   heroOverline: {
     fontSize: 10,
     fontWeight: '800',
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255, 255, 255, 0.8)',
     letterSpacing: 1.2,
+    marginBottom: 4,
   },
   heroBigValue: {
-    fontSize: 26,
+    fontSize: 28,
+    fontFamily: FONTS.serif,
     fontWeight: '800',
     color: '#ffffff',
-    fontFamily: FONTS.serif,
-    marginTop: 4,
+    textAlign: 'center',
   },
   heroSubValue: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
     marginTop: 6,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   metricBox: {
     width: '48%',
     backgroundColor: '#f8fafc',
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   metricNumber: {
-    fontSize: 22,
+    fontSize: 20,
+    fontFamily: FONTS.serif,
     fontWeight: '800',
-    color: '#1e293b',
+    color: '#0f172a',
     marginTop: 6,
   },
   metricLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#334155',
     marginTop: 2,
   },
   metricSub: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginTop: 1,
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 2,
   },
   arcadeSummaryBox: {
     backgroundColor: '#f8fafc',
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   arcadeTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 4,
   },
   arcadeTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#334155',
   },
   arcadeLeaderText: {
     fontSize: 13,
-    fontWeight: '700',
-    marginTop: 4,
+    fontFamily: FONTS.serif,
+    fontWeight: '800',
+    marginBottom: 8,
   },
   arcadeScoreRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
   },
   arcadePlayerScore: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#475569',
   },
   doneBtn: {
-    paddingVertical: 13,
     borderRadius: 14,
+    paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   doneBtnText: {
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
-    color: '#ffffff',
   },
 });
+
+export default CoupleWrappedModal;

@@ -10,7 +10,7 @@ generator client {
 model Message {
   id             String   @id @default(uuid()) @db.Uuid
   sender         String   @default("Javier") @db.VarChar(50)
-  recipient      String   @default("Ella") @db.VarChar(50)
+  recipient      String   @default("Karla") @db.VarChar(50)
   content        String   @db.Text
   scheduled_date DateTime @db.Date
   theme_color    String   @db.VarChar(50)
@@ -25,7 +25,7 @@ model Milestone {
   author     String   @default("Javier") @db.VarChar(50)
   title      String   @db.VarChar(255)
   date       DateTime @db.Date
-  image_url  String   @db.VarChar(1024)
+  image_url  String   @db.Text
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("milestones")

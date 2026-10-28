@@ -36,6 +36,7 @@ import {
   PRESET_FEELINGS,
   MoodFeelingType,
   resolveFeelingType,
+  getFeelingLabel,
 } from '../components/MoodMascot';
 import {
   getTodayMessage,
@@ -43,6 +44,7 @@ import {
   formatDisplayDate,
   toLocalDateString,
   getCachedMilestones,
+  calculateTimeTogether,
 } from '../services/StorageService';
 import {
   syncSupabaseMessages,
@@ -92,10 +94,6 @@ export const TodayScreen: React.FC = () => {
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
-
-  const startAnniv = new Date(`${homeState.anniversaryDate || '2026-06-18'}T00:00:00`);
-  const diffAnnivMs = Math.max(0, Date.now() - startAnniv.getTime());
-  const daysTogether = Math.floor(diffAnnivMs / (1000 * 60 * 60 * 24));
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
   const [petNameDraft, setPetNameDraft] = useState('Pochito');
   const [isEditingPetName, setIsEditingPetName] = useState(false);
@@ -119,6 +117,8 @@ export const TodayScreen: React.FC = () => {
   const [isNextEventModalOpen, setIsNextEventModalOpen] = useState(false);
   const [tempEventTitle, setTempEventTitle] = useState('');
   const [tempEventDate, setTempEventDate] = useState(() => toLocalDateString(new Date()));
+  const [tempEventTime, setTempEventTime] = useState('');
+  const [hasEventTime, setHasEventTime] = useState(false);
   const [showEventDatePicker, setShowEventDatePicker] = useState(false);
 
   // Animaciones
@@ -188,9 +188,7 @@ export const TodayScreen: React.FC = () => {
 
     // Sincronizar datos automáticamente con los Widgets de la pantalla de inicio
     try {
-      const start = new Date(`${syncedHome.anniversaryDate}T00:00:00`);
-      const diffMs = Math.max(0, Date.now() - start.getTime());
-      const daysTogether = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const syncedDays = calculateTimeTogether(syncedHome.anniversaryDate).totalDays;
       const partnerRole: 'Javier' | 'Karla' = currentProfile === 'Karla' ? 'Javier' : 'Karla';
       const partnerDisplayName = getDisplayName(partnerRole);
 
@@ -211,7 +209,7 @@ export const TodayScreen: React.FC = () => {
       const isStreakActive = syncedHome.lastInteractionDate === todayStr;
 
       void syncWidgetData({
-        daysTogether,
+        daysTogether: syncedDays,
         anniversaryDate: syncedHome.anniversaryDate,
         noteText: partnerNote,
         noteSender: partnerNote ? partnerDisplayName : '',
@@ -325,20 +323,15 @@ export const TodayScreen: React.FC = () => {
     await saveHomeState(currentProfile, next);
   };
 
-  // Cálculo del Tiempo Juntos
-  const timeTogether = useMemo(() => {
-    const start = new Date(`${homeState.anniversaryDate}T00:00:00`);
-    const now = new Date();
-    const diffMs = Math.max(0, now.getTime() - start.getTime());
-    const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const years = Math.floor(totalDays / 365);
-    const months = Math.floor((totalDays % 365) / 30);
-    const days = (totalDays % 365) % 30;
-    return { totalDays, years, months, days };
-  }, [homeState.anniversaryDate]);
-
   // Ticker de fecha actual del dispositivo (recalcula al volver de segundo plano y a medianoche)
   const [currentDateTick, setCurrentDateTick] = useState(() => toLocalDateString(new Date()));
+
+  // Cálculo del Tiempo Juntos con precisión de calendario real
+  const timeTogether = useMemo(
+    () => calculateTimeTogether(homeState.anniversaryDate),
+    [homeState.anniversaryDate, currentDateTick]
+  );
+  const daysTogether = timeTogether.totalDays;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
@@ -362,21 +355,62 @@ export const TodayScreen: React.FC = () => {
     };
   }, [loadData]);
 
-  // Cuenta regresiva a próxima cita calculada desde medianoche de hoy
-  const daysUntilNextEvent = useMemo(() => {
+  // Cuenta regresiva a próxima cita calculada con precisión de días y horas
+  const nextEventCountdown = useMemo(() => {
     if (!homeState.nextEventDate || !homeState.nextEventDate.trim()) return null;
     const parts = homeState.nextEventDate.split('-').map(Number);
     if (parts.length !== 3 || parts.some(isNaN)) return null;
     const [y, m, d] = parts;
-    const target = new Date(y, m - 1, d, 0, 0, 0);
-    if (isNaN(target.getTime())) return null;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diffDays);
-  }, [homeState.nextEventDate, currentDateTick]);
 
-  const hasValidNextEvent = daysUntilNextEvent !== null;
+    let targetHour = 0;
+    let targetMin = 0;
+    const hasTime = Boolean(homeState.nextEventTime && homeState.nextEventTime.includes(':'));
+    if (hasTime) {
+      const [h, min] = homeState.nextEventTime!.split(':').map(Number);
+      if (!isNaN(h) && !isNaN(min)) {
+        targetHour = h;
+        targetMin = min;
+      }
+    }
+
+    const target = new Date(y, m - 1, d, targetHour, targetMin, 0);
+    if (isNaN(target.getTime())) return null;
+
+    const now = new Date();
+    const diffMs = target.getTime() - now.getTime();
+
+    // Si ya pasaron más de 12 horas del evento, ya concluyó
+    if (diffMs < -12 * 60 * 60 * 1000) {
+      return null;
+    }
+
+    if (diffMs <= 0) {
+      return { text: '¡Es hoy!', totalDays: 0, hours: 0, hasTime };
+    }
+
+    const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const remHours = totalHours % 24;
+
+    let label = '';
+    if (days === 0) {
+      if (remHours === 0) {
+        const remMin = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+        label = `Faltan ${remMin} min`;
+      } else {
+        label = `Faltan ${plural(remHours, 'hora', 'horas')}`;
+      }
+    } else if (hasTime && remHours > 0) {
+      label = `Faltan ${days}d y ${remHours}h`;
+    } else {
+      label = `Faltan ${plural(days, 'día', 'días')}`;
+    }
+
+    return { text: label, totalDays: days, hours: remHours, hasTime };
+  }, [homeState.nextEventDate, homeState.nextEventTime, currentDateTick]);
+
+  const hasValidNextEvent = nextEventCountdown !== null;
+  const daysUntilNextEvent = nextEventCountdown ? nextEventCountdown.totalDays : null;
 
   // Mascota de pareja (estilo Pou: se mantiene feliz, seria o triste según los corazones recibidos)
   const petInfo = useMemo(() => {
@@ -584,10 +618,12 @@ export const TodayScreen: React.FC = () => {
   const handleSaveNextEvent = async () => {
     const title = tempEventTitle.trim();
     if (!title) return;
+    const timeToSave = hasEventTime ? tempEventTime.trim() : '';
     await updateAndSyncHome({
       ...homeState,
       nextEventTitle: title,
       nextEventDate: tempEventDate,
+      nextEventTime: timeToSave,
     });
     void syncWidgetData({
       nextEventTitle: title,
@@ -601,6 +637,7 @@ export const TodayScreen: React.FC = () => {
       ...homeState,
       nextEventTitle: '',
       nextEventDate: '',
+      nextEventTime: '',
     });
     void syncWidgetData({
       nextEventTitle: '',
@@ -777,6 +814,8 @@ export const TodayScreen: React.FC = () => {
             onPress={() => {
               setTempEventTitle(homeState.nextEventTitle || '');
               setTempEventDate(hasValidNextEvent ? homeState.nextEventDate : toLocalDateString(new Date()));
+              setTempEventTime(homeState.nextEventTime || '');
+              setHasEventTime(Boolean(homeState.nextEventTime && homeState.nextEventTime.trim()));
               setIsNextEventModalOpen(true);
             }}
             style={styles.dsCard}
@@ -803,21 +842,33 @@ export const TodayScreen: React.FC = () => {
             </Text>
 
             <View style={styles.eventBottomRow}>
-              <Text style={styles.dsEventDate} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                {hasValidNextEvent
-                  ? formatDisplayDate(homeState.nextEventDate, { day: 'numeric', month: 'short' })
-                  : 'Toca para agendar'}
-              </Text>
-              {hasValidNextEvent && daysUntilNextEvent !== null && (
-                <View style={[styles.dsCountdownPill, { backgroundColor: colors.primary }]}>
+              {hasValidNextEvent ? (
+                <>
+                  <Text style={styles.dsEventDate} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                    {formatDisplayDate(homeState.nextEventDate, { day: 'numeric', month: 'short' })}
+                    {homeState.nextEventTime ? ` · ${homeState.nextEventTime}` : ''}
+                  </Text>
+                  {nextEventCountdown && (
+                    <View style={[styles.dsCountdownPill, { backgroundColor: colors.primary }]}>
+                      <Text
+                        style={[styles.dsCountdownText, { color: colors.primaryOn }]}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.2}
+                      >
+                        {nextEventCountdown.text}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={[styles.scheduleActionChip, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name="add-circle" size={13} color={colors.primary} />
                   <Text
-                    style={[styles.dsCountdownText, { color: colors.primaryOn }]}
+                    style={[styles.scheduleActionChipText, { color: colors.primary }]}
                     numberOfLines={1}
                     maxFontSizeMultiplier={1.2}
                   >
-                    {daysUntilNextEvent === 0
-                      ? '¡Es hoy!'
-                      : `Faltan ${plural(daysUntilNextEvent, 'día', 'días')}`}
+                    + Agendar cita
                   </Text>
                 </View>
               )}
@@ -858,47 +909,50 @@ export const TodayScreen: React.FC = () => {
                   scaleTo={0.97}
                   style={[
                     styles.dsCard,
+                    styles.moodCard,
                     { flex: 1 },
                     isMe && { borderWidth: 1.5, borderColor: colors.primary },
                   ]}
                 >
                   <View style={styles.moodBentoTop}>
-                    <MoodMascot feeling={feelingType} size="sm" accentColor={colors.primary} />
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                        {getAvatarUri(person) && (
-                          <Image
-                            source={{ uri: getAvatarUri(person)! }}
-                            style={{ width: 18, height: 18, borderRadius: 9 }}
-                          />
-                        )}
-                        <Text
-                          style={styles.moodPersonName}
-                          numberOfLines={1}
-                          maxFontSizeMultiplier={1.2}
-                        >
-                          {getDisplayName(person)}
-                        </Text>
-                      </View>
+                    <View style={styles.moodMascotBadgeWrapper}>
+                      <MoodMascot feeling={feelingType} size="sm" accentColor={colors.primary} />
+                      {getAvatarUri(person) && (
+                        <Image
+                          source={{ uri: getAvatarUri(person)! }}
+                          style={[styles.moodAvatarBadge, { borderColor: colors.surface }]}
+                        />
+                      )}
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 9, justifyContent: 'center' }}>
+                      <Text
+                        style={styles.moodPersonName}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.2}
+                      >
+                        {getDisplayName(person)}
+                      </Text>
                       <View style={[styles.feelingChip, { backgroundColor: colors.primaryLight }]}>
                         <Text
                           style={[styles.feelingChipText, { color: colors.primary }]}
                           numberOfLines={1}
                           maxFontSizeMultiplier={1.2}
                         >
-                          {feelingObj?.label || 'Feliz'}
+                          {getFeelingLabel(feelingType, person)}
                         </Text>
                       </View>
                     </View>
                   </View>
 
-                  <Text
-                    style={styles.moodStatusMessage}
-                    numberOfLines={3}
-                    maxFontSizeMultiplier={1.2}
-                  >
-                    {m?.status || 'Pensando en ti'}
-                  </Text>
+                  <View style={[styles.moodBubble, { backgroundColor: colors.primaryLight }]}>
+                    <Text
+                      style={[styles.moodStatusMessage, { color: colors.text }]}
+                      numberOfLines={3}
+                      maxFontSizeMultiplier={1.2}
+                    >
+                      “{m?.status?.trim() || 'Pensando en ti'}”
+                    </Text>
+                  </View>
 
                   {mismatch && (
                     <View style={[styles.mismatchBox, { backgroundColor: colors.surfaceAlt }]}>
@@ -1030,8 +1084,15 @@ export const TodayScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { maxHeight: '90%' }]}>
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 10, marginBottom: 8 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                {/* Mini Pochito Avatar Preview siempre visible en el Header */}
+                <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: `${primaryColor}15`, alignItems: 'center', justifyContent: 'center', borderWidth: 1.2, borderColor: `${primaryColor}40` }}>
+                  <Text style={{ fontSize: 16 }}>
+                    {petInfo.accessory === 'crown' ? '👑' : petInfo.accessory === 'flower' ? '🌸' : petInfo.accessory === 'sunglasses' ? '🕶️' : petInfo.accessory === 'party_hat' ? '🥳' : '🐻'}
+                  </Text>
+                </View>
+
                 {isEditingPetName ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                     <TextInput
@@ -1410,10 +1471,23 @@ export const TodayScreen: React.FC = () => {
 
               {/* Armario de Pochito */}
               <View style={{ marginTop: 10, marginBottom: 12 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b', marginBottom: 8 }}>
-                  Armario de {petInfo.name}
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b' }}>
+                    Armario de {petInfo.name}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '600' }}>Puesto:</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor }}>
+                      {petInfo.accessory === 'crown' ? '👑 Corona' : petInfo.accessory === 'flower' ? '🌸 Florecita' : petInfo.accessory === 'sunglasses' ? '🕶️ Gafas' : petInfo.accessory === 'party_hat' ? '🥳 Fiesta' : '✨ Sin gorro'}
+                    </Text>
+                  </View>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginHorizontal: -20 }}
+                  contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+                >
                   {[
                     { id: 'none', label: 'Sin gorro', emoji: '✨', minLvl: 1, minHearts: 0 },
                     { id: 'crown', label: 'Corona Real', emoji: '👑', minLvl: 2, minHearts: 3 },
@@ -1522,13 +1596,12 @@ export const TodayScreen: React.FC = () => {
       <DatePickerModal
         visible={showAnniversaryPicker}
         value={homeState.anniversaryDate}
+        showQuickSelect={false}
         onSelect={(selected) => {
           void updateAndSyncHome({ ...homeState, anniversaryDate: selected });
           try {
-            const start = new Date(`${selected}T00:00:00`);
-            const diffMs = Math.max(0, Date.now() - start.getTime());
-            const daysTogether = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            void syncWidgetData({ anniversaryDate: selected, daysTogether });
+            const calculated = calculateTimeTogether(selected);
+            void syncWidgetData({ anniversaryDate: selected, daysTogether: calculated.totalDays });
           } catch {
             // Ignorar
           }
@@ -1595,7 +1668,7 @@ export const TodayScreen: React.FC = () => {
                         selected && { color: primaryColor, fontWeight: '800' },
                       ]}
                     >
-                      {item.label}
+                      {getFeelingLabel(item.id, currentProfile)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -1662,6 +1735,93 @@ export const TodayScreen: React.FC = () => {
               <Ionicons name="calendar" size={18} color={primaryColor} />
               <Text style={styles.dateSelectorText}>{formatDisplayDate(tempEventDate)}</Text>
             </TouchableOpacity>
+
+            {/* Hora Opcional */}
+            <View style={styles.timeSectionHeaderRow}>
+              <Text style={styles.inputLabel}>Hora de la cita</Text>
+              <View style={styles.timeToggleGroup}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setHasEventTime(false);
+                    setTempEventTime('');
+                  }}
+                  style={[
+                    styles.timeToggleBtn,
+                    !hasEventTime && { backgroundColor: `${primaryColor}18`, borderColor: primaryColor },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.timeToggleBtnText,
+                      !hasEventTime && { color: primaryColor, fontWeight: '700' },
+                    ]}
+                  >
+                    Todo el día
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setHasEventTime(true);
+                    if (!tempEventTime) setTempEventTime('20:00');
+                  }}
+                  style={[
+                    styles.timeToggleBtn,
+                    hasEventTime && { backgroundColor: `${primaryColor}18`, borderColor: primaryColor },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.timeToggleBtnText,
+                      hasEventTime && { color: primaryColor, fontWeight: '700' },
+                    ]}
+                  >
+                    Elegir hora
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {hasEventTime && (
+              <View style={styles.timePickerContainer}>
+                <View style={styles.timeInputRow}>
+                  <Ionicons name="time-outline" size={18} color={primaryColor} />
+                  <TextInput
+                    value={tempEventTime}
+                    onChangeText={setTempEventTime}
+                    placeholder="20:00"
+                    placeholderTextColor="#94a3b8"
+                    maxLength={5}
+                    style={styles.timeInputBox}
+                    keyboardType="numbers-and-punctuation"
+                  />
+                  <Text style={styles.timeHintText}>(24h ej. 19:30)</Text>
+                </View>
+                <View style={styles.quickTimeChipsRow}>
+                  {['13:30', '18:00', '20:00', '21:30'].map((preset) => (
+                    <TouchableOpacity
+                      key={preset}
+                      onPress={() => setTempEventTime(preset)}
+                      style={[
+                        styles.quickTimeChip,
+                        tempEventTime === preset && { backgroundColor: primaryColor, borderColor: primaryColor },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.quickTimeChipText,
+                          tempEventTime === preset && { color: '#ffffff', fontWeight: '800' },
+                        ]}
+                      >
+                        {preset}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
               {hasValidNextEvent && (
@@ -1938,10 +2098,41 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '600',
   },
+  scheduleActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  scheduleActionChipText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  moodCard: {
+    justifyContent: 'flex-start',
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+  },
+  moodMascotBadgeWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moodAvatarBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+  },
   moodBentoTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
   },
   moodPersonName: {
     fontSize: 13,
@@ -1954,17 +2145,23 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1.5,
     borderRadius: 6,
-    marginTop: 1,
+    marginTop: 2,
   },
   feelingChipText: {
     fontSize: 9.5,
     fontWeight: '800',
   },
+  moodBubble: {
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5.5,
+    borderRadius: 10,
+    alignSelf: 'stretch',
+  },
   moodStatusMessage: {
-    fontSize: 11.5,
-    color: c.textSecondary,
-    lineHeight: 15,
-    marginVertical: 2,
+    fontSize: 11,
+    lineHeight: 14.5,
+    fontStyle: 'italic',
   },
   mismatchBox: {
     flexDirection: 'row',
@@ -2431,6 +2628,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   feelingsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 6,
     marginBottom: 12,
   },
@@ -2495,5 +2693,78 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: c.primaryOn,
+  },
+  timeSectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  timeToggleGroup: {
+    flexDirection: 'row',
+    backgroundColor: c.surfaceAlt,
+    borderRadius: 10,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  timeToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  timeToggleBtnText: {
+    fontSize: 11,
+    color: c.textSecondary,
+    fontWeight: '600',
+  },
+  timePickerContainer: {
+    backgroundColor: c.surfaceAlt,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  timeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  timeInputBox: {
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    fontSize: 14,
+    fontWeight: '700',
+    color: c.text,
+    width: 70,
+    textAlign: 'center',
+  },
+  timeHintText: {
+    fontSize: 11,
+    color: c.textMuted,
+  },
+  quickTimeChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  quickTimeChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  quickTimeChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: c.text,
   },
 });

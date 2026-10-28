@@ -33,6 +33,8 @@ import { AppHeader } from '../components/AppHeader';
 import {
   getPastMessages,
   getCachedMilestones,
+  deduplicateMilestones,
+  calculateTimeTogether,
   formatDisplayDate,
   addLocalMilestone,
   toLocalDateString,
@@ -137,15 +139,17 @@ export const MemoriesScreen: React.FC = () => {
     await saveHomeState(currentProfile, nextHome);
   };
 
-  const startAnniv = new Date(`${homeState.anniversaryDate || '2026-06-18'}T00:00:00`);
-  const diffAnnivMs = Math.max(0, Date.now() - startAnniv.getTime());
-  const daysTogether = Math.floor(diffAnnivMs / (1000 * 60 * 60 * 24));
+  const timeTogether = useMemo(
+    () => calculateTimeTogether(homeState.anniversaryDate),
+    [homeState.anniversaryDate]
+  );
+  const daysTogether = timeTogether.totalDays;
 
   const loadMemories = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
-    await syncSupabaseMilestones();
+    const synced = await syncSupabaseMilestones();
 
     const [past, cachedMilestones] = await Promise.all([
       getPastMessages(currentProfile),
@@ -153,7 +157,8 @@ export const MemoriesScreen: React.FC = () => {
     ]);
 
     setMemories(past);
-    setMilestones(cachedMilestones);
+    const sourceList = synced && synced.length > 0 ? synced : cachedMilestones;
+    setMilestones(deduplicateMilestones(sourceList));
     if (isRefresh) {
       setFailedImages({});
       void scheduleDailyMessage();
@@ -234,6 +239,7 @@ export const MemoriesScreen: React.FC = () => {
   };
 
   const handleSaveMilestone = async () => {
+    if (isSaving) return;
     if (!newTitle.trim()) {
       Alert.alert('Título requerido', 'Por favor escribe un título para este recuerdo.');
       return;
@@ -246,25 +252,41 @@ export const MemoriesScreen: React.FC = () => {
     setIsSaving(true);
     try {
       const finalImage = await SupabaseMediaService.uploadPhoto(selectedImageUri, 'memories');
-      const local = await addLocalMilestone({
+
+      // Intentar guardar primero en Supabase
+      const res = await createSupabaseMilestone({
         author: currentProfile,
         title: newTitle.trim(),
         date: newDate,
         image_url: finalImage,
       });
 
-      void createSupabaseMilestone({
-        author: currentProfile,
-        title: newTitle.trim(),
-        date: newDate,
-        image_url: finalImage,
-      });
+      let savedMilestone: Milestone;
+      if (res.success && res.data) {
+        savedMilestone = res.data;
+      } else {
+        // Fallback offline en caso de que falle la conexión
+        savedMilestone = await addLocalMilestone({
+          author: currentProfile,
+          title: newTitle.trim(),
+          date: newDate,
+          image_url: finalImage,
+        });
+      }
 
-      setMilestones((prev) =>
-        [...prev, local].sort((a, b) =>
-          toLocalDateString(a.date).localeCompare(toLocalDateString(b.date))
-        )
-      );
+      setMilestones((prev) => {
+        const withoutDup = prev.filter(
+          (m) =>
+            m.id !== savedMilestone.id &&
+            !(m.image_url && m.image_url.trim() === savedMilestone.image_url?.trim()) &&
+            !(
+              m.title.trim().toLowerCase() === savedMilestone.title.trim().toLowerCase() &&
+              toLocalDateString(m.date) === toLocalDateString(savedMilestone.date) &&
+              m.author === savedMilestone.author
+            )
+        );
+        return deduplicateMilestones([...withoutDup, savedMilestone]);
+      });
 
       setNewTitle('');
       setSelectedImageUri(null);
@@ -279,7 +301,8 @@ export const MemoriesScreen: React.FC = () => {
   // Mapeo de fechas para el calendario y álbum
   const milestonesByDate = useMemo(() => {
     const map = new Map<string, Milestone[]>();
-    for (const m of milestones) {
+    const cleanList = deduplicateMilestones(milestones);
+    for (const m of cleanList) {
       const dateKey = toLocalDateString(m.date);
       const list = map.get(dateKey) || [];
       list.push(m);
@@ -315,7 +338,7 @@ export const MemoriesScreen: React.FC = () => {
 
   // Renderizador de la Vista Álbum (Cero Scroll con Cuadrícula Paginada 6 fotos por página)
   const renderAlbumView = () => {
-    const sortedMilestones = [...milestones].sort((a, b) =>
+    const sortedMilestones = deduplicateMilestones(milestones).sort((a, b) =>
       toLocalDateString(b.date).localeCompare(toLocalDateString(a.date))
     );
 
@@ -1132,6 +1155,7 @@ export const MemoriesScreen: React.FC = () => {
         milestones={milestones}
         messages={memories}
         petName={homeState.couplePet?.name || 'Pochito'}
+        anniversaryDate={homeState.anniversaryDate}
       />
 
       {/* Modal Cápsulas del Tiempo Multimedia */}

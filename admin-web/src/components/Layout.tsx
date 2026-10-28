@@ -15,13 +15,17 @@ export const Layout: React.FC = () => {
 
   useEffect(() => {
     if (!isMobileMenuOpen) return;
+    document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsMobileMenuOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isMobileMenuOpen]);
 
   const closeMobileMenu = (): void => {
@@ -58,6 +62,7 @@ export const Layout: React.FC = () => {
 
       {/* Sidebar fijo en md+, drawer deslizable en <md */}
       <aside
+        aria-label="Menú lateral de administración"
         className={`fixed left-0 top-0 bottom-0 w-64 h-screen bg-slate-900 text-white flex flex-col justify-between border-r border-slate-800 z-40 select-none transition-transform duration-200 ease-in-out ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
@@ -85,7 +90,7 @@ export const Layout: React.FC = () => {
           </div>
 
           {/* Navegación Principal */}
-          <nav className="mt-6 px-3 space-y-1">
+          <nav aria-label="Navegación principal" className="mt-6 px-3 space-y-1">
             <NavLink
               to="/dashboard"
               end

@@ -147,26 +147,58 @@ export const TicTacToeArena: React.FC<Props> = ({
           </View>
         </View>
 
-        {/* Barra de Progreso Hacia la Meta (Primero a 3) */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressBarKarla,
-                { width: `${Math.min(50, (scoreK / 3) * 50)}%` },
-              ]}
-            />
-            <View
-              style={[
-                styles.progressBarJavier,
-                { width: `${Math.min(50, (scoreJ / 3) * 50)}%` },
-              ]}
-            />
-          </View>
-          <View style={styles.progressLabelsRow}>
-            <Text style={styles.progressSubText}>Karlita: {scoreK}/3</Text>
-            <Text style={styles.progressMetaText}>Meta: 3 victorias</Text>
-            <Text style={styles.progressSubText}>Javier: {scoreJ}/3</Text>
+        {/* Carrera Hacia la Meta: 2 Barras Independientes de 3 Bloques */}
+        <View style={styles.raceProgressContainer}>
+          <View style={styles.raceProgressRow}>
+            {/* Karlita: 3 Bloques a la Izquierda */}
+            <View style={styles.playerProgressGroup}>
+              <View style={styles.playerProgressLabelRow}>
+                <Text style={[styles.playerProgressName, { color: '#be185d' }]}>Karlita</Text>
+                <Text style={styles.playerProgressScore}>{scoreK}/3</Text>
+              </View>
+              <View style={styles.blocksTrack}>
+                {[0, 1, 2].map((idx) => {
+                  const isWon = idx < scoreK;
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.raceBlock,
+                        isWon ? styles.raceBlockKarlaWon : styles.raceBlockEmpty,
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Divisor Central: Meta 3 */}
+            <View style={styles.raceMetaBadge}>
+              <Ionicons name="trophy" size={13} color="#f59e0b" />
+              <Text style={styles.raceMetaBadgeText}>Meta: 3</Text>
+            </View>
+
+            {/* Javier: 3 Bloques a la Derecha */}
+            <View style={[styles.playerProgressGroup, { alignItems: 'flex-end' }]}>
+              <View style={styles.playerProgressLabelRow}>
+                <Text style={styles.playerProgressScore}>{scoreJ}/3</Text>
+                <Text style={[styles.playerProgressName, { color: '#0369a1' }]}>Javier</Text>
+              </View>
+              <View style={[styles.blocksTrack, { justifyContent: 'flex-end' }]}>
+                {[2, 1, 0].map((idx) => {
+                  const isWon = idx < scoreJ;
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.raceBlock,
+                        isWon ? styles.raceBlockJavierWon : styles.raceBlockEmpty,
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -368,41 +400,71 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#92400e',
   },
-  progressContainer: {
+  raceProgressContainer: {
+    width: '100%',
+    paddingTop: 4,
+  },
+  raceProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  playerProgressGroup: {
+    flex: 1,
     gap: 3,
   },
-  progressTrack: {
-    height: 6,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 3,
+  playerProgressLabelRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: 6,
   },
-  progressBarKarla: {
-    height: '100%',
-    backgroundColor: '#ec4899',
-    borderRadius: 3,
+  playerProgressName: {
+    fontSize: 10.5,
+    fontWeight: '800',
   },
-  progressBarJavier: {
-    height: '100%',
-    backgroundColor: '#0ea5e9',
-    borderRadius: 3,
-    alignSelf: 'flex-end',
-  },
-  progressLabelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  progressSubText: {
-    fontSize: 9.5,
+  playerProgressScore: {
+    fontSize: 10,
     fontWeight: '700',
     color: '#64748b',
   },
-  progressMetaText: {
+  blocksTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    width: '100%',
+  },
+  raceBlock: {
+    flex: 1,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  raceBlockEmpty: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 0.5,
+    borderColor: '#e2e8f0',
+  },
+  raceBlockKarlaWon: {
+    backgroundColor: '#ec4899',
+  },
+  raceBlockJavierWon: {
+    backgroundColor: '#0ea5e9',
+  },
+  raceMetaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fffbeb',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fef3c7',
+  },
+  raceMetaBadgeText: {
     fontSize: 9.5,
     fontWeight: '800',
-    color: '#d97706',
+    color: '#92400e',
   },
   victoryBanner: {
     flexDirection: 'row',
@@ -453,9 +515,9 @@ const styles = StyleSheet.create({
   },
   darkGlassCell: {
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.09)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.28)',
     alignItems: 'center',
     justifyContent: 'center',
   },

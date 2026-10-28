@@ -102,7 +102,7 @@ export const MessageForm: React.FC<MessageFormProps> = ({
               <select
                 id="message-sender"
                 disabled={isSubmitting}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 shadow-sm outline-none transition-colors focus:border-slate-500 focus:ring-2 focus:ring-slate-400/25"
                 {...register('sender')}
               >
                 <option value="Javier">Javier</option>
@@ -117,7 +117,7 @@ export const MessageForm: React.FC<MessageFormProps> = ({
               <select
                 id="message-recipient"
                 disabled={isSubmitting}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 shadow-sm outline-none transition-colors focus:border-slate-500 focus:ring-2 focus:ring-slate-400/25"
                 {...register('recipient')}
               >
                 <option value="Karla">Karlita</option>

@@ -20,6 +20,7 @@ interface GameHeaderProps {
   onReset: () => void;
   onPressScore?: (player?: 'all' | 'Karla' | 'Javier') => void;
   primaryColor?: string;
+  simplifiedHeader?: boolean;
 }
 
 export const GameHeader: React.FC<GameHeaderProps> = ({
@@ -31,6 +32,7 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   onBack,
   onReset,
   onPressScore,
+  simplifiedHeader = false,
 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -57,6 +59,52 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
     currentTurnPlayer === 'Karla' || currentTurnPlayer === 'w';
   const isJavierTurn =
     currentTurnPlayer === 'Javier' || currentTurnPlayer === 'b';
+
+  if (simplifiedHeader) {
+    return (
+      <View style={styles.headerContainer}>
+        {/* Botón Volver al Lobby */}
+        <TouchableOpacity
+          onPress={() => {
+            void triggerGameHaptic('light');
+            onBack();
+          }}
+          style={styles.backBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Volver al lobby de juegos"
+        >
+          <Ionicons name="chevron-back" size={20} color="#334155" />
+          <Text style={styles.backBtnText}>Lobby</Text>
+        </TouchableOpacity>
+
+        {/* Centro: Título Centrado con Ícono */}
+        <View style={styles.centerSectionSimple}>
+          <View style={styles.titleRow}>
+            <View style={styles.iconHalo}>
+              <Ionicons name={icon} size={16} color={GAMES_THEME.colors.coral} />
+            </View>
+            <Text style={styles.gameTitleTextSimple} numberOfLines={1}>
+              {title}
+            </Text>
+          </View>
+        </View>
+
+        {/* Derecha: Botón de Reiniciar con Icono y Confirmación */}
+        <TouchableOpacity
+          onPress={() => {
+            void triggerGameHaptic('medium');
+            onReset();
+          }}
+          style={styles.headerResetPill}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Reiniciar partida"
+        >
+          <Ionicons name="reload" size={14} color="#e11d48" />
+          <Text style={styles.headerResetPillText}>Reiniciar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.headerContainer}>
@@ -320,10 +368,36 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f8f9fa',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  centerSectionSimple: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gameTitleTextSimple: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  headerResetPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#fecdd3',
+  },
+  headerResetPillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#e11d48',
   },
 });

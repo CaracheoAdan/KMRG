@@ -11,6 +11,7 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '../components/ui/Icon';
@@ -19,10 +20,12 @@ import { setCurrentProfile } from '../services/StorageService';
 import { useProfile } from '../contexts/ProfileContext';
 import { FONTS, COLORS } from '../theme/designSystem';
 
-// PIN de acceso privado de pareja
-const COUPLE_ACCESS_PIN = '2026';
+// PIN de acceso privado de pareja (configurable vía variable de entorno)
+const COUPLE_ACCESS_PIN = process.env.EXPO_PUBLIC_COUPLE_PIN || '2026';
 const MAX_PIN_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
+const LOCKOUT_UNTIL_KEY = '@kmrg_auth_lockout_until';
+const FAILED_ATTEMPTS_KEY = '@kmrg_auth_failed_attempts';
 
 export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfile) => void }> = ({
   onAuthenticated,
@@ -34,12 +37,32 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
 
+  // Restaurar estado de bloqueo persistente al montar la pantalla
+  useEffect(() => {
+    AsyncStorage.multiGet([LOCKOUT_UNTIL_KEY, FAILED_ATTEMPTS_KEY])
+      .then(([[, lockUntilRaw], [, attemptsRaw]]) => {
+        if (attemptsRaw) {
+          setFailedAttempts(Number(attemptsRaw) || 0);
+        }
+        if (lockUntilRaw) {
+          const remaining = Math.ceil((Number(lockUntilRaw) - Date.now()) / 1000);
+          if (remaining > 0) {
+            setLockoutRemaining(remaining);
+          } else {
+            void AsyncStorage.multiRemove([LOCKOUT_UNTIL_KEY, FAILED_ATTEMPTS_KEY]);
+          }
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (lockoutRemaining <= 0) return;
     const timer = setInterval(() => {
       setLockoutRemaining((prev) => {
         if (prev <= 1) {
           setFailedAttempts(0);
+          void AsyncStorage.multiRemove([LOCKOUT_UNTIL_KEY, FAILED_ATTEMPTS_KEY]);
           return 0;
         }
         return prev - 1;
@@ -69,9 +92,12 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
       const nextAttempts = failedAttempts + 1;
       setFailedAttempts(nextAttempts);
       setPinError(true);
+      await AsyncStorage.setItem(FAILED_ATTEMPTS_KEY, String(nextAttempts));
 
       if (nextAttempts >= MAX_PIN_ATTEMPTS) {
+        const lockUntil = Date.now() + LOCKOUT_SECONDS * 1000;
         setLockoutRemaining(LOCKOUT_SECONDS);
+        await AsyncStorage.setItem(LOCKOUT_UNTIL_KEY, String(lockUntil));
         Alert.alert(
           'Seguridad Activada',
           `Se alcanzó el límite de intentos. Espera ${LOCKOUT_SECONDS} segundos para volver a intentarlo.`
@@ -86,6 +112,7 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
     }
 
     setFailedAttempts(0);
+    await AsyncStorage.multiRemove([LOCKOUT_UNTIL_KEY, FAILED_ATTEMPTS_KEY]);
     await setCurrentProfile(selectedRole);
     onAuthenticated(selectedRole);
   };

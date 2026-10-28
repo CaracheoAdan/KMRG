@@ -38,6 +38,67 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+async function uploadMediaBuffer(
+  uriOrBase64: string,
+  options: {
+    folder: string;
+    ext: 'jpg' | 'm4a';
+    contentType: 'image/jpeg' | 'audio/m4a';
+    dataPrefix: 'data:image/' | 'data:audio/';
+  }
+): Promise<string> {
+  if (!uriOrBase64) return '';
+
+  // Si ya es una URL remota de Supabase o HTTP, no es necesario volver a subirla
+  if (uriOrBase64.startsWith('http://') || uriOrBase64.startsWith('https://')) {
+    return uriOrBase64;
+  }
+
+  try {
+    const fileName = `${options.folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${options.ext}`;
+    let fileBytes: Uint8Array;
+
+    if (uriOrBase64.startsWith(options.dataPrefix)) {
+      fileBytes = base64ToUint8Array(uriOrBase64);
+    } else if (
+      (uriOrBase64.startsWith('file://') || uriOrBase64.startsWith('/')) &&
+      FileSystemModule
+    ) {
+      const base64Data = await FileSystemModule.readAsStringAsync(uriOrBase64, {
+        encoding: FileSystemModule.EncodingType?.Base64 || 'base64',
+      });
+      fileBytes = base64ToUint8Array(base64Data);
+    } else {
+      return uriOrBase64;
+    }
+
+    const { data, error } = await supabase.storage
+      .from('kmrg-media')
+      .upload(fileName, fileBytes, {
+        contentType: options.contentType,
+        upsert: true,
+      });
+
+    if (error) {
+      console.warn('[SupabaseMediaService] Storage upload fallback a local:', error.message);
+      return uriOrBase64;
+    }
+
+    if (data?.path) {
+      const { data: publicUrlData } = supabase.storage
+        .from('kmrg-media')
+        .getPublicUrl(data.path);
+      if (publicUrlData?.publicUrl) {
+        return publicUrlData.publicUrl;
+      }
+    }
+  } catch (err) {
+    console.warn('[SupabaseMediaService] Error en subida multimedia, usando fallback local:', err);
+  }
+
+  return uriOrBase64;
+}
+
 export const SupabaseMediaService = {
   /**
    * Sube una foto a Supabase Storage en el bucket 'kmrg-media'.
@@ -48,58 +109,12 @@ export const SupabaseMediaService = {
     photoUriOrBase64: string,
     folder: 'memories' | 'avatars' | 'capsules' | 'places' = 'memories'
   ): Promise<string> {
-    if (!photoUriOrBase64) return '';
-
-    // Si ya es una URL remota de Supabase o HTTP, no es necesario volver a subirla
-    if (photoUriOrBase64.startsWith('http://') || photoUriOrBase64.startsWith('https://')) {
-      return photoUriOrBase64;
-    }
-
-    try {
-      const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.jpg`;
-      let fileBytes: Uint8Array;
-
-      if (photoUriOrBase64.startsWith('data:image/')) {
-        fileBytes = base64ToUint8Array(photoUriOrBase64);
-      } else if (
-        (photoUriOrBase64.startsWith('file://') || photoUriOrBase64.startsWith('/')) &&
-        FileSystemModule
-      ) {
-        const base64Data = await FileSystemModule.readAsStringAsync(photoUriOrBase64, {
-          encoding: FileSystemModule.EncodingType?.Base64 || 'base64',
-        });
-        fileBytes = base64ToUint8Array(base64Data);
-      } else {
-        // En caso de no poder convertir, retornamos la uri original de forma segura
-        return photoUriOrBase64;
-      }
-
-      const { data, error } = await supabase.storage
-        .from('kmrg-media')
-        .upload(fileName, fileBytes, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (error) {
-        // Fallback no destructivo: preserva el base64 si el bucket remoto no responde
-        console.warn('[SupabaseMediaService] Storage upload fallback a local:', error.message);
-        return photoUriOrBase64;
-      }
-
-      if (data?.path) {
-        const { data: publicUrlData } = supabase.storage
-          .from('kmrg-media')
-          .getPublicUrl(data.path);
-        if (publicUrlData?.publicUrl) {
-          return publicUrlData.publicUrl;
-        }
-      }
-    } catch (err) {
-      console.warn('[SupabaseMediaService] Error en uploadPhoto, usando fallback local:', err);
-    }
-
-    return photoUriOrBase64;
+    return uploadMediaBuffer(photoUriOrBase64, {
+      folder,
+      ext: 'jpg',
+      contentType: 'image/jpeg',
+      dataPrefix: 'data:image/',
+    });
   },
 
   /**
@@ -110,55 +125,11 @@ export const SupabaseMediaService = {
     audioUriOrBase64: string,
     folder: string = 'audio'
   ): Promise<string> {
-    if (!audioUriOrBase64) return '';
-
-    // Si ya es una URL remota de Supabase o HTTP, no es necesario volver a subirla
-    if (audioUriOrBase64.startsWith('http://') || audioUriOrBase64.startsWith('https://')) {
-      return audioUriOrBase64;
-    }
-
-    try {
-      const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.m4a`;
-      let fileBytes: Uint8Array;
-
-      if (audioUriOrBase64.startsWith('data:audio/')) {
-        fileBytes = base64ToUint8Array(audioUriOrBase64);
-      } else if (
-        (audioUriOrBase64.startsWith('file://') || audioUriOrBase64.startsWith('/')) &&
-        FileSystemModule
-      ) {
-        const base64Data = await FileSystemModule.readAsStringAsync(audioUriOrBase64, {
-          encoding: FileSystemModule.EncodingType?.Base64 || 'base64',
-        });
-        fileBytes = base64ToUint8Array(base64Data);
-      } else {
-        return audioUriOrBase64;
-      }
-
-      const { data, error } = await supabase.storage
-        .from('kmrg-media')
-        .upload(fileName, fileBytes, {
-          contentType: 'audio/m4a',
-          upsert: true,
-        });
-
-      if (error) {
-        console.warn('[SupabaseMediaService] Audio storage upload fallback a local:', error.message);
-        return audioUriOrBase64;
-      }
-
-      if (data?.path) {
-        const { data: publicUrlData } = supabase.storage
-          .from('kmrg-media')
-          .getPublicUrl(data.path);
-        if (publicUrlData?.publicUrl) {
-          return publicUrlData.publicUrl;
-        }
-      }
-    } catch (err) {
-      console.warn('[SupabaseMediaService] Error en uploadAudio, usando fallback local:', err);
-    }
-
-    return audioUriOrBase64;
+    return uploadMediaBuffer(audioUriOrBase64, {
+      folder,
+      ext: 'm4a',
+      contentType: 'audio/m4a',
+      dataPrefix: 'data:audio/',
+    });
   },
 };

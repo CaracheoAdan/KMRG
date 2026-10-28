@@ -5,6 +5,7 @@ import {
   View,
   Modal,
   TouchableOpacity,
+  ScrollView,
   Platform,
 } from 'react-native';
 import { Ionicons } from './ui/Icon';
@@ -18,6 +19,7 @@ interface DatePickerModalProps {
   onClose: () => void;
   title?: string;
   minDate?: string;
+  showQuickSelect?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -34,6 +36,7 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
   onClose,
   title = 'Elige una fecha',
   minDate,
+  showQuickSelect = true,
 }) => {
   const { primaryColor } = useTheme();
 
@@ -46,6 +49,39 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
   const [currentYear, setCurrentYear] = useState(initialYear);
   const [currentMonth, setCurrentMonth] = useState(initialMonth); // 0-11
   const [tempDate, setTempDate] = useState(effectiveVal);
+  const [pickerMode, setPickerMode] = useState<'calendar' | 'month' | 'year'>('calendar');
+  const availableYears = React.useMemo(() => {
+    const maxYear = new Date().getFullYear() + 2;
+    const yearsList: number[] = [];
+    for (let y = maxYear; y >= 1995; y--) {
+      yearsList.push(y);
+    }
+    return yearsList;
+  }, []);
+
+  const handleSelectYear = (yr: number) => {
+    setCurrentYear(yr);
+    setPickerMode('calendar');
+    if (tempDate) {
+      const parts = tempDate.split('-').map(Number);
+      const day = Math.min(parts[2] || 1, new Date(yr, currentMonth + 1, 0).getDate());
+      const mStr = String(currentMonth + 1).padStart(2, '0');
+      const dStr = String(day).padStart(2, '0');
+      setTempDate(`${yr}-${mStr}-${dStr}`);
+    }
+  };
+
+  const handleSelectMonth = (mIdx: number) => {
+    setCurrentMonth(mIdx);
+    setPickerMode('calendar');
+    if (tempDate) {
+      const parts = tempDate.split('-').map(Number);
+      const day = Math.min(parts[2] || 1, new Date(currentYear, mIdx + 1, 0).getDate());
+      const mStr = String(mIdx + 1).padStart(2, '0');
+      const dStr = String(day).padStart(2, '0');
+      setTempDate(`${currentYear}-${mStr}-${dStr}`);
+    }
+  };
 
   // Sincronizar cuando cambia el valor recibido
   React.useEffect(() => {
@@ -138,139 +174,269 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Accesos rápidos */}
-          <View style={styles.quickButtonsRow}>
-            {minDate ? (
-              <>
-                <TouchableOpacity
-                  onPress={() => {
-                    const t = new Date();
-                    t.setDate(t.getDate() + 1);
-                    const s = toLocalDateString(t);
-                    setTempDate(s);
-                    const parts = s.split('-').map(Number);
-                    setCurrentYear(parts[0]);
-                    setCurrentMonth(parts[1] - 1);
-                  }}
-                  style={styles.quickBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.quickBtnText}>Mañana</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    const t = new Date();
-                    t.setDate(t.getDate() + 7);
-                    const s = toLocalDateString(t);
-                    setTempDate(s);
-                    const parts = s.split('-').map(Number);
-                    setCurrentYear(parts[0]);
-                    setCurrentMonth(parts[1] - 1);
-                  }}
-                  style={styles.quickBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.quickBtnText}>En 1 sem</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    const t = new Date();
-                    t.setDate(t.getDate() + 30);
-                    const s = toLocalDateString(t);
-                    setTempDate(s);
-                    const parts = s.split('-').map(Number);
-                    setCurrentYear(parts[0]);
-                    setCurrentMonth(parts[1] - 1);
-                  }}
-                  style={styles.quickBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.quickBtnText}>En 1 mes</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TouchableOpacity
-                  onPress={() => setQuickDate(0)}
-                  style={styles.quickBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.quickBtnText}>Hoy</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setQuickDate(1)}
-                  style={styles.quickBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.quickBtnText}>Ayer</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setQuickDate(7)}
-                  style={styles.quickBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.quickBtnText}>Hace 1 sem</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-
-          {/* Controles de mes y año */}
-          <View style={styles.monthNav}>
-            <TouchableOpacity onPress={handlePrevMonth} style={[styles.navArrow, { backgroundColor: `${primaryColor}18` }]}>
-              <Ionicons name="chevron-back" size={20} color={primaryColor} />
-            </TouchableOpacity>
-            <Text style={styles.monthLabel}>
-              {MONTH_NAMES[currentMonth]} {currentYear}
-            </Text>
-            <TouchableOpacity onPress={handleNextMonth} style={[styles.navArrow, { backgroundColor: `${primaryColor}18` }]}>
-              <Ionicons name="chevron-forward" size={20} color={primaryColor} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Días de la semana */}
-          <View style={styles.weekRow}>
-            {WEEK_DAYS.map((wd, i) => (
-              <Text key={i} style={styles.weekText}>
-                {wd}
-              </Text>
-            ))}
-          </View>
-
-          {/* Días del mes */}
-          <View style={styles.daysGrid}>
-            {days.map((item, index) => {
-              if (!item.dayNum || !item.dateString) {
-                return <View key={`p-${index}`} style={styles.dayCell} />;
-              }
-
-              const isSelected = item.dateString === tempDate;
-
-              const isPastDisabled = Boolean(minDate && item.dateString < minDate);
-              return (
-                <TouchableOpacity
-                  key={item.dateString}
-                  disabled={isPastDisabled}
-                  onPress={() => item.dateString && setTempDate(item.dateString)}
-                  style={[
-                    styles.dayCell,
-                    isSelected && [styles.dayCellSelected, { backgroundColor: primaryColor }],
-                    isPastDisabled && { opacity: 0.25 },
-                  ]}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      isSelected && styles.dayTextSelected,
-                    ]}
+          {/* Accesos rápidos O Selector de Año/Mes para Aniversario */}
+          {showQuickSelect ? (
+            <View style={styles.quickButtonsRow}>
+              {minDate ? (
+                <>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const t = new Date();
+                      t.setDate(t.getDate() + 1);
+                      const s = toLocalDateString(t);
+                      setTempDate(s);
+                      const parts = s.split('-').map(Number);
+                      setCurrentYear(parts[0]);
+                      setCurrentMonth(parts[1] - 1);
+                    }}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
                   >
-                    {item.dayNum}
-                  </Text>
+                    <Text style={styles.quickBtnText}>Mañana</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const t = new Date();
+                      t.setDate(t.getDate() + 7);
+                      const s = toLocalDateString(t);
+                      setTempDate(s);
+                      const parts = s.split('-').map(Number);
+                      setCurrentYear(parts[0]);
+                      setCurrentMonth(parts[1] - 1);
+                    }}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.quickBtnText}>En 1 sem</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const t = new Date();
+                      t.setDate(t.getDate() + 30);
+                      const s = toLocalDateString(t);
+                      setTempDate(s);
+                      const parts = s.split('-').map(Number);
+                      setCurrentYear(parts[0]);
+                      setCurrentMonth(parts[1] - 1);
+                    }}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.quickBtnText}>En 1 mes</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    onPress={() => setQuickDate(0)}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.quickBtnText}>Hoy</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setQuickDate(1)}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.quickBtnText}>Ayer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setQuickDate(7)}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.quickBtnText}>Hace 1 sem</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          ) : (
+            <View style={styles.quickYearMonthRow}>
+              <TouchableOpacity
+                onPress={() => setPickerMode(pickerMode === 'month' ? 'calendar' : 'month')}
+                style={[
+                  styles.quickSelectorChip,
+                  pickerMode === 'month' && { backgroundColor: primaryColor, borderColor: primaryColor },
+                ]}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={14}
+                  color={pickerMode === 'month' ? '#ffffff' : primaryColor}
+                />
+                <Text
+                  style={[
+                    styles.quickSelectorChipText,
+                    { color: pickerMode === 'month' ? '#ffffff' : primaryColor },
+                  ]}
+                >
+                  {MONTH_NAMES[currentMonth]}
+                </Text>
+                <Ionicons
+                  name={pickerMode === 'month' ? 'chevron-up' : 'chevron-down'}
+                  size={12}
+                  color={pickerMode === 'month' ? '#ffffff' : primaryColor}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setPickerMode(pickerMode === 'year' ? 'calendar' : 'year')}
+                style={[
+                  styles.quickSelectorChip,
+                  pickerMode === 'year' && { backgroundColor: primaryColor, borderColor: primaryColor },
+                ]}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="time-outline"
+                  size={14}
+                  color={pickerMode === 'year' ? '#ffffff' : primaryColor}
+                />
+                <Text
+                  style={[
+                    styles.quickSelectorChipText,
+                    { color: pickerMode === 'year' ? '#ffffff' : primaryColor },
+                  ]}
+                >
+                  Año {currentYear}
+                </Text>
+                <Ionicons
+                  name={pickerMode === 'year' ? 'chevron-up' : 'chevron-down'}
+                  size={12}
+                  color={pickerMode === 'year' ? '#ffffff' : primaryColor}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {pickerMode === 'month' ? (
+            <View style={styles.pickerGridContainer}>
+              <Text style={styles.pickerGridTitle}>Selecciona el mes</Text>
+              <View style={styles.monthsGrid}>
+                {MONTH_NAMES.map((mName, mIdx) => {
+                  const isSelected = mIdx === currentMonth;
+                  return (
+                    <TouchableOpacity
+                      key={mName}
+                      onPress={() => handleSelectMonth(mIdx)}
+                      style={[
+                        styles.monthPickBtn,
+                        isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.monthPickText,
+                          isSelected && { color: '#ffffff', fontWeight: '800' },
+                        ]}
+                      >
+                        {mName.substring(0, 3)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : pickerMode === 'year' ? (
+            <View style={styles.pickerGridContainer}>
+              <Text style={styles.pickerGridTitle}>Selecciona el año</Text>
+              <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                <View style={styles.yearsGrid}>
+                  {availableYears.map((yr) => {
+                    const isSelected = yr === currentYear;
+                    return (
+                      <TouchableOpacity
+                        key={yr}
+                        onPress={() => handleSelectYear(yr)}
+                        style={[
+                          styles.yearPickBtn,
+                          isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
+                        ]}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.yearPickText,
+                            isSelected && { color: '#ffffff', fontWeight: '800' },
+                          ]}
+                        >
+                          {yr}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          ) : (
+            <>
+              {/* Controles de mes y año */}
+              <View style={styles.monthNav}>
+                <TouchableOpacity onPress={handlePrevMonth} style={[styles.navArrow, { backgroundColor: `${primaryColor}18` }]}>
+                  <Ionicons name="chevron-back" size={20} color={primaryColor} />
                 </TouchableOpacity>
-              );
-            })}
-          </View>
+                <TouchableOpacity
+                  onPress={() => setPickerMode('month')}
+                  activeOpacity={0.7}
+                  style={styles.monthLabelTouch}
+                >
+                  <Text style={styles.monthLabel}>
+                    {MONTH_NAMES[currentMonth]} {currentYear}
+                  </Text>
+                  <Ionicons name="chevron-down" size={13} color="#6c757d" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleNextMonth} style={[styles.navArrow, { backgroundColor: `${primaryColor}18` }]}>
+                  <Ionicons name="chevron-forward" size={20} color={primaryColor} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Días de la semana */}
+              <View style={styles.weekRow}>
+                {WEEK_DAYS.map((wd, i) => (
+                  <Text key={i} style={styles.weekText}>
+                    {wd}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Días del mes */}
+              <View style={styles.daysGrid}>
+                {days.map((item, index) => {
+                  if (!item.dayNum || !item.dateString) {
+                    return <View key={`p-${index}`} style={styles.dayCell} />;
+                  }
+
+                  const isSelected = item.dateString === tempDate;
+                  const isPastDisabled = Boolean(minDate && item.dateString < minDate);
+                  return (
+                    <TouchableOpacity
+                      key={item.dateString}
+                      disabled={isPastDisabled}
+                      onPress={() => item.dateString && setTempDate(item.dateString)}
+                      style={[
+                        styles.dayCell,
+                        isSelected && [styles.dayCellSelected, { backgroundColor: primaryColor }],
+                        isPastDisabled && { opacity: 0.25 },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          isSelected && styles.dayTextSelected,
+                        ]}
+                      >
+                        {item.dayNum}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          )}
 
           {/* Botones de acción */}
           <View style={styles.actionsRow}>
@@ -445,5 +611,88 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  quickYearMonthRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickSelectorChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  quickSelectorChipText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  monthLabelTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  pickerGridContainer: {
+    paddingVertical: 8,
+    minHeight: 210,
+    justifyContent: 'center',
+  },
+  pickerGridTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8d99ae',
+    textAlign: 'center',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  monthsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  monthPickBtn: {
+    width: '30%',
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  monthPickText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2b2d42',
+  },
+  yearsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    paddingVertical: 2,
+  },
+  yearPickBtn: {
+    width: '22%',
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  yearPickText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2b2d42',
   },
 });

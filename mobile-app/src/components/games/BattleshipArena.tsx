@@ -1235,7 +1235,7 @@ export const BattleshipArena: React.FC<Props> = ({
                       : 'information-circle'
                   }
                   size={12}
-                  color={helpBanner?.isError ? '#ef4444' : '#0284c7'}
+                  color={helpBanner?.isError ? '#ef4444' : '#64748b'}
                 />
                 <Text
                   style={[
@@ -1477,6 +1477,7 @@ export const BattleshipArena: React.FC<Props> = ({
               {myFleet.map((s) => {
                 const conf = SHIP_CONFIG[s.id] || { name: s.id, size: s.size, bg: '#0284c7' };
                 const isSel = s.id === selectedSetupShipId;
+                const fleetCardWidth = Math.max(92, Math.round((exactFrameWidth - 36) / 3.35));
 
                 return (
                   <TouchableOpacity
@@ -1494,6 +1495,7 @@ export const BattleshipArena: React.FC<Props> = ({
                     }}
                     style={[
                       styles.fleetUniformCard,
+                      { width: fleetCardWidth },
                       isSel && styles.fleetMiniCardSelected,
                     ]}
                     activeOpacity={0.8}

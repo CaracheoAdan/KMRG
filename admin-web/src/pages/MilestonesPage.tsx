@@ -18,6 +18,7 @@ import {
   deleteMilestone,
 } from '../lib/milestones.api';
 import type { Milestone } from '../types';
+import { normalizeDateInput, formatCalendarDate as formatDisplayDate } from '../lib/utils';
 import {
   Card,
   CardHeader,
@@ -35,36 +36,7 @@ interface MilestoneFormValues {
   image_url: string;
 }
 
-const normalizeDateInput = (dateStr: string): string => {
-  if (!dateStr) return '';
-  return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-};
 
-const formatDisplayDate = (dateStr: string): string => {
-  if (!dateStr) return '—';
-  try {
-    const cleanDate = normalizeDateInput(dateStr);
-    const parts = cleanDate.split('-');
-    if (parts.length === 3) {
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const day = parseInt(parts[2], 10);
-      const d = new Date(Date.UTC(year, month, day));
-      const monthNames = [
-        'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-        'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-      ];
-      return `${day} ${monthNames[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-    }
-    return new Date(dateStr).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
-};
 
 export const MilestonesPage: React.FC = () => {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -204,7 +176,7 @@ export const MilestonesPage: React.FC = () => {
       }
     } catch (error: unknown) {
       console.error('Error al eliminar recuerdo:', error);
-      alert('Error al eliminar el recuerdo. Por favor intenta nuevamente.');
+      setErrorMessage('No se pudo eliminar el recuerdo. Por favor intenta nuevamente.');
     } finally {
       setDeletingId(null);
     }
@@ -427,7 +399,7 @@ export const MilestonesPage: React.FC = () => {
               No hay recuerdos registrados
             </h3>
             <p className="text-sm text-slate-500 mt-1 max-w-sm">
-              Agrega vuestros momentos especiales con su fecha y fotografía para la línea de tiempo.
+              Agrega nuestros momentos especiales con su fecha y fotografía para la línea de tiempo.
             </p>
             {!isFormOpen && (
               <Button
@@ -496,7 +468,7 @@ export const MilestonesPage: React.FC = () => {
                                 href={milestone.image_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-slate-400 hover:text-rose-500 truncate block max-w-xs sm:max-w-md transition-colors"
+                                className="text-xs text-slate-500 hover:text-rose-600 truncate block max-w-xs sm:max-w-md transition-colors"
                               >
                                 {milestone.image_url}
                               </a>

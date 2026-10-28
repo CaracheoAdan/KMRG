@@ -19,6 +19,7 @@ import { DatePickerModal } from './DatePickerModal';
 import * as ImagePicker from 'expo-image-picker';
 import { SupabaseMediaService } from '../services/SupabaseMediaService';
 import { toLocalDateString } from '../services/StorageService';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   visible: boolean;
@@ -58,6 +59,7 @@ export const TimeCapsuleModal: React.FC<Props> = ({
   onSaveCapsule,
   onOpenCapsule,
 }) => {
+  const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
   const [selectedCapsule, setSelectedCapsule] = useState<TimeCapsuleItem | null>(null);
 
@@ -74,15 +76,15 @@ export const TimeCapsuleModal: React.FC<Props> = ({
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Ticker for live countdown
+  // Ticker for live countdown (activo solo en la vista de lista para no re-renderizar el formulario cada segundo)
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || activeTab !== 'list' || selectedCapsule) return;
     const interval = setInterval(() => {
       setTick((t) => t + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [visible]);
+  }, [visible, activeTab, selectedCapsule]);
 
   const handlePickPhoto = async () => {
     try {
@@ -163,7 +165,7 @@ export const TimeCapsuleModal: React.FC<Props> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.sheetContainer}>
+        <View style={[styles.sheetContainer, { backgroundColor: colors.surface }]}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -171,7 +173,7 @@ export const TimeCapsuleModal: React.FC<Props> = ({
                 <Ionicons name="hourglass" size={20} color={primaryColor} />
               </View>
               <View>
-                <Text style={styles.headerTitle}>Cápsulas del Tiempo</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Cápsulas del Tiempo</Text>
                 <Text style={styles.headerSubtitle}>Recuerdos sellados para el futuro</Text>
               </View>
             </View>

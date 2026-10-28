@@ -152,13 +152,19 @@ export const ChessArena: React.FC<Props> = ({
         ]}
       >
         <View style={styles.playerInfoRow}>
-          <View style={[styles.playerAvatar, { backgroundColor: '#e0f2fe', borderColor: '#38bdf8' }]}>
+          <View style={[styles.playerAvatar, { backgroundColor: '#e0f2fe', borderColor: !isWhite && !isWinner ? '#0284c7' : '#38bdf8' }]}>
             <Text style={[styles.playerAvatarText, { color: '#0369a1' }]}>J</Text>
           </View>
           <View style={styles.playerNameColumn}>
             <Text style={styles.playerName}>Javier</Text>
             <Text style={styles.playerRole}>Negras ⚔️</Text>
           </View>
+          {!isWhite && !isWinner && (
+            <View style={styles.activeTurnChipJavier}>
+              <Ionicons name="sparkles" size={10} color="#0369a1" />
+              <Text style={styles.activeTurnChipTextJavier}>Turno</Text>
+            </View>
+          )}
           {diffJavier > 0 && (
             <View style={styles.materialAdvantageBadgeJavier}>
               <Text style={styles.materialAdvantageText}>+{diffJavier}</Text>
@@ -331,13 +337,19 @@ export const ChessArena: React.FC<Props> = ({
         ]}
       >
         <View style={styles.playerInfoRow}>
-          <View style={[styles.playerAvatar, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
+          <View style={[styles.playerAvatar, { backgroundColor: '#fdf2f8', borderColor: isWhite && !isWinner ? '#ec4899' : '#f472b6' }]}>
             <Text style={[styles.playerAvatarText, { color: '#be185d' }]}>K</Text>
           </View>
           <View style={styles.playerNameColumn}>
             <Text style={styles.playerName}>Karlita</Text>
             <Text style={styles.playerRole}>Blancas 👑</Text>
           </View>
+          {isWhite && !isWinner && (
+            <View style={styles.activeTurnChipKarla}>
+              <Ionicons name="sparkles" size={10} color="#be185d" />
+              <Text style={styles.activeTurnChipTextKarla}>Turno</Text>
+            </View>
+          )}
           {diffKarla > 0 && (
             <View style={styles.materialAdvantageBadgeKarla}>
               <Text style={styles.materialAdvantageText}>+{diffKarla}</Text>
@@ -422,24 +434,15 @@ export const ChessArena: React.FC<Props> = ({
         </ScrollView>
       </View>
 
-      {/* 6. Dock Inferior: Deshacer y Reiniciar con Botones Unificados */}
+      {/* 6. Dock Inferior: Acciones de la jugada actual (Deshacer) */}
       <View style={[styles.dockContainer, { width: frameWidth }]}>
         <View style={{ flex: 1 }}>
           <GameButton
-            label={`Deshacer (${chessHistoryLength})`}
+            label={`Deshacer Jugada (${chessHistoryLength})`}
             icon="arrow-undo"
             variant="secondary"
             disabled={chessHistoryLength === 0}
             onPress={onUndo}
-          />
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <GameButton
-            label="Reiniciar"
-            icon="reload"
-            variant="destructive"
-            onPress={onReset}
           />
         </View>
       </View>
@@ -486,12 +489,58 @@ const styles = StyleSheet.create({
     ...GAMES_THEME.shadows.soft,
   },
   playerBarActiveKarla: {
-    borderColor: '#f472b6',
+    borderWidth: 2,
+    borderColor: '#ec4899',
     backgroundColor: '#fdf2f8',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 4,
   },
   playerBarActiveJavier: {
-    borderColor: '#38bdf8',
+    borderWidth: 2,
+    borderColor: '#0284c7',
     backgroundColor: '#f0f9ff',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  activeTurnChipKarla: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#fce7f3',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fbcfe8',
+    marginLeft: 4,
+  },
+  activeTurnChipTextKarla: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#be185d',
+  },
+  activeTurnChipJavier: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    marginLeft: 4,
+  },
+  activeTurnChipTextJavier: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0369a1',
   },
   playerInfoRow: {
     flexDirection: 'row',

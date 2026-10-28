@@ -28,6 +28,10 @@ export const DEFAULT_WIDGET_DATA: KmrgWidgetData = {
 
 export function computeTimeTogether(anniversaryDate?: string, fallbackDays = 0) {
   let totalDays = fallbackDays;
+  let years = 0;
+  let months = 0;
+  let days = 0;
+
   if (anniversaryDate && anniversaryDate.trim()) {
     try {
       const parts = anniversaryDate.split('-').map(Number);
@@ -36,15 +40,35 @@ export function computeTimeTogether(anniversaryDate?: string, fallbackDays = 0) 
         const now = new Date();
         const diffMs = Math.max(0, now.getTime() - start.getTime());
         totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        years = now.getFullYear() - start.getFullYear();
+        months = now.getMonth() - start.getMonth();
+        days = now.getDate() - start.getDate();
+
+        if (days < 0) {
+          const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+          days += prevMonthLastDay;
+          months -= 1;
+        }
+
+        if (months < 0) {
+          months += 12;
+          years -= 1;
+        }
+        years = Math.max(0, years);
+        months = Math.max(0, months);
+        days = Math.max(0, days);
       }
     } catch {
       totalDays = fallbackDays;
     }
   }
 
-  const years = Math.floor(totalDays / 365);
-  const months = Math.floor((totalDays % 365) / 30);
-  const days = (totalDays % 365) % 30;
+  if (years === 0 && months === 0 && days === 0 && totalDays > 0) {
+    years = Math.floor(totalDays / 365);
+    months = Math.floor((totalDays % 365) / 30);
+    days = (totalDays % 365) % 30;
+  }
 
   const parts: string[] = [];
   if (years > 0) parts.push(`${years} ${years === 1 ? 'año' : 'años'}`);

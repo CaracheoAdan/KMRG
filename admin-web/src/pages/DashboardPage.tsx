@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Pencil, Mail, Calendar, AlertCircle, RefreshCw, Heart, Sparkles, Clock } from 'lucide-react';
 import { getMessages, deleteMessage } from '../lib/messages.api';
+import { formatCalendarDate, formatDateTime } from '../lib/utils';
 import { getInteractions } from '../lib/interactions.api';
 import { Message, Interaction } from '../types';
 import { Card } from '../components/ui/Card';
@@ -44,8 +45,9 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     fetchData();
 
-    // Polling silencioso cada 15 segundos para actualizar interacciones y estado de lectura en vivo
+    // Polling silencioso cada 15 segundos (pausado cuando la pestaña está oculta)
     const interval = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       try {
         const [freshInteractions, freshMessages] = await Promise.all([
           getInteractions(),
@@ -75,53 +77,13 @@ export const DashboardPage: React.FC = () => {
       setMessages((prev) => prev.filter((msg) => msg.id !== id));
     } catch (error: unknown) {
       console.error('Error al eliminar mensaje:', error);
-      alert('Error al eliminar el mensaje. Por favor intenta nuevamente.');
+      setErrorMessage('No se pudo eliminar el mensaje. Por favor intenta nuevamente.');
     } finally {
       setDeletingId(null);
     }
   };
 
-  const formatScheduledDate = (dateStr: string): string => {
-    if (!dateStr) return '—';
-    try {
-      const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-      const parts = cleanDate.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const day = parseInt(parts[2], 10);
-        const d = new Date(Date.UTC(year, month, day));
-        const monthNames = [
-          'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-          'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-        ];
-        return `${day} ${monthNames[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-      }
-      return new Date(dateStr).toLocaleDateString('es-ES', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const formatDateTime = (dateStr: string): string => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('es-ES', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const formatScheduledDate = formatCalendarDate;
 
   const truncateContent = (text: string, maxLen = 80): string => {
     if (!text) return '';
@@ -171,7 +133,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {interactions.length === 0 ? (
-          <div className="py-6 text-center text-slate-400 text-sm">
+          <div className="py-6 text-center text-slate-500 text-sm">
             Aún no hay interacciones registradas. Aparecerán aquí en cuanto presione el corazón.
           </div>
         ) : (
@@ -384,7 +346,7 @@ export const DashboardPage: React.FC = () => {
                           }
                           className="text-slate-400 hover:text-slate-800 hover:bg-slate-100 p-2 h-8 w-8 rounded-lg transition-colors"
                           title="Editar mensaje"
-                          aria-label="Editar mensaje"
+                          aria-label={`Editar mensaje del ${formatScheduledDate(message.scheduled_date)}`}
                         >
                           <Pencil className="w-4 h-4" aria-hidden="true" />
                         </Button>
@@ -396,7 +358,7 @@ export const DashboardPage: React.FC = () => {
                           onClick={() => handleDelete(message.id)}
                           className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 h-8 w-8 rounded-lg transition-colors"
                           title="Eliminar mensaje"
-                          aria-label="Eliminar mensaje"
+                          aria-label={`Eliminar mensaje del ${formatScheduledDate(message.scheduled_date)}`}
                         >
                           <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </Button>

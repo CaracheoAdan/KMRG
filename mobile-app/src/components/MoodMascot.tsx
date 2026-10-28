@@ -18,6 +18,35 @@ interface MoodMascotProps {
   accessory?: 'none' | 'crown' | 'party_hat' | 'flower' | 'sunglasses';
 }
 
+
+/**
+ * Retorna la etiqueta con el género correcto según el perfil ('Karla' -> 'Enamorada', 'Javier' -> 'Enamorado')
+ */
+export function getFeelingLabel(
+  feeling: MoodFeelingType | string,
+  profile?: string | null
+): string {
+  const isFemale = profile === 'Karla';
+  switch (feeling) {
+    case 'feliz':
+      return 'Feliz';
+    case 'enamorado':
+      return isFemale ? 'Enamorada' : 'Enamorado';
+    case 'tranquilo':
+      return isFemale ? 'Tranquila' : 'Tranquilo';
+    case 'divertido':
+      return isFemale ? 'Juguetona' : 'Juguetón';
+    case 'cansado':
+      return isFemale ? 'Cansada' : 'Cansado';
+    case 'triste':
+      return 'Triste';
+    case 'enojado':
+      return isFemale ? 'Enojada' : 'Enojado';
+    default:
+      return String(feeling);
+  }
+}
+
 export const PRESET_FEELINGS: Array<{
   id: MoodFeelingType;
   label: string;

@@ -1,10 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
 import {
+  BucketItem,
   HomeState,
+  LoveReason,
+  MovieItem,
   MoviesAndPlansState,
+  QuickNoteMessage,
   SpecialPlace,
+  TimeCapsuleItem,
   UserProfile,
+  VoiceNoteData,
 } from '../types';
 import { toLocalDateString } from './StorageService';
 import { sanitizeInput } from '../theme/designSystem';
@@ -32,7 +38,7 @@ export const DEFAULT_SPECIAL_PLACES: SpecialPlace[] = [
     address: '20.51399, -100.82658',
     date: '2026-10-23',
     notes:
-      'Desde este día, supe que quería estar contigo el resto de mi vida, sin importar que pasará.',
+      'Desde este día, supe que quería estar contigo el resto de mi vida, sin importar qué pasara.',
     rating: 5,
     latitude: 20.513986925980635,
     longitude: -100.8265775063644,
@@ -47,6 +53,7 @@ export const DEFAULT_HOME_STATE: HomeState = {
   anniversaryDate: '2024-02-14',
   nextEventTitle: '',
   nextEventDate: '',
+  nextEventTime: '',
   streakCount: 1,
   lastInteractionDate: toLocalDateString(new Date()),
   moods: {
@@ -419,6 +426,7 @@ function normalizeHomeState(state: HomeState): HomeState {
     nextEventTitle: stripLegacyEmoji(
       sanitizeInput(state.nextEventTitle || DEFAULT_HOME_STATE.nextEventTitle, 100)
     ),
+    nextEventTime: sanitizeInput(state.nextEventTime || '', 10),
     moods: {
       Javier: {
         ...DEFAULT_HOME_STATE.moods.Javier,
@@ -431,12 +439,37 @@ function normalizeHomeState(state: HomeState): HomeState {
         status: sanitizeInput(safeMoods.Karla?.status || '', 120),
       },
     },
+    stickyNote: {
+      author: state.stickyNote?.author === 'Karla' ? 'Karla' : 'Javier',
+      text: sanitizeInput(state.stickyNote?.text || '', 500),
+      updatedAt: state.stickyNote?.updatedAt || new Date().toISOString(),
+    },
+    loveReasons: Array.isArray(state.loveReasons)
+      ? state.loveReasons.map((r) => ({
+          ...r,
+          text: sanitizeInput(r.text || '', 300),
+        }))
+      : DEFAULT_HOME_STATE.loveReasons,
     voiceNotes: Array.isArray(state.voiceNotes)
       ? state.voiceNotes
       : DEFAULT_HOME_STATE.voiceNotes,
     timeCapsules: Array.isArray(state.timeCapsules)
       ? state.timeCapsules
       : DEFAULT_HOME_STATE.timeCapsules,
+    todaySong: state.todaySong
+      ? {
+          ...state.todaySong,
+          title: sanitizeInput(state.todaySong.title || '', 120),
+          artist: sanitizeInput(state.todaySong.artist || '', 120),
+          dedication: state.todaySong.dedication
+            ? sanitizeInput(state.todaySong.dedication, 300)
+            : undefined,
+          url:
+            state.todaySong.url && /^https?:\/\//i.test(state.todaySong.url.trim())
+              ? state.todaySong.url.trim()
+              : undefined,
+        }
+      : undefined,
     couplePet: {
       ...DEFAULT_HOME_STATE.couplePet!,
       ...(state.couplePet || {}),
@@ -482,6 +515,7 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   // Preservar próximo evento agendado
   const nextEventTitle = normIncoming.nextEventTitle || normBase.nextEventTitle || '';
   const nextEventDate = normIncoming.nextEventDate || normBase.nextEventDate || '';
+  const nextEventTime = normIncoming.nextEventTime !== undefined ? normIncoming.nextEventTime : (normBase.nextEventTime || '');
 
   // Notita fija: la más reciente gana
   const stickyBaseTime = new Date(normBase.stickyNote?.updatedAt || 0).getTime();
@@ -490,17 +524,17 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
     stickyIncTime >= stickyBaseTime ? normIncoming.stickyNote : normBase.stickyNote;
 
   // Razones para amar: unión por ID sin perder ninguna
-  const reasonsMap = new Map<string, any>();
+  const reasonsMap = new Map<string, LoveReason>();
   (normBase.loveReasons || []).forEach((r) => reasonsMap.set(r.id, r));
   (normIncoming.loveReasons || []).forEach((r) => reasonsMap.set(r.id, r));
 
   // Notas de voz: unión por ID sin perder ninguna
-  const voiceMap = new Map<string, any>();
+  const voiceMap = new Map<string, VoiceNoteData>();
   (normBase.voiceNotes || []).forEach((v) => voiceMap.set(v.id, v));
   (normIncoming.voiceNotes || []).forEach((v) => voiceMap.set(v.id, v));
 
   // Cápsulas de tiempo: unión por ID sin perder ninguna
-  const capsulesMap = new Map<string, any>();
+  const capsulesMap = new Map<string, TimeCapsuleItem>();
   (normBase.timeCapsules || []).forEach((c) => capsulesMap.set(c.id, c));
   (normIncoming.timeCapsules || []).forEach((c) => capsulesMap.set(c.id, c));
 
@@ -592,7 +626,7 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   };
 
   // Notitas rápidas: unión por ID ordenadas por fecha
-  const quickMap = new Map<string, any>();
+  const quickMap = new Map<string, QuickNoteMessage>();
   (normBase.quickNotes || []).forEach((n) => quickMap.set(n.id, n));
   (normIncoming.quickNotes || []).forEach((n) => quickMap.set(n.id, n));
   const quickNotes = Array.from(quickMap.values())
@@ -613,6 +647,7 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
     anniversaryDate,
     nextEventTitle,
     nextEventDate,
+    nextEventTime,
     streakCount: Math.max(normBase.streakCount || 1, normIncoming.streakCount || 1),
     lastInteractionDate:
       normIncoming.lastInteractionDate > normBase.lastInteractionDate
@@ -623,9 +658,16 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
       Karla: karlaIncTime >= karlaBaseTime ? normIncoming.moods.Karla : normBase.moods.Karla,
     },
     stickyNote,
-    loveReasons: Array.from(reasonsMap.values()),
-    voiceNotes: Array.from(voiceMap.values()),
-    timeCapsules: Array.from(capsulesMap.values()),
+    loveReasons: Array.from(reasonsMap.values()).filter(
+      (item) => !(normBase.deletedIds || []).includes(item.id) && !(normIncoming.deletedIds || []).includes(item.id)
+    ),
+    voiceNotes: Array.from(voiceMap.values()).filter(
+      (item) => !(normBase.deletedIds || []).includes(item.id) && !(normIncoming.deletedIds || []).includes(item.id)
+    ),
+    timeCapsules: Array.from(capsulesMap.values()).filter(
+      (item) => !(normBase.deletedIds || []).includes(item.id) && !(normIncoming.deletedIds || []).includes(item.id)
+    ),
+    deletedIds: Array.from(new Set([...(normBase.deletedIds || []), ...(normIncoming.deletedIds || [])])).slice(-200),
     couplePet,
     partnerProfiles,
     pushTokens: {
@@ -645,7 +687,7 @@ function mergeMoviesStates(
   const normIncoming = normalizeMoviesState(incoming);
 
   // Unir películas por ID sin perder ninguna calificación ni notas
-  const moviesMap = new Map<string, any>();
+  const moviesMap = new Map<string, MovieItem>();
   normBase.movies.forEach((m) => moviesMap.set(m.id, m));
   normIncoming.movies.forEach((m) => {
     if (moviesMap.has(m.id)) {
@@ -664,7 +706,7 @@ function mergeMoviesStates(
   });
 
   // Unir bucket list por ID sin perder ítems completados
-  const bucketMap = new Map<string, any>();
+  const bucketMap = new Map<string, BucketItem>();
   normBase.bucketList.forEach((b) => bucketMap.set(b.id, b));
   normIncoming.bucketList.forEach((b) => {
     if (bucketMap.has(b.id)) {
@@ -684,10 +726,12 @@ function mergeMoviesStates(
     new Set([...normBase.foodOptions, ...normIncoming.foodOptions])
   );
 
+  const deletedMovies = new Set([...(normBase.deletedIds || []), ...(normIncoming.deletedIds || [])]);
   return {
-    movies: Array.from(moviesMap.values()),
-    bucketList: Array.from(bucketMap.values()),
+    movies: Array.from(moviesMap.values()).filter((m) => !deletedMovies.has(m.id)),
+    bucketList: Array.from(bucketMap.values()).filter((b) => !deletedMovies.has(b.id)),
     foodOptions: foods.length > 0 ? foods : DEFAULT_MOVIES_STATE.foodOptions,
+    deletedIds: Array.from(deletedMovies).slice(-200),
   };
 }
 
@@ -698,7 +742,7 @@ function mergeSpecialPlaces(
   const normBase = normalizePlacesState(base);
   const normIncoming = normalizePlacesState(incoming);
 
-  const placesMap = new Map<string, any>();
+  const placesMap = new Map<string, SpecialPlace>();
   normBase.places.forEach((p) => placesMap.set(p.id, p));
   normIncoming.places.forEach((p) => {
     if (placesMap.has(p.id)) {
@@ -714,8 +758,10 @@ function mergeSpecialPlaces(
     }
   });
 
+  const deletedPlaces = new Set([...(normBase.deletedIds || []), ...(normIncoming.deletedIds || [])]);
   return {
-    places: Array.from(placesMap.values()),
+    places: Array.from(placesMap.values()).filter((p) => !deletedPlaces.has(p.id)),
+    deletedIds: Array.from(deletedPlaces).slice(-200),
   };
 }
 
@@ -981,6 +1027,7 @@ function normalizeGamesState(state: GamesState): GamesState {
 
 export interface SpecialPlacesState {
   places: SpecialPlace[];
+  deletedIds?: string[];
 }
 
 export const DEFAULT_PLACES_STATE: SpecialPlacesState = {
@@ -997,7 +1044,7 @@ function normalizePlacesState(state: SpecialPlacesState): SpecialPlacesState {
       }))
     : DEFAULT_SPECIAL_PLACES;
 
-  return { places };
+  return { places, deletedIds: Array.isArray(state?.deletedIds) ? state.deletedIds : [] };
 }
 
 async function fetchLatestSyncedState<T>(
@@ -1065,6 +1112,20 @@ async function fetchLatestSyncedState<T>(
   return localCached ?? applyNormalize(defaultValue);
 }
 
+function collectArrayIds(obj: any): string[] {
+  if (!obj || typeof obj !== 'object') return [];
+  const keys = ['loveReasons', 'voiceNotes', 'timeCapsules', 'movies', 'bucketList', 'places'];
+  const ids: string[] = [];
+  for (const k of keys) {
+    if (Array.isArray(obj[k])) {
+      for (const item of obj[k]) {
+        if (item && typeof item.id === 'string') ids.push(item.id);
+      }
+    }
+  }
+  return ids;
+}
+
 async function saveAndBroadcastState<T>(
   sender: UserProfile,
   syncType: string,
@@ -1072,9 +1133,27 @@ async function saveAndBroadcastState<T>(
   newState: T,
   normalizer?: (val: T) => T
 ): Promise<void> {
-  const cleanState = normalizer ? normalizer(newState) : newState;
+  let cleanState: any = normalizer ? normalizer(newState) : newState;
 
   try {
+    const prevRaw = await AsyncStorage.getItem(localKey);
+    if (prevRaw && cleanState && typeof cleanState === 'object') {
+      const prevParsed = JSON.parse(prevRaw);
+      const prevIds = collectArrayIds(prevParsed);
+      const currentIds = new Set(collectArrayIds(cleanState));
+      const newlyDeleted = prevIds.filter((id) => !currentIds.has(id));
+      const existingDeleted: string[] = Array.isArray(cleanState.deletedIds)
+        ? cleanState.deletedIds
+        : Array.isArray(prevParsed?.deletedIds)
+        ? prevParsed.deletedIds
+        : [];
+      if (newlyDeleted.length > 0 || existingDeleted.length > 0) {
+        cleanState = {
+          ...cleanState,
+          deletedIds: Array.from(new Set([...existingDeleted, ...newlyDeleted])).slice(-200),
+        };
+      }
+    }
     await AsyncStorage.setItem(localKey, JSON.stringify(cleanState));
   } catch {
     // Ignorar error local

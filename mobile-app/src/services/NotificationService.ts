@@ -159,15 +159,24 @@ export const registerDevicePushToken = async (): Promise<string | null> => {
 /**
  * Envía una notificación push inmediata al dispositivo de la pareja vía Expo Push API
  */
+const EXPO_PUSH_TOKEN_REGEX = /^(ExponentPushToken|ExpoPushToken)\[[a-zA-Z0-9_-]+\]$/;
+
 export const sendPartnerPushNotification = async (
   recipientToken: string,
   title: string,
   body: string,
   data: Record<string, unknown> = {}
 ): Promise<boolean> => {
-  if (!recipientToken || typeof recipientToken !== 'string') {
+  if (
+    !recipientToken ||
+    typeof recipientToken !== 'string' ||
+    !EXPO_PUSH_TOKEN_REGEX.test(recipientToken.trim())
+  ) {
     return false;
   }
+
+  const safeTitle = (title || '').trim().slice(0, 80);
+  const safeBody = (body || '').trim().slice(0, 240);
 
   try {
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -178,9 +187,9 @@ export const sendPartnerPushNotification = async (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        to: recipientToken,
-        title,
-        body,
+        to: recipientToken.trim(),
+        title: safeTitle,
+        body: safeBody,
         sound: 'default',
         priority: 'high',
         channelId: 'daily-messages',

@@ -8,15 +8,37 @@ import {
 } from '../services/CoupleSyncService';
 import { supabase } from '../config/supabase';
 
+let sharedHomeChannelInitialized = false;
+
+function ensureSharedHomeRealtimeChannel(): void {
+  if (sharedHomeChannelInitialized) return;
+  sharedHomeChannelInitialized = true;
+
+  supabase
+    .channel('kmrg-shared-home-state')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'interactions' },
+      (payload: { new?: { type?: string; payload?: Partial<HomeState> } }) => {
+        if (payload.new?.type === 'sync_home_state' && payload.new?.payload) {
+          notifyHomeState({ ...DEFAULT_HOME_STATE, ...payload.new.payload });
+        }
+      }
+    )
+    .subscribe();
+}
+
 /**
  * Fuente única del estado de Hoy (racha, mascota, perfiles).
- * Todas las pantallas (header incluido) leen la racha desde aquí para que siempre coincida.
+ * Todas las pantallas (header incluido) leen la racha desde aquí reutilizando un único canal Realtime.
  */
 export function useHomeState(): HomeState {
   const [home, setHome] = useState<HomeState>(DEFAULT_HOME_STATE);
 
   useEffect(() => {
     let mounted = true;
+    ensureSharedHomeRealtimeChannel();
+
     void getHomeState().then((s) => {
       if (mounted) setHome(s);
     });
@@ -25,23 +47,9 @@ export function useHomeState(): HomeState {
       if (mounted) setHome(s);
     });
 
-    const channel = supabase
-      .channel(`kmrg-home-state-${Math.random().toString(36).slice(2, 8)}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'interactions' },
-        (payload: any) => {
-          if (payload.new?.type === 'sync_home_state' && payload.new?.payload) {
-            notifyHomeState({ ...DEFAULT_HOME_STATE, ...payload.new.payload });
-          }
-        }
-      )
-      .subscribe();
-
     return () => {
       mounted = false;
       unsub();
-      void supabase.removeChannel(channel);
     };
   }, []);
 

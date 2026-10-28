@@ -5,8 +5,11 @@ import {
   getCachedMessages,
   saveCachedMilestones,
   getCachedMilestones,
+  deduplicateMilestones,
   toLocalDateString,
 } from './StorageService';
+
+const VALID_PROFILES = new Set<UserProfile>(['Javier', 'Karla']);
 
 /**
  * Sincroniza mensajes desde Supabase con blindaje de privacidad:
@@ -22,9 +25,12 @@ export const syncSupabaseMessages = async (currentProfile?: UserProfile): Promis
       .select('*')
       .order('scheduled_date', { ascending: true });
 
-    if (currentProfile) {
-      const alias = currentProfile === 'Karla' ? 'Ella' : currentProfile;
-      query = query.or(`scheduled_date.lte.${todayStr},sender.eq.${currentProfile},sender.eq.${alias}`);
+    const safeProfile =
+      currentProfile && VALID_PROFILES.has(currentProfile) ? currentProfile : undefined;
+
+    if (safeProfile) {
+      const alias = safeProfile === 'Karla' ? 'Ella' : safeProfile;
+      query = query.or(`scheduled_date.lte.${todayStr},sender.eq.${safeProfile},sender.eq.${alias}`);
     } else {
       query = query.lte('scheduled_date', todayStr);
     }
@@ -157,26 +163,41 @@ export const syncSupabaseMilestones = async (): Promise<Milestone[]> => {
     if (!error && Array.isArray(data)) {
       const existing = await getCachedMilestones();
       const localOnly = existing.filter((m) => m.id.startsWith('local-'));
-      
+
+      const uploadedImageUrls = new Set(
+        (data as Milestone[]).map((m) => (m.image_url || '').trim()).filter(Boolean)
+      );
+      const uploadedSignatures = new Set(
+        (data as Milestone[]).map(
+          (m) => `${(m.author || '').toLowerCase()}_${toLocalDateString(m.date)}_${(m.title || '').trim().toLowerCase()}`
+        )
+      );
+
+      // Conservar solo los recuerdos locales que NO existan ya en Supabase
+      const pendingLocalOnly = localOnly.filter((m) => {
+        const img = (m.image_url || '').trim();
+        if (img && uploadedImageUrls.has(img)) return false;
+        const sig = `${(m.author || '').toLowerCase()}_${toLocalDateString(m.date)}_${(m.title || '').trim().toLowerCase()}`;
+        if (uploadedSignatures.has(sig)) return false;
+        return true;
+      });
+
       const map = new Map<string, Milestone>();
       for (const m of data as Milestone[]) {
         map.set(m.id, m);
       }
-      for (const m of localOnly) {
+      for (const m of pendingLocalOnly) {
         map.set(m.id, m);
       }
 
-      const merged = Array.from(map.values()).sort((a, b) =>
-        toLocalDateString(a.date).localeCompare(toLocalDateString(b.date))
-      );
-
+      const merged = deduplicateMilestones(Array.from(map.values()));
       await saveCachedMilestones(merged);
       return merged;
     }
   } catch (error) {
     console.log('[SupabaseSync] Modo sin conexión. Usando recuerdos locales.');
   }
-  return await getCachedMilestones();
+  return deduplicateMilestones(await getCachedMilestones());
 };
 
 /**
@@ -204,8 +225,24 @@ export const createSupabaseMilestone = async (milestone: {
 
     if (error) throw error;
 
-    await syncSupabaseMilestones();
-    return { success: true, data: data as Milestone };
+    const newMilestone = data as Milestone;
+
+    // Actualizar caché local agregando el elemento canónico y eliminando cualquier copia local
+    const existing = await getCachedMilestones();
+    const cleanList = existing.filter(
+      (m) =>
+        m.id !== newMilestone.id &&
+        !(m.image_url && m.image_url.trim() === newMilestone.image_url?.trim()) &&
+        !(
+          m.title.trim().toLowerCase() === newMilestone.title.trim().toLowerCase() &&
+          toLocalDateString(m.date) === toLocalDateString(newMilestone.date) &&
+          m.author === newMilestone.author
+        )
+    );
+    const updated = deduplicateMilestones([...cleanList, newMilestone]);
+    await saveCachedMilestones(updated);
+
+    return { success: true, data: newMilestone };
   } catch (error: any) {
     console.warn('Error al guardar hito en Supabase:', error.message);
     return { success: false, error: error.message };
@@ -254,6 +291,10 @@ export const sendSupabaseInteraction = async (
  */
 export const pruneOldInteractions = async (): Promise<void> => {
   try {
+    // 0. Intentar usar función almacenada del servidor PostgreSQL si está disponible
+    const { error: rpcError } = await supabase.rpc('prune_kmrg_interactions');
+    if (!rpcError) return;
+
     const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
     // 1. Podar latidos efímeros 'thinking_of_you' con más de 3 días

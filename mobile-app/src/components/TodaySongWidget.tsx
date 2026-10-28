@@ -14,6 +14,7 @@ import {
 import { Ionicons } from './ui/Icon';
 import { TodaySongData, UserProfile } from '../types';
 import { FONTS } from '../theme/designSystem';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   song?: TodaySongData;
@@ -22,12 +23,16 @@ interface Props {
   onSaveSong: (song: TodaySongData) => void;
 }
 
+const isSafeHttpUrl = (rawUrl?: string): boolean =>
+  Boolean(rawUrl && /^https?:\/\//i.test(rawUrl.trim()));
+
 export const TodaySongWidget: React.FC<Props> = ({
   song,
   currentProfile,
   primaryColor,
   onSaveSong,
 }) => {
+  const { colors } = useTheme();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
@@ -70,15 +75,15 @@ export const TodaySongWidget: React.FC<Props> = ({
   };
 
   const handlePlaySong = async () => {
-    if (song?.url) {
+    if (song?.url && isSafeHttpUrl(song.url)) {
       try {
-        await Linking.openURL(song.url);
+        await Linking.openURL(song.url.trim());
+        return;
       } catch {
         // Fallback: search on YouTube
-        const query = encodeURIComponent(`${song.title} ${song.artist}`);
-        void Linking.openURL(`https://www.youtube.com/results?search_query=${query}`);
       }
-    } else if (song) {
+    }
+    if (song) {
       const query = encodeURIComponent(`${song.title} ${song.artist}`);
       void Linking.openURL(`https://www.youtube.com/results?search_query=${query}`);
     }
@@ -89,7 +94,7 @@ export const TodaySongWidget: React.FC<Props> = ({
       <View style={styles.headerRow}>
         <View style={styles.titleLeft}>
           <Ionicons name="musical-notes-outline" size={18} color={primaryColor} />
-          <Text style={styles.sectionTitle}>Nuestra Canción de Hoy</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Nuestra Canción de Hoy</Text>
         </View>
         <TouchableOpacity
           onPress={handleOpenModal}
@@ -105,19 +110,19 @@ export const TodaySongWidget: React.FC<Props> = ({
       {!song ? (
         <TouchableOpacity
           onPress={handleOpenModal}
-          style={styles.emptyCard}
+          style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           activeOpacity={0.8}
         >
           <View style={[styles.emptyIconCircle, { backgroundColor: `${primaryColor}15` }]}>
             <Ionicons name="musical-note" size={24} color={primaryColor} />
           </View>
-          <Text style={styles.emptyTitle}>¿Cuál es la banda sonora de hoy?</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>¿Cuál es la banda sonora de hoy?</Text>
           <Text style={styles.emptySubtitle}>
             Dedícale una canción a tu pareja para escuchar juntos durante el día.
           </Text>
         </TouchableOpacity>
       ) : (
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.contentRow}>
             {/* Vinilo / Disco animado */}
             <TouchableOpacity
@@ -131,10 +136,10 @@ export const TodaySongWidget: React.FC<Props> = ({
             </TouchableOpacity>
 
             <View style={styles.infoCol}>
-              <Text style={styles.songTitle} numberOfLines={1}>
+              <Text style={[styles.songTitle, { color: colors.text }]} numberOfLines={1}>
                 {song.title}
               </Text>
-              <Text style={styles.artistName} numberOfLines={1}>
+              <Text style={[styles.artistName, { color: colors.textSecondary }]} numberOfLines={1}>
                 {song.artist}
               </Text>
               <Text style={styles.dedicatedBy}>
@@ -144,8 +149,8 @@ export const TodaySongWidget: React.FC<Props> = ({
           </View>
 
           {!!song.dedication && (
-            <View style={[styles.dedicationBox, { borderLeftColor: primaryColor }]}>
-              <Text style={styles.dedicationText}>“{song.dedication}”</Text>
+            <View style={[styles.dedicationBox, { borderLeftColor: primaryColor, backgroundColor: colors.surfaceAlt }]}>
+              <Text style={[styles.dedicationText, { color: colors.textSecondary }]}>“{song.dedication}”</Text>
             </View>
           )}
 
@@ -172,9 +177,9 @@ export const TodaySongWidget: React.FC<Props> = ({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Dedicar Canción de Hoy</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Dedicar Canción de Hoy</Text>
               <TouchableOpacity
                 onPress={() => setIsModalOpen(false)}
                 style={styles.closeBtn}

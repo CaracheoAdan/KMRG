@@ -334,15 +334,15 @@ export const GameScoreBreakdownModal: React.FC<GameScoreBreakdownModalProps> = (
                   {/* Vista Individual Karla */}
                   {selectedFilter === 'Karla' && (
                     <View style={styles.singlePlayerRow}>
-                      <View>
+                      <View style={{ flex: 1, marginRight: 8 }}>
                         <Text style={styles.singleWinsText}>
                           {wK} {game.key === 'sudoku' ? 'partidas completadas' : 'victorias conseguidas'}
                         </Text>
-                        <Text style={styles.singleSubText}>
+                        <Text style={styles.singleSubText} numberOfLines={2}>
                           Aportó {pK} puntos y {tK} trofeo{tK === 1 ? '' : 's'} esta semana
                         </Text>
                       </View>
-                      <View style={[styles.singleScoreBadge, { backgroundColor: '#f3e8ff' }]}>
+                      <View style={[styles.singleScoreBadge, { backgroundColor: '#f3e8ff', flexShrink: 0 }]}>
                         <Text style={[styles.singleScoreBadgeText, { color: '#9333ea' }]}>{pK} pts</Text>
                       </View>
                     </View>
@@ -351,15 +351,15 @@ export const GameScoreBreakdownModal: React.FC<GameScoreBreakdownModalProps> = (
                   {/* Vista Individual Javier */}
                   {selectedFilter === 'Javier' && (
                     <View style={styles.singlePlayerRow}>
-                      <View>
+                      <View style={{ flex: 1, marginRight: 8 }}>
                         <Text style={styles.singleWinsText}>
                           {wJ} {game.key === 'sudoku' ? 'partidas completadas' : 'victorias conseguidas'}
                         </Text>
-                        <Text style={styles.singleSubText}>
+                        <Text style={styles.singleSubText} numberOfLines={2}>
                           Aportó {pJ} puntos y {tJ} trofeo{tJ === 1 ? '' : 's'} esta semana
                         </Text>
                       </View>
-                      <View style={[styles.singleScoreBadge, { backgroundColor: '#e0f2fe' }]}>
+                      <View style={[styles.singleScoreBadge, { backgroundColor: '#e0f2fe', flexShrink: 0 }]}>
                         <Text style={[styles.singleScoreBadgeText, { color: '#0284c7' }]}>{pJ} pts</Text>
                       </View>
                     </View>
@@ -386,17 +386,19 @@ export const GameScoreBreakdownModal: React.FC<GameScoreBreakdownModalProps> = (
             </View>
           </ScrollView>
 
-          {/* Botón de Entendido */}
-          <TouchableOpacity
-            onPress={() => {
-              void triggerGameHaptic('light');
-              onClose();
-            }}
-            style={styles.actionBtn}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionBtnText}>Cerrar</Text>
-          </TouchableOpacity>
+          {/* Footer delimitado con sutil borde superior */}
+          <View style={styles.modalFooterDivider}>
+            <TouchableOpacity
+              onPress={() => {
+                void triggerGameHaptic('light');
+                onClose();
+              }}
+              style={styles.actionBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.actionBtnText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -753,13 +755,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1e293b',
   },
+  modalFooterDivider: {
+    paddingTop: 10,
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
+  },
   actionBtn: {
     backgroundColor: '#f1f5f9',
     borderRadius: 14,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
   },
   actionBtnText: {
     fontSize: 14,

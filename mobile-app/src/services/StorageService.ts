@@ -111,6 +111,76 @@ export const toLocalDateAtHour = (dateInput: string | Date, hour: number): Date 
   return new Date(year, month - 1, day, hour, 0, 0, 0);
 };
 
+export interface TimeTogetherBreakdown {
+  totalDays: number;
+  years: number;
+  months: number;
+  days: number;
+}
+
+/**
+ * Calcula con precisión de calendario real el tiempo transcurrido desde el aniversario.
+ * Respeta la duración exacta de cada mes (28, 30, 31 días) en lugar de aproximar con meses fijos de 30 días.
+ */
+export const calculateTimeTogether = (
+  anniversaryDateStr?: string | null,
+  nowInput: Date = new Date()
+): TimeTogetherBreakdown => {
+  if (!anniversaryDateStr) {
+    return { totalDays: 0, years: 0, months: 0, days: 0 };
+  }
+
+  const clean = toLocalDateString(anniversaryDateStr);
+  const parts = clean.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) {
+    return { totalDays: 0, years: 0, months: 0, days: 0 };
+  }
+  const [startYear, startMonth, startDay] = parts;
+
+  const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+  const now = new Date(
+    nowInput.getFullYear(),
+    nowInput.getMonth(),
+    nowInput.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+
+  if (now.getTime() < start.getTime()) {
+    return { totalDays: 0, years: 0, months: 0, days: 0 };
+  }
+
+  // 1. Días totales exactos
+  const diffMs = now.getTime() - start.getTime();
+  const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // 2. Desglose exacto de calendario (Años, Meses, Días)
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  let days = now.getDate() - start.getDate();
+
+  if (days < 0) {
+    // Tomar los días del mes inmediatamente anterior al mes de `now`
+    const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    days += prevMonthLastDay;
+    months -= 1;
+  }
+
+  if (months < 0) {
+    months += 12;
+    years -= 1;
+  }
+
+  return {
+    totalDays,
+    years: Math.max(0, years),
+    months: Math.max(0, months),
+    days: Math.max(0, days),
+  };
+};
+
 /**
  * Caché local de Mensajes
  */
@@ -229,14 +299,61 @@ export const markMessageAsRead = async (id: string): Promise<void> => {
 };
 
 /**
- * Caché local de Recuerdos / Hitos
+ * Deduplica una lista de recuerdos eliminando duplicados por ID, por URL de imagen
+ * o por firma de autor + fecha + título, priorizando elementos canónicos de Supabase sobre 'local-'.
+ */
+export const deduplicateMilestones = (list: Milestone[]): Milestone[] => {
+  if (!Array.isArray(list) || list.length === 0) return [];
+
+  const seenIds = new Set<string>();
+  const seenImageUrls = new Set<string>();
+  const seenSignatures = new Set<string>();
+  const result: Milestone[] = [];
+
+  // Priorizar hitos canónicos de Supabase (sin prefijo 'local-')
+  const sorted = [...list].sort((a, b) => {
+    const aIsLocal = a.id?.startsWith('local-') ? 1 : 0;
+    const bIsLocal = b.id?.startsWith('local-') ? 1 : 0;
+    if (aIsLocal !== bIsLocal) return aIsLocal - bIsLocal;
+    return (b.created_at || '').localeCompare(a.created_at || '');
+  });
+
+  for (const m of sorted) {
+    if (!m || !m.id) continue;
+    if (seenIds.has(m.id)) continue;
+
+    const img = (m.image_url || '').trim();
+    const sig = `${(m.author || '').toLowerCase()}_${toLocalDateString(m.date)}_${(m.title || '').trim().toLowerCase()}`;
+
+    // Si la URL de imagen ya existe, es el mismo recuerdo duplicado
+    if (img && seenImageUrls.has(img)) {
+      continue;
+    }
+    // Si coinciden autor, fecha y título exacto, es el mismo recuerdo duplicado
+    if (seenSignatures.has(sig)) {
+      continue;
+    }
+
+    seenIds.add(m.id);
+    if (img) seenImageUrls.add(img);
+    seenSignatures.add(sig);
+    result.push(m);
+  }
+
+  return result.sort((a, b) =>
+    toLocalDateString(a.date).localeCompare(toLocalDateString(b.date))
+  );
+};
+
+/**
+ * Caché local de Recuerdos / Hitos (siempre deduplicada)
  */
 export const getCachedMilestones = async (): Promise<Milestone[]> => {
   try {
     const raw = await AsyncStorage.getItem(MILESTONES_KEY);
     if (!raw) return [];
     const parsed: Milestone[] = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? deduplicateMilestones(parsed) : [];
   } catch {
     return [];
   }
@@ -244,7 +361,8 @@ export const getCachedMilestones = async (): Promise<Milestone[]> => {
 
 export const saveCachedMilestones = async (milestones: Milestone[]): Promise<void> => {
   try {
-    await AsyncStorage.setItem(MILESTONES_KEY, JSON.stringify(milestones));
+    const clean = deduplicateMilestones(milestones);
+    await AsyncStorage.setItem(MILESTONES_KEY, JSON.stringify(clean));
   } catch (error) {
     console.warn('Error guardando hitos en caché local:', error);
   }
@@ -266,9 +384,7 @@ export const addLocalMilestone = async (milestone: {
   };
 
   const existing = await getCachedMilestones();
-  const updated = [...existing, newMilestone].sort((a, b) =>
-    toLocalDateString(a.date).localeCompare(toLocalDateString(b.date))
-  );
+  const updated = deduplicateMilestones([...existing, newMilestone]);
 
   await AsyncStorage.setItem(MILESTONES_KEY, JSON.stringify(updated));
   return newMilestone;

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '../ui/Icon';
 import { UserProfile } from '../../types';
@@ -20,6 +21,7 @@ export interface SavedSudokuSession {
   notes: Record<string, number[]>;
   mistakes: number;
   completed: boolean;
+  placedBy?: Record<string, 'Karla' | 'Javier'>;
 }
 
 interface Props {
@@ -142,8 +144,27 @@ export const SudokuArena: React.FC<Props> = ({
               <TouchableOpacity
                 key={d.key}
                 onPress={() => {
-                  void triggerGameHaptic('selection');
-                  onNewGame(d.key as any);
+                  if (active) return;
+                  if (filledCellsCount > 0 && !sudoku.completed) {
+                    Alert.alert(
+                      '¿Cambiar dificultad?',
+                      `Llevan ${filledCellsCount}/81 celdas avanzadas. Si cambias a "${d.label}", se iniciará una nueva partida colaborativa y se reiniciará el tablero actual.`,
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        {
+                          text: 'Reiniciar en ' + d.label,
+                          style: 'destructive',
+                          onPress: () => {
+                            void triggerGameHaptic('selection');
+                            onNewGame(d.key as any);
+                          },
+                        },
+                      ]
+                    );
+                  } else {
+                    void triggerGameHaptic('selection');
+                    onNewGame(d.key as any);
+                  }
                 }}
                 style={[styles.segmentBtn, active && styles.segmentBtnActive]}
                 accessibilityLabel={`Dificultad ${d.label}`}
@@ -246,7 +267,7 @@ export const SudokuArena: React.FC<Props> = ({
                         { fontSize: digitFontSize },
                         isFixed
                           ? styles.fixedDigit
-                          : currentProfile === 'Karla'
+                          : (sudoku.placedBy?.[r + '-' + c] || currentProfile) === 'Karla'
                           ? styles.karlaDigit
                           : styles.javierDigit,
                         isWrong && styles.wrongDigit,
@@ -488,7 +509,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   fixedDigit: {
-    color: '#334155', // Gris azulado oscuro
+    color: '#1e293b', // Gris azulado oscuro original
   },
   karlaDigit: {
     color: '#9333ea',
@@ -582,13 +603,14 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   remainingCountText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#64748b',
+    fontSize: 8.5,
+    fontWeight: '600',
+    color: '#94a3b8',
+    marginTop: 1,
   },
   remainingCountTextDone: {
-    color: '#16a34a',
-    fontWeight: '900',
+    color: '#10b981',
+    fontWeight: '800',
   },
   sudokuProgressCard: {
     width: '100%',

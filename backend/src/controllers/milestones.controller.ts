@@ -126,29 +126,46 @@ export const updateMilestone = async (req: Request, res: Response): Promise<void
       image_url?: string;
     };
 
-    const updated = await prisma.milestone.update({
-      where: { id },
-      data: {
-        ...(author !== undefined && { author }),
-        ...(title !== undefined && { title }),
-        ...(date !== undefined && { date: new Date(date) }),
-        ...(image_url !== undefined && { image_url }),
-      },
-    });
+    const prismaPatch = {
+      ...(author !== undefined && { author }),
+      ...(title !== undefined && { title: title.trim() }),
+      ...(date !== undefined && { date: new Date(date) }),
+      ...(image_url !== undefined && { image_url: image_url.trim() }),
+    };
 
     if (supabase) {
       try {
         const patch: Record<string, unknown> = {};
         if (author !== undefined) patch.author = author;
-        if (title !== undefined) patch.title = title;
+        if (title !== undefined) patch.title = title.trim();
         if (date !== undefined) patch.date = date;
-        if (image_url !== undefined) patch.image_url = image_url;
+        if (image_url !== undefined) patch.image_url = image_url.trim();
 
-        await supabase.from('milestones').update(patch).eq('id', id);
+        const { data, error } = await supabase
+          .from('milestones')
+          .update(patch)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (!error && data) {
+          try {
+            await prisma.milestone.update({ where: { id }, data: prismaPatch });
+          } catch {
+            // Hito creado directamente en Supabase desde la app móvil
+          }
+          res.json({ success: true, data });
+          return;
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar actualización de hito a Supabase');
       }
     }
+
+    const updated = await prisma.milestone.update({
+      where: { id },
+      data: prismaPatch,
+    });
 
     res.json({ success: true, data: updated });
   } catch (error) {
@@ -167,15 +184,20 @@ export const deleteMilestone = async (req: Request, res: Response): Promise<void
   try {
     const id = req.params.id as string;
 
-    await prisma.milestone.delete({ where: { id } });
-
     if (supabase) {
       try {
-        await supabase.from('milestones').delete().eq('id', id);
+        const { error } = await supabase.from('milestones').delete().eq('id', id);
+        if (!error) {
+          await prisma.milestone.deleteMany({ where: { id } }).catch(() => undefined);
+          res.json({ success: true, message: 'Hito eliminado' });
+          return;
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar eliminación de hito a Supabase');
       }
     }
+
+    await prisma.milestone.delete({ where: { id } });
 
     res.json({ success: true, message: 'Hito eliminado' });
   } catch (error) {

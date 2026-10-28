@@ -145,17 +145,14 @@ export const updateMessage = async (req: Request, res: Response): Promise<void> 
       is_read?: boolean;
     };
 
-    const updated = await prisma.message.update({
-      where: { id },
-      data: {
-        ...(sender !== undefined && { sender }),
-        ...(recipient !== undefined && { recipient }),
-        ...(content !== undefined && { content }),
-        ...(scheduled_date !== undefined && { scheduled_date: new Date(scheduled_date) }),
-        ...(theme_color !== undefined && { theme_color }),
-        ...(is_read !== undefined && { is_read }),
-      },
-    });
+    const prismaPatch = {
+      ...(sender !== undefined && { sender }),
+      ...(recipient !== undefined && { recipient }),
+      ...(content !== undefined && { content: content.trim() }),
+      ...(scheduled_date !== undefined && { scheduled_date: new Date(scheduled_date) }),
+      ...(theme_color !== undefined && { theme_color }),
+      ...(is_read !== undefined && { is_read }),
+    };
 
     if (supabase) {
       try {
@@ -167,11 +164,31 @@ export const updateMessage = async (req: Request, res: Response): Promise<void> 
         if (theme_color !== undefined) patch.theme_color = theme_color;
         if (is_read !== undefined) patch.is_read = is_read;
 
-        await supabase.from('messages').update(patch).eq('id', id);
+        const { data, error } = await supabase
+          .from('messages')
+          .update(patch)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (!error && data) {
+          try {
+            await prisma.message.update({ where: { id }, data: prismaPatch });
+          } catch {
+            // El mensaje fue creado desde la app móvil solo en Supabase
+          }
+          res.json({ success: true, data });
+          return;
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar actualización de mensaje a Supabase');
       }
     }
+
+    const updated = await prisma.message.update({
+      where: { id },
+      data: prismaPatch,
+    });
 
     res.json({ success: true, data: updated });
   } catch (error) {
@@ -190,15 +207,20 @@ export const deleteMessage = async (req: Request, res: Response): Promise<void> 
   try {
     const id = req.params.id as string;
 
-    await prisma.message.delete({ where: { id } });
-
     if (supabase) {
       try {
-        await supabase.from('messages').delete().eq('id', id);
+        const { error } = await supabase.from('messages').delete().eq('id', id);
+        if (!error) {
+          await prisma.message.deleteMany({ where: { id } }).catch(() => undefined);
+          res.json({ success: true, message: 'Mensaje eliminado' });
+          return;
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar eliminación de mensaje a Supabase');
       }
     }
+
+    await prisma.message.delete({ where: { id } });
 
     res.json({ success: true, message: 'Mensaje eliminado' });
   } catch (error) {
@@ -212,14 +234,17 @@ export const deleteMessage = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// ── Mobile: Sincronización completa de mensajes ──
+// ── Mobile: Sincronización de mensajes (filtrando cartas futuras por privacidad) ──
 export const syncMessages = async (_req: Request, res: Response): Promise<void> => {
   try {
+    const todayIso = new Date().toISOString().split('T')[0];
+
     if (supabase) {
       try {
         const { data, error } = await supabase
           .from('messages')
           .select('*')
+          .lte('scheduled_date', todayIso)
           .order('scheduled_date', { ascending: true })
           .order('created_at', { ascending: true });
 
@@ -232,6 +257,11 @@ export const syncMessages = async (_req: Request, res: Response): Promise<void> 
     }
 
     const messages = await prisma.message.findMany({
+      where: {
+        scheduled_date: {
+          lte: new Date(`${todayIso}T23:59:59.999Z`),
+        },
+      },
       select: {
         id: true,
         sender: true,
@@ -258,18 +288,31 @@ export const markMessageAsRead = async (req: Request, res: Response): Promise<vo
   try {
     const id = req.params.id as string;
 
-    await prisma.message.update({
-      where: { id },
-      data: { is_read: true },
-    });
-
     if (supabase) {
       try {
-        await supabase.from('messages').update({ is_read: true }).eq('id', id);
+        const { data, error } = await supabase
+          .from('messages')
+          .update({ is_read: true })
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (!error && data) {
+          await prisma.message
+            .update({ where: { id }, data: { is_read: true } })
+            .catch(() => undefined);
+          res.json({ success: true, message: 'Mensaje marcado como leído' });
+          return;
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar marca de lectura a Supabase');
       }
     }
+
+    await prisma.message.update({
+      where: { id },
+      data: { is_read: true },
+    });
 
     res.json({ success: true, message: 'Mensaje marcado como leído' });
   } catch (error) {

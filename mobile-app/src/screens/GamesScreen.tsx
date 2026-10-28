@@ -5,6 +5,7 @@ import {
   Text,
   View,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   Alert,
@@ -26,6 +27,7 @@ import { TicTacToeArena } from '../components/games/TicTacToeArena';
 import { SudokuArena } from '../components/games/SudokuArena';
 import { ChessArena } from '../components/games/ChessArena';
 import { HangmanArena } from '../components/games/HangmanArena';
+import { HANGMAN_DICTIONARY } from '../components/games/hangmanDictionary';
 import { BattleshipArena } from '../components/games/BattleshipArena';
 import { MoodMascot } from '../components/MoodMascot';
 import { GameHeader } from '../components/games/common/GameHeader';
@@ -88,53 +90,7 @@ const ALL_GAMES: Array<{
   { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle', description: 'Adivina la palabra oculta', bgTint: '#ffe4e6', iconColor: '#e11d48' },
 ];
 
-const HANGMAN_DICTIONARY: Array<{ word: string; hint: string; category: string }> = [
-  { word: 'MATRIX', hint: 'Ciencia ficción con Neo y las pastillas roja y azul', category: 'Cine' },
-  { word: 'TITANIC', hint: 'Famoso barco transatlántico y un iceberg', category: 'Cine' },
-  { word: 'AVATAR', hint: 'Seres de piel azul en el planeta Pandora', category: 'Cine' },
-  { word: 'BATMAN', hint: 'El caballero de la noche protegiendo Gotham', category: 'Cine' },
-  { word: 'SHREK', hint: 'Ogro verde carismático que vive en un pantano', category: 'Cine' },
-  { word: 'INCEPTION', hint: 'Ladrones que se infiltran dentro de los sueños', category: 'Cine' },
-  { word: 'SPIDERMAN', hint: 'Héroe con traje arácnido que trepa paredes', category: 'Cine' },
-  { word: 'GLADIADOR', hint: 'Guerrero romano en busca de honor y venganza', category: 'Cine' },
-  { word: 'STARWARS', hint: 'Guerra galáctica con sables de luz y caballeros Jedi', category: 'Cine' },
-  { word: 'JURASSIC', hint: 'Parque con dinosaurios clonados que se escapan', category: 'Cine' },
-  { word: 'ELEFANTE', hint: 'Mamífero terrestre gigante con colmillos y trompa', category: 'Animales' },
-  { word: 'JIRAFA', hint: 'El animal más alto del mundo con cuello largo', category: 'Animales' },
-  { word: 'DELFIN', hint: 'Mamífero marino muy sociable e inteligente', category: 'Animales' },
-  { word: 'CANGURO', hint: 'Salta velozmente y lleva a su cría en una bolsa', category: 'Animales' },
-  { word: 'PINGUINO', hint: 'Ave que no vuela pero nada en aguas congeladas', category: 'Animales' },
-  { word: 'LEOPARDO', hint: 'Felino salvaje muy veloz con manchas oscuras', category: 'Animales' },
-  { word: 'MARIPOSA', hint: 'Insecto con alas coloridas tras salir del capullo', category: 'Animales' },
-  { word: 'JAPON', hint: 'País del sol naciente, sushi y templos', category: 'Geografía' },
-  { word: 'ITALIA', hint: 'País con forma de bota, cuna de la pizza y el Coliseo', category: 'Geografía' },
-  { word: 'FRANCIA', hint: 'País de la Torre Eiffel y los croissants', category: 'Geografía' },
-  { word: 'CANADA', hint: 'País norteño con hoja de arce en su bandera', category: 'Geografía' },
-  { word: 'BRASIL', hint: 'País más grande de Sudamérica famoso por su carnaval', category: 'Geografía' },
-  { word: 'EGIPTO', hint: 'Tierra de pirámides milenarias y el río Nilo', category: 'Geografía' },
-  { word: 'PIZZA', hint: 'Masa horneada con salsa de tomate y queso derretido', category: 'Comida' },
-  { word: 'HAMBURGUESA', hint: 'Carne en pan con queso, lechuga y papas fritas', category: 'Comida' },
-  { word: 'CHOCOLATE', hint: 'Dulce delicioso elaborado a partir del cacao', category: 'Comida' },
-  { word: 'ESPAGUETI', hint: 'Pasta larga italiana con salsa boloñesa', category: 'Comida' },
-  { word: 'SUSHI', hint: 'Rollo japonés de arroz con pescado fresco o aguacate', category: 'Comida' },
-  { word: 'HELADO', hint: 'Postre cremoso servido muy frío en cono o copa', category: 'Comida' },
-  { word: 'TACOS', hint: 'Tortilla con carne asada, cilantro y cebolla', category: 'Comida' },
-  { word: 'GUITARRA', hint: 'Instrumento musical de seis cuerdas y caja sonora', category: 'Objetos' },
-  { word: 'TELESCOPIO', hint: 'Instrumento óptico para ver planetas y estrellas', category: 'Tecnología' },
-  { word: 'COMPUTADORA', hint: 'Máquina electrónica para procesar datos y navegar', category: 'Tecnología' },
-  { word: 'AUDIFONOS', hint: 'Dispositivo para escuchar música en privado', category: 'Objetos' },
-  { word: 'BICICLETA', hint: 'Vehículo de dos ruedas impulsado por pedales', category: 'Objetos' },
-  { word: 'COHETE', hint: 'Vehículo que viaja a gran velocidad al espacio exterior', category: 'Tecnología' },
-  { word: 'VOLCAN', hint: 'Montaña con cráter que expulsa lava y humo', category: 'Naturaleza' },
-  { word: 'ARCOIRIS', hint: 'Banda de colores que surge cuando llueve con sol', category: 'Naturaleza' },
-  { word: 'ASTRONAUTA', hint: 'Persona entrenada para viajar al espacio exterior', category: 'Ciencia' },
-  { word: 'GALAXIA', hint: 'Enorme sistema de miles de millones de estrellas', category: 'Espacio' },
-  { word: 'DINOSAURIO', hint: 'Reptiles colosales que dominaron la Tierra', category: 'Historia' },
-  { word: 'POKEMON', hint: 'Criaturas de bolsillo con entrenadores y batallas', category: 'Videojuegos' },
-  { word: 'MINECRAFT', hint: 'Juego de construcción y supervivencia con cubos', category: 'Videojuegos' },
-  { word: 'TETRIS', hint: 'Clásico juego de acomodar piezas geométricas que caen', category: 'Videojuegos' },
-  { word: 'AJEDREZ', hint: 'Juego de estrategia con tablero de 64 casillas', category: 'Juegos' },
-];
+// HANGMAN_DICTIONARY se importa desde '../components/games/hangmanDictionary'
 
 const BASE_SUDOKU = [
   [5, 3, 4, 6, 7, 8, 9, 1, 2],
@@ -832,21 +788,37 @@ export const GamesScreen: React.FC = () => {
     return getValidChessMoves(gamesState.chess.board, selectedChessPos[0], selectedChessPos[1]);
   }, [selectedChessPos, gamesState.chess.board, getValidChessMoves]);
 
-  const handleResetChess = async () => {
-    setSelectedChessPos(null);
-    setChessHistory([]);
-    await updateAndSyncGames({
-      ...gamesState,
-      chess: {
-        ...gamesState.chess,
-        board: createInitialChessBoard(),
-        turn: 'w',
-        capturedByW: [],
-        capturedByB: [],
-        lastMove: null,
-        winner: null,
-      },
-    });
+  const handleResetChess = (skipConfirm = false) => {
+    const doReset = async () => {
+      setSelectedChessPos(null);
+      setChessHistory([]);
+      await updateAndSyncGames({
+        ...gamesState,
+        chess: {
+          ...gamesState.chess,
+          board: createInitialChessBoard(),
+          turn: 'w',
+          capturedByW: [],
+          capturedByB: [],
+          lastMove: null,
+          winner: null,
+        },
+      });
+    };
+
+    if (skipConfirm) {
+      void doReset();
+      return;
+    }
+
+    Alert.alert(
+      '¿Reiniciar partida de ajedrez?',
+      'Se borrará el tablero actual y se comenzará una partida nueva con Blancas (Karlita).',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Reiniciar', style: 'destructive', onPress: () => void doReset() },
+      ]
+    );
   };
 
   const handleChessCellPress = async (r: number, c: number) => {
@@ -934,7 +906,7 @@ export const GamesScreen: React.FC = () => {
             pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
             subtitle: 'Victoria magistral en el tablero real.',
             color: nextWinner === 'w' ? '#9333ea' : '#0284c7',
-            onPlayAgain: () => void handleResetChess(),
+            onPlayAgain: () => handleResetChess(true),
           });
         }
         return;
@@ -1552,7 +1524,7 @@ export const GamesScreen: React.FC = () => {
             chessHistoryLength={chessHistory.length}
             onCellPress={(r, c) => void handleChessCellPress(r, c)}
             onUndo={() => void handleUndoChessMove()}
-            onReset={() => void handleResetChess()}
+            onReset={() => handleResetChess(false)}
           />
         )}
 
@@ -1688,8 +1660,9 @@ export const GamesScreen: React.FC = () => {
         case 'tictactoe': {
           if (gamesState.ticTacToe.winner) return { text: 'Terminado', isMyTurn: false };
           const isMyTurn = gamesState.ticTacToe.turn === currentProfile;
+          const turnPlayer = gamesState.ticTacToe.turn;
           return {
-            text: isMyTurn ? 'Tu turno' : 'Su turno',
+            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(turnPlayer)}`,
             isMyTurn,
           };
         }
@@ -1698,8 +1671,9 @@ export const GamesScreen: React.FC = () => {
           if (gamesState.battleship.phase === 'setup')
             return { text: 'Acomodar', isMyTurn: true };
           const isMyTurn = gamesState.battleship.turn === currentProfile;
+          const turnPlayer = gamesState.battleship.turn;
           return {
-            text: isMyTurn ? 'Tu turno' : 'Su turno',
+            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(turnPlayer)}`,
             isMyTurn,
           };
         }
@@ -1708,7 +1682,11 @@ export const GamesScreen: React.FC = () => {
           const isWhite = currentProfile === 'Karla';
           const isMyTurn =
             (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
-          return { text: isMyTurn ? 'Tu turno' : 'Su turno', isMyTurn };
+          const activePlayer = gamesState.chess.turn === 'w' ? 'Karla' : 'Javier';
+          return {
+            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(activePlayer)}`,
+            isMyTurn,
+          };
         }
         case 'sudoku': {
           if (sudoku.completed) return { text: 'Completado', isMyTurn: false };
@@ -1725,6 +1703,72 @@ export const GamesScreen: React.FC = () => {
       }
     },
     [gamesState, currentProfile, sudoku]
+  );
+
+  const getGameNaturalStatus = useCallback(
+    (id: GameTab) => {
+      const partnerName = currentProfile === 'Karla' ? 'Javier' : 'Karlita';
+      switch (id) {
+        case 'tictactoe': {
+          if (gamesState.ticTacToe.winner) {
+            if (gamesState.ticTacToe.winner === 'Empate') return 'Ronda empatada';
+            return gamesState.ticTacToe.winner === currentProfile
+              ? '¡Ganaste la última ronda!'
+              : `${partnerName} ganó la última ronda`;
+          }
+          return gamesState.ticTacToe.turn === currentProfile
+            ? '¡Tu turno de marcar!'
+            : `Turno de ${partnerName}`;
+        }
+        case 'battleship': {
+          if (gamesState.battleship.winner) {
+            return gamesState.battleship.winner === currentProfile
+              ? '¡Ganaste la batalla naval!'
+              : `${partnerName} ganó la batalla`;
+          }
+          if (gamesState.battleship.phase === 'setup') {
+            const isReady =
+              currentProfile === 'Karla'
+                ? gamesState.battleship.readyKarla
+                : gamesState.battleship.readyJavier;
+            return isReady
+              ? `Esperando que ${partnerName} acomode su flota`
+              : 'Falta acomodar tu flota';
+          }
+          return gamesState.battleship.turn === currentProfile
+            ? '¡Tu turno de disparar!'
+            : `Turno de disparar de ${partnerName}`;
+        }
+        case 'chess': {
+          if (gamesState.chess.winner) {
+            const winnerProfile = gamesState.chess.winner === 'w' ? 'Karla' : 'Javier';
+            return winnerProfile === currentProfile
+              ? '¡Ganaste por jaque mate!'
+              : `${partnerName} ganó por jaque mate`;
+          }
+          const isWhite = currentProfile === 'Karla';
+          const isMyTurn =
+            (gamesState.chess.turn === 'w' && isWhite) ||
+            (gamesState.chess.turn === 'b' && !isWhite);
+          return isMyTurn ? 'Tu turno de mover' : `Turno de mover de ${partnerName}`;
+        }
+        case 'sudoku': {
+          if (sudoku.completed) return '¡Tablero completado juntos!';
+          const filledCount = sudoku.board.flat().filter((v) => v !== 0).length;
+          return `Partida en curso (${filledCount}/81 celdas)`;
+        }
+        case 'hangman': {
+          if (gamesState.hangman.status === 'won') return '¡Palabra descifrada!';
+          if (gamesState.hangman.status === 'lost') return 'Palabra no descifrada';
+          if (gamesState.hangman.isPartnerChallenge) {
+            return `${partnerName} te retó una palabra`;
+          }
+          const lives = 6 - wrongGuessesCount;
+          return `Adivina la palabra (${lives} vidas restantes)`;
+        }
+      }
+    },
+    [gamesState, currentProfile, sudoku, wrongGuessesCount]
   );
 
   const getGameTurnLabel = (id: GameTab) => {
@@ -2044,21 +2088,34 @@ export const GamesScreen: React.FC = () => {
         })()}
       </View>
 
-      {/* ================= MODAL DE CONFIRMACIÓN: INICIAR PARTIDA ================= */}
+      {/* ================= MODAL DE CONFIRMACIÓN: INICIAR PARTIDA (BOTTOM SHEET) ================= */}
       <Modal
         visible={Boolean(pendingGameToLaunch)}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setPendingGameToLaunch(null)}
       >
-        <View style={styles.launchModalOverlay}>
+        <Pressable
+          style={styles.launchModalOverlay}
+          onPress={() => setPendingGameToLaunch(null)}
+        >
           {pendingGameToLaunch && (() => {
             const gameInfo = ALL_GAMES.find((g) => g.id === pendingGameToLaunch);
             const status = getGameStatus(pendingGameToLaunch);
+            const naturalStatus = getGameNaturalStatus(pendingGameToLaunch);
             if (!gameInfo) return null;
 
             return (
-              <View style={[styles.launchModalCard, { backgroundColor: colors.surface, borderColor: `${gameInfo.iconColor}40` }]}>
+              <Pressable
+                style={[
+                  styles.launchModalCard,
+                  { backgroundColor: colors.surface, borderColor: `${gameInfo.iconColor}40` },
+                ]}
+                onPress={(e: any) => e?.stopPropagation?.()}
+              >
+                {/* Tirador sutil superior del Bottom Sheet */}
+                <View style={[styles.sheetHandle, { backgroundColor: isDark ? '#334155' : '#cbd5e1' }]} />
+
                 {/* Ícono Grande con Degradado Temático */}
                 <View style={styles.launchModalIconWrap}>
                   <LinearGradient
@@ -2067,7 +2124,7 @@ export const GamesScreen: React.FC = () => {
                     end={{ x: 1, y: 1 }}
                     style={styles.launchModalIconBox}
                   >
-                    <Ionicons name={gameInfo.icon as any} size={38} color="#ffffff" />
+                    <Ionicons name={gameInfo.icon as any} size={34} color="#ffffff" />
                   </LinearGradient>
                 </View>
 
@@ -2125,6 +2182,7 @@ export const GamesScreen: React.FC = () => {
                   );
                 })()}
 
+                {/* Badge con Frase de Estado Natural */}
                 <View
                   style={[
                     styles.launchModalStatusPill,
@@ -2146,11 +2204,11 @@ export const GamesScreen: React.FC = () => {
                       { color: status.isMyTurn ? gameInfo.iconColor : colors.textSecondary },
                     ]}
                   >
-                    Estado: {status.text}
+                    {naturalStatus}
                   </Text>
                 </View>
 
-                {/* Botones de acción del Modal Unificados */}
+                {/* Botón Principal Iniciar Partida + Cancelar Sutil */}
                 <View style={styles.launchActionsRow}>
                   <GameButton
                     label="Iniciar Partida"
@@ -2162,18 +2220,20 @@ export const GamesScreen: React.FC = () => {
                       setActiveGame(toLaunch);
                     }}
                   />
-                  <GameButton
-                    label="Volver al Lobby"
-                    variant="secondary"
-                    onPress={() => {
-                      setPendingGameToLaunch(null);
-                    }}
-                  />
+                  <TouchableOpacity
+                    style={styles.launchCancelBtn}
+                    onPress={() => setPendingGameToLaunch(null)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.launchCancelText, { color: colors.textSecondary }]}>
+                      Cancelar
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
+              </Pressable>
             );
           })()}
-        </View>
+        </Pressable>
       </Modal>
 
       {/* ================= PANTALLA COMPLETA DEL JUEGO ACTIVO (HEADER MÍNIMO + BARRA INFERIOR OCULTA) ================= */}
@@ -2192,6 +2252,7 @@ export const GamesScreen: React.FC = () => {
               icon={(ALL_GAMES.find((g) => g.id === activeGame)?.icon as any) || 'game-controller'}
               turnLabel={getGameTurnLabel(activeGame)}
               isMyTurn={getGameStatus(activeGame).isMyTurn}
+              simplifiedHeader={activeGame === 'chess'}
               currentTurnPlayer={
                 activeGame === 'tictactoe'
                   ? gamesState.ticTacToe.turn
@@ -2444,25 +2505,37 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
   },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
   launchModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.48)',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: 24,
   },
   launchModalCard: {
     width: '100%',
-    maxWidth: 340,
-    borderRadius: 24,
-    padding: 22,
+    maxWidth: 520,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 22,
     borderWidth: 1.5,
+    borderBottomWidth: 0,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
-    elevation: 6,
+    elevation: 10,
   },
   launchModalIconWrap: {
     marginBottom: 12,
@@ -2569,7 +2642,17 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   launchActionsRow: {
     width: '100%',
-    gap: 10,
+    gap: 6,
+  },
+  launchCancelBtn: {
+    width: '100%',
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  launchCancelText: {
+    fontSize: 13.5,
+    fontWeight: '700',
   },
   lobbyScoreboard: {
     flexDirection: 'row',

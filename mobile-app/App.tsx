@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, LogBox, Text, TextInput } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabNavigator } from './src/navigation/TabNavigator';
@@ -17,16 +17,6 @@ import {
   getSpecialPlacesState,
   getGamesState,
 } from './src/services/CoupleSyncService';
-
-// Limitar escala de fuente a 1.2 para que ninguna pantalla rompa el diseño responsivo sin scroll
-if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
-(Text as any).defaultProps.maxFontSizeMultiplier = 1.2;
-
-if ((TextInput as any).defaultProps == null) (TextInput as any).defaultProps = {};
-(TextInput as any).defaultProps.maxFontSizeMultiplier = 1.2;
-
-// Filtrar únicamente avisos informativos conocidos de librerías sin ocultar errores reales
-LogBox.ignoreLogs(['Support for defaultProps will be removed']);
 
 function MainNavigator() {
   const { profile, isLoading, setProfile } = useProfile();

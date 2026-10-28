@@ -146,6 +146,7 @@ export interface HomeState {
   anniversaryDate: string; // YYYY-MM-DD
   nextEventTitle: string;
   nextEventDate: string; // YYYY-MM-DD
+  nextEventTime?: string; // HH:mm opcional
   streakCount: number;
   lastInteractionDate: string;
   moods: {
@@ -171,6 +172,7 @@ export interface HomeState {
   };
   quickNotes?: QuickNoteMessage[];
   todaySong?: TodaySongData;
+  deletedIds?: string[];
 }
 
 export interface MovieItem {
@@ -201,4 +203,5 @@ export interface MoviesAndPlansState {
   movies: MovieItem[];
   bucketList: BucketItem[];
   foodOptions: string[];
+  deletedIds?: string[];
 }

@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { getMessageById, getMessages, updateMessage } from '../lib/messages.api';
+import { normalizeDateInput } from '../lib/utils';
 import { Message } from '../types';
 import { MessageForm, MessageFormValues } from '../components/MessageForm';
 import { Card } from '../components/ui/Card';
@@ -11,11 +12,6 @@ import { Button } from '../components/ui/Button';
 interface LocationState {
   message?: Message;
 }
-
-const normalizeDateInput = (dateStr: string): string => {
-  if (!dateStr) return '';
-  return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-};
 
 export const EditMessagePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
