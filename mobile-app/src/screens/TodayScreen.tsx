@@ -310,6 +310,16 @@ export const TodayScreen: React.FC = () => {
           const newInteraction = payload.new;
           if (!newInteraction) return;
 
+          if (newInteraction.type === 'remote_emergency_reset' && newInteraction.payload) {
+            const clean = (newInteraction.payload.cleanHome || {}) as Partial<HomeState>;
+            setHomeState((prev) => ({ ...prev, ...clean }));
+            void syncWidgetData({
+              nextEventDate: '',
+              nextEventTitle: '',
+            });
+            return;
+          }
+
           if (newInteraction.type === 'sync_home_state' && newInteraction.payload) {
             const incomingHome = newInteraction.payload as Partial<HomeState>;
             setHomeState((prev) => ({ ...prev, ...incomingHome }));

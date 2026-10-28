@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Pencil, Mail, Calendar, AlertCircle, RefreshCw, Heart, Sparkles, Clock } from 'lucide-react';
+import { Plus, Trash2, Pencil, Mail, Calendar, AlertCircle, RefreshCw, Heart, Sparkles, Clock, Check, X, Loader2 } from 'lucide-react';
 import { getMessages, deleteMessage } from '../lib/messages.api';
 import { formatCalendarDate, formatDateTime } from '../lib/utils';
 import { getInteractions } from '../lib/interactions.api';
+import { triggerEmergencyReset } from '../lib/admin.api';
 import { Message, Interaction } from '../types';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -16,6 +17,33 @@ export const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Modal de recuperación de emergencia para destrabar la app móvil
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
+  const [resetMode, setResetMode] = useState<'cita' | 'full'>('cita');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetFeedback, setResetFeedback] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTriggerReset = async (): Promise<void> => {
+    setIsResetting(true);
+    setResetFeedback(null);
+    try {
+      const res = await triggerEmergencyReset(resetMode);
+      setResetFeedback({
+        success: true,
+        message: res.message || 'Señal de desbloqueo enviada con éxito.',
+      });
+      fetchData();
+    } catch (err: unknown) {
+      console.error('Error al destrabar app:', err);
+      setResetFeedback({
+        success: false,
+        message: 'No se pudo enviar la señal de recuperación. Intenta nuevamente.',
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const fetchData = useCallback(async (): Promise<void> => {
     setIsLoading(true);
@@ -173,6 +201,20 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setIsRecoveryModalOpen(true);
+              setResetFeedback(null);
+            }}
+            className="gap-1.5 text-rose-700 bg-rose-50/80 hover:bg-rose-100 border border-rose-200/80 shadow-xs font-semibold px-3"
+            title="Destrabar / Reparar app móvil remotamente si se quedó congelada"
+          >
+            <AlertCircle className="w-4 h-4 text-rose-600" />
+            <span>Destrabar App</span>
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"
@@ -371,6 +413,129 @@ export const DashboardPage: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* Modal de Recuperación y Desbloqueo Remoto */}
+      {isRecoveryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl" role="img" aria-label="salvavidas">🛟</span>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Destrabar App Móvil</h3>
+                    <p className="text-xs text-slate-500">Recuperación y desbloqueo remoto</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRecoveryModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-600 mb-4 leading-relaxed">
+                Si la aplicación en el teléfono de Karlita o Javier se quedó trabada o congelada (por ejemplo al guardar una cita o por datos corruptos), puedes enviar una señal remota inmediata para destrabarla.
+              </p>
+
+              <div className="space-y-3 mb-5">
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    resetMode === 'cita'
+                      ? 'border-rose-500 bg-rose-50/60 ring-1 ring-rose-500'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="resetMode"
+                    value="cita"
+                    checked={resetMode === 'cita'}
+                    onChange={() => setResetMode('cita')}
+                    className="mt-1 text-rose-600 focus:ring-rose-500"
+                  />
+                  <div className="text-xs">
+                    <strong className="block text-slate-900 font-semibold mb-0.5">
+                      Limpiar Cita Conflictiva (Recomendado)
+                    </strong>
+                    <span className="text-slate-500">
+                      Elimina cualquier fecha u horario de cita que esté causando error en el teléfono. No borra fotos, recuerdos, notitas ni cartas.
+                    </span>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    resetMode === 'full'
+                      ? 'border-rose-500 bg-rose-50/60 ring-1 ring-rose-500'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="resetMode"
+                    value="full"
+                    checked={resetMode === 'full'}
+                    onChange={() => setResetMode('full')}
+                    className="mt-1 text-rose-600 focus:ring-rose-500"
+                  />
+                  <div className="text-xs">
+                    <strong className="block text-slate-900 font-semibold mb-0.5">
+                      Restablecer Pantalla Completa
+                    </strong>
+                    <span className="text-slate-500">
+                      Restaura la pantalla de Hoy a valores limpios y seguros por defecto.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {resetFeedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs flex items-center gap-2 mb-4 ${
+                    resetFeedback.success
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {resetFeedback.success ? (
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{resetFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsRecoveryModalOpen(false)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={isResetting}
+                  onClick={handleTriggerReset}
+                  className="bg-rose-600 hover:bg-rose-700 text-white gap-2"
+                >
+                  {isResetting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4" />
+                  )}
+                  <span>{isResetting ? 'Enviando señal...' : 'Enviar Señal de Desbloqueo'}</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

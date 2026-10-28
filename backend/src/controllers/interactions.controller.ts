@@ -68,3 +68,74 @@ export const listInteractions = async (_req: Request, res: Response): Promise<vo
     res.status(500).json({ success: false, message: 'Error al obtener interacciones' });
   }
 };
+
+// ── Admin: Enviar señal remota de desbloqueo / recuperación a la app móvil ──
+export const emergencyResetAppState = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { mode } = req.body || {};
+    const isFull = mode === 'full';
+
+    const cleanHome = isFull
+      ? {
+          nextEventTitle: '',
+          nextEventDate: '',
+          nextEventTime: '',
+          stickyNote: { author: 'Javier', text: '', updatedAt: new Date().toISOString() },
+        }
+      : {
+          nextEventTitle: '',
+          nextEventDate: '',
+          nextEventTime: '',
+        };
+
+    const payload = {
+      mode: isFull ? 'full' : 'cita',
+      timestamp: new Date().toISOString(),
+      cleanHome,
+    };
+
+    // 1. Guardar en Prisma si está disponible
+    try {
+      await prisma.interaction.create({
+        data: {
+          sender: 'Admin',
+          type: 'remote_emergency_reset',
+          payload,
+        },
+      });
+    } catch (err) {
+      logger.warn({ err }, 'Prisma interacción no se pudo crear en emergencyResetAppState');
+    }
+
+    // 2. Transmitir en tiempo real y persistir en Supabase para que la app lo reciba de inmediato
+    if (supabase) {
+      try {
+        await supabase.from('interactions').insert([
+          {
+            sender: 'Admin',
+            type: 'remote_emergency_reset',
+            payload,
+          },
+          {
+            sender: 'Admin',
+            type: 'sync_home_state',
+            payload: cleanHome,
+          },
+        ]);
+      } catch (err) {
+        logger.warn({ err }, 'Supabase no pudo registrar remote_emergency_reset');
+      }
+    }
+
+    res.json({
+      success: true,
+      message: isFull
+        ? 'Se ha enviado la señal para restablecer el estado completo de la app.'
+        : 'Se ha enviado la señal para destrabar la app y limpiar la cita.',
+      payload,
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Error en emergencyResetAppState');
+    res.status(500).json({ success: false, message: 'Error al enviar comando de recuperación' });
+  }
+};

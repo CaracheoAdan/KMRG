@@ -16,7 +16,7 @@ import {
   updateMilestone,
   deleteMilestone,
 } from '../controllers/milestones.controller';
-import { listInteractions } from '../controllers/interactions.controller';
+import { listInteractions, emergencyResetAppState } from '../controllers/interactions.controller';
 import {
   createMessageSchema,
   updateMessageSchema,
@@ -47,7 +47,8 @@ router.post('/milestones', validate({ body: createMilestoneSchema }), createMile
 router.put('/milestones/:id', validate({ params: uuidParamSchema, body: updateMilestoneSchema }), updateMilestone);
 router.delete('/milestones/:id', validate({ params: uuidParamSchema }), deleteMilestone);
 
-// ── Interactions (solo lectura desde admin) ──
+// ── Interactions & Emergency Recovery ──
 router.get('/interactions', listInteractions);
+router.post('/emergency-reset', emergencyResetAppState);
 
 export default router;

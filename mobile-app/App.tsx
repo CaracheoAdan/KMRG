@@ -93,24 +93,65 @@ class RootErrorBoundary extends React.Component<
     return { hasError: true, error };
   }
 
+  recoveryChannel: any = null;
+
   componentDidCatch(error: any, errorInfo: any) {
     console.error('[RootErrorBoundary] Error atrapado en raíz:', error, errorInfo);
+    try {
+      const { supabase } = require('./src/config/supabase');
+      if (supabase && !this.recoveryChannel) {
+        this.recoveryChannel = supabase
+          .channel('kmrg-emergency-recovery')
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'interactions' },
+            (payload: any) => {
+              const item = payload?.new;
+              if (item && (item.type === 'remote_emergency_reset' || item.type === 'sync_home_state')) {
+                void this.handleResetState();
+              }
+            }
+          )
+          .subscribe();
+      }
+    } catch (e) {
+      console.warn('No se pudo suscribir canal de rescate:', e);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.recoveryChannel) {
+      try {
+        const { supabase } = require('./src/config/supabase');
+        void supabase?.removeChannel(this.recoveryChannel);
+      } catch {}
+      this.recoveryChannel = null;
+    }
   }
 
   handleResetState = async () => {
     try {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const raw = await AsyncStorage.getItem('kmrg_home_state_v1');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Limpiar únicamente campos problemáticos de la cita si causaron el fallo
-        parsed.nextEventTitle = '';
-        parsed.nextEventDate = '';
-        parsed.nextEventTime = '';
-        await AsyncStorage.setItem('kmrg_home_state_v1', JSON.stringify(parsed));
+      const keysToClean = ['@kmrg_couple_home_state_v2', '@kmrg_couple_home_state_v1', 'kmrg_home_state_v1'];
+      for (const key of keysToClean) {
+        const raw = await AsyncStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          parsed.nextEventTitle = '';
+          parsed.nextEventDate = '';
+          parsed.nextEventTime = '';
+          await AsyncStorage.setItem(key, JSON.stringify(parsed));
+        }
       }
     } catch (e) {
       console.warn('Error al limpiar estado en modo seguro:', e);
+    }
+    if (this.recoveryChannel) {
+      try {
+        const { supabase } = require('./src/config/supabase');
+        void supabase?.removeChannel(this.recoveryChannel);
+      } catch {}
+      this.recoveryChannel = null;
     }
     this.setState({ hasError: false, error: null });
   };
