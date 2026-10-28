@@ -11,6 +11,11 @@ export const getMilestones = async (): Promise<Milestone[]> => {
   return response.data.data;
 };
 
+export const getMilestoneById = async (id: string): Promise<Milestone> => {
+  const response = await api.get<ApiResponse<Milestone>>(`/admin/milestones/${id}`);
+  return response.data.data;
+};
+
 export const createMilestone = async (payload: CreateMilestonePayload): Promise<Milestone> => {
   const response = await api.post<ApiResponse<Milestone>>('/admin/milestones', payload);
   return response.data.data;

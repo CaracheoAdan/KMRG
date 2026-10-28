@@ -9,9 +9,10 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { ThemeSelectorModal } from './src/components/ThemeSelectorModal';
 import { CustomAlertProvider } from './src/components/CustomAlertModal';
 import { syncSupabaseMessages, syncSupabaseMilestones } from './src/services/SupabaseService';
-import { scheduleDailyMessage } from './src/services/NotificationService';
+import { registerDevicePushToken, scheduleDailyMessage } from './src/services/NotificationService';
 import {
   getHomeState,
+  saveHomeState,
   getMoviesState,
   getSpecialPlacesState,
   getGamesState,
@@ -40,8 +41,23 @@ function MainNavigator() {
         getMoviesState(),
         getSpecialPlacesState(),
         getGamesState(),
-      ]).then(() => {
+      ]).then(async ([_, __, homeState]) => {
         void scheduleDailyMessage();
+        try {
+          const pushToken = await registerDevicePushToken();
+          if (pushToken && homeState.pushTokens?.[profile] !== pushToken) {
+            const nextHome = {
+              ...homeState,
+              pushTokens: {
+                ...(homeState.pushTokens || {}),
+                [profile]: pushToken,
+              },
+            };
+            void saveHomeState(profile, nextHome);
+          }
+        } catch (e) {
+          console.warn('[App] Error registrando push token:', e);
+        }
       });
     }
   }, [profile]);

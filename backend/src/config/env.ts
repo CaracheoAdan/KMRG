@@ -26,6 +26,9 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
   // Número de proxies de confianza (ej. 1 detrás de Nginx/Render/Railway) para que el rate limit use la IP real.
   TRUST_PROXY: z.string().default('0').transform((val) => parseInt(val, 10)),
+  // Supabase Cloud opcional para sincronización bidireccional en vivo
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

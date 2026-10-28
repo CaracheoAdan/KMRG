@@ -31,6 +31,7 @@ import { formatDisplayDate, toLocalDateString } from '../services/StorageService
 import { DatePickerModal } from './DatePickerModal';
 import { FONTS } from '../theme/designSystem';
 import { supabase } from '../config/supabase';
+import { SupabaseMediaService } from '../services/SupabaseMediaService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const INLINE_MAP_WIDTH = SCREEN_WIDTH - 36;
@@ -462,6 +463,15 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       return;
     }
 
+    let finalPhotoUrl = newImageUri || undefined;
+    if (newImageUri && (newImageUri.startsWith('data:image/') || newImageUri.startsWith('file://'))) {
+      try {
+        finalPhotoUrl = await SupabaseMediaService.uploadPhoto(newImageUri, 'places');
+      } catch (e) {
+        console.warn('Error subiendo foto de lugar a storage:', e);
+      }
+    }
+
     const item: SpecialPlace = {
       id: `place-${Date.now()}`,
       title: newTitle.trim(),
@@ -474,7 +484,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       longitude: newLon,
       mapX: 50,
       mapY: 50,
-      imageUri: newImageUri || undefined,
+      imageUri: finalPhotoUrl,
       addedBy: currentProfile,
       favorite: true,
     };

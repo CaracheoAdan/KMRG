@@ -15,6 +15,8 @@ export const hexColorSchema = z
   .regex(/^#[0-9a-fA-F]{6}$/, 'theme_color debe ser un color hexadecimal #RRGGBB');
 
 export const createMessageSchema = z.object({
+  sender: z.string().trim().min(1).max(50).optional().default('Javier'),
+  recipient: z.string().trim().min(1).max(50).optional().default('Ella'),
   content: z.string().trim().min(1, 'El contenido del mensaje no puede estar vacío').max(5000),
   scheduled_date: dateOnlySchema,
   theme_color: hexColorSchema,
@@ -23,6 +25,8 @@ export const createMessageSchema = z.object({
 
 export const updateMessageSchema = z
   .object({
+    sender: z.string().trim().min(1).max(50).optional(),
+    recipient: z.string().trim().min(1).max(50).optional(),
     content: z.string().trim().min(1).max(5000).optional(),
     scheduled_date: dateOnlySchema.optional(),
     theme_color: hexColorSchema.optional(),

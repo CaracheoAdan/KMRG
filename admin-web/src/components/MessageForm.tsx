@@ -7,6 +7,8 @@ import { Textarea } from './ui/Textarea';
 import { Button } from './ui/Button';
 
 export interface MessageFormValues {
+  sender?: string;
+  recipient?: string;
   content: string;
   scheduled_date: string;
   theme_color: string;
@@ -15,6 +17,7 @@ export interface MessageFormValues {
 
 export const PRESET_COLORS = [
   { hex: '#e63946', label: 'Rojo' },
+  { hex: '#9333ea', label: 'Morado' },
   { hex: '#457b9d', label: 'Azul' },
   { hex: '#2a9d8f', label: 'Verde' },
   { hex: '#f4a261', label: 'Naranja' },
@@ -48,6 +51,8 @@ export const MessageForm: React.FC<MessageFormProps> = ({
     formState: { errors, isSubmitting },
   } = useForm<MessageFormValues>({
     defaultValues: {
+      sender: initialValues?.sender || 'Javier',
+      recipient: initialValues?.recipient || 'Karla',
       content: initialValues?.content ?? '',
       scheduled_date: initialValues?.scheduled_date ?? '',
       theme_color: initialValues?.theme_color || PRESET_COLORS[0].hex,
@@ -59,6 +64,8 @@ export const MessageForm: React.FC<MessageFormProps> = ({
   useEffect(() => {
     if (initialValues) {
       reset({
+        sender: initialValues.sender || 'Javier',
+        recipient: initialValues.recipient || 'Karla',
         content: initialValues.content,
         scheduled_date: initialValues.scheduled_date,
         theme_color: initialValues.theme_color || PRESET_COLORS[0].hex,
@@ -69,6 +76,8 @@ export const MessageForm: React.FC<MessageFormProps> = ({
 
   const selectedColor = watch('theme_color');
   const currentContent = watch('content') || '';
+  const currentSender = watch('sender') || 'Javier';
+  const currentRecipient = watch('recipient') || 'Karla';
 
   return (
     <div className="space-y-6">
@@ -84,13 +93,46 @@ export const MessageForm: React.FC<MessageFormProps> = ({
 
       <Card padding="lg" className="border-slate-200/90 shadow-sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+          {/* Remitente y Destinatario */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="message-sender" className="block text-sm font-medium text-slate-700">
+                Remitente (De:)
+              </label>
+              <select
+                id="message-sender"
+                disabled={isSubmitting}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                {...register('sender')}
+              >
+                <option value="Javier">Javier</option>
+                <option value="Karla">Karlita</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="message-recipient" className="block text-sm font-medium text-slate-700">
+                Destinatario (Para:)
+              </label>
+              <select
+                id="message-recipient"
+                disabled={isSubmitting}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-800 focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                {...register('recipient')}
+              >
+                <option value="Karla">Karlita</option>
+                <option value="Javier">Javier</option>
+              </select>
+            </div>
+          </div>
+
           <div className="space-y-1">
             <Textarea
               id="message-content"
-              label="Tu mensaje"
+              label="Tu mensaje o carta"
               rows={6}
               maxLength={5000}
-              placeholder="Escribe el contenido del mensaje o carta..."
+              placeholder="Escribe el contenido de la carta..."
               disabled={isSubmitting}
               error={errors.content?.message}
               className="font-serif text-base leading-relaxed"
@@ -115,7 +157,7 @@ export const MessageForm: React.FC<MessageFormProps> = ({
 
           <Input
             id="scheduled-date"
-            label="Fecha programada"
+            label="Fecha programada de apertura"
             type="date"
             disabled={isSubmitting}
             error={errors.scheduled_date?.message}
@@ -196,15 +238,21 @@ export const MessageForm: React.FC<MessageFormProps> = ({
                 borderColor: `${selectedColor || PRESET_COLORS[0].hex}30`,
               }}
             >
-              <span
-                className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full inline-block mb-3"
-                style={{
-                  color: selectedColor || PRESET_COLORS[0].hex,
-                  backgroundColor: `${selectedColor || PRESET_COLORS[0].hex}22`,
-                }}
-              >
-                Vista previa en la app
-              </span>
+              <div className="flex items-center justify-between mb-3">
+                <span
+                  className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full inline-block"
+                  style={{
+                    color: selectedColor || PRESET_COLORS[0].hex,
+                    backgroundColor: `${selectedColor || PRESET_COLORS[0].hex}22`,
+                  }}
+                >
+                  Vista previa en la app
+                </span>
+                <span className="text-xs font-medium text-slate-500">
+                  De: <strong className="text-slate-700">{currentSender}</strong> → Para:{' '}
+                  <strong className="text-slate-700">{currentRecipient}</strong>
+                </span>
+              </div>
               <div className="bg-white rounded-2xl p-6 shadow-sm text-center relative">
                 <p className="font-serif text-lg leading-relaxed text-slate-800 whitespace-pre-wrap">
                   “{currentContent.trim()}”

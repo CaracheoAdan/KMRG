@@ -9,6 +9,7 @@ const imageUrlSchema = z
   .refine((val) => /^https?:\/\//i.test(val), 'image_url debe usar http(s)');
 
 export const createMilestoneSchema = z.object({
+  author: z.string().trim().min(1).max(50).optional().default('Javier'),
   title: z.string().trim().min(1, 'El título es requerido').max(255),
   date: dateOnlySchema,
   image_url: imageUrlSchema,
@@ -16,6 +17,7 @@ export const createMilestoneSchema = z.object({
 
 export const updateMilestoneSchema = z
   .object({
+    author: z.string().trim().min(1).max(50).optional(),
     title: z.string().trim().min(1).max(255).optional(),
     date: dateOnlySchema.optional(),
     image_url: imageUrlSchema.optional(),

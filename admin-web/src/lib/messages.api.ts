@@ -6,6 +6,11 @@ export const getMessages = async (): Promise<Message[]> => {
   return response.data.data;
 };
 
+export const getMessageById = async (id: string): Promise<Message> => {
+  const response = await api.get<ApiResponse<Message>>(`/admin/messages/${id}`);
+  return response.data.data;
+};
+
 export const createMessage = async (payload: CreateMessagePayload): Promise<Message> => {
   const response = await api.post<ApiResponse<Message>>('/admin/messages', payload);
   return response.data.data;

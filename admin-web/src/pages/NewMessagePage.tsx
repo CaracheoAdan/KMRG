@@ -13,6 +13,8 @@ export const NewMessagePage: React.FC = () => {
     setErrorMessage(null);
     try {
       await createMessage({
+        sender: data.sender || 'Javier',
+        recipient: data.recipient || 'Karla',
         content: data.content.trim(),
         scheduled_date: data.scheduled_date,
         theme_color: data.theme_color,

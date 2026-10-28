@@ -249,18 +249,41 @@ export const sendSupabaseInteraction = async (
 };
 
 /**
- * Poda interacciones transitorias antiguas (> 3 días) para mantener la base de datos veloz y ligera
+ * Poda interacciones transitorias antiguas (> 3 días) y estados históricos redundantes
+ * para mantener la base de datos veloz, ligera y dentro de los límites de Supabase.
  */
 export const pruneOldInteractions = async (): Promise<void> => {
   try {
     const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    // SEGURIDAD CRÍTICA: Solo podar latidos efímeros 'thinking_of_you'.
-    // NUNCA eliminar registros de estado sincronizado ('sync_home_state', 'sync_movies_state', etc.).
+
+    // 1. Podar latidos efímeros 'thinking_of_you' con más de 3 días
     await supabase
       .from('interactions')
       .delete()
       .eq('type', 'thinking_of_you')
       .lt('created_at', cutoff);
+
+    // 2. Podar estados antiguos de sync_* conservando siempre las 5 versiones más recientes por cada tipo
+    const stateTypes = [
+      'sync_home_state',
+      'sync_movies_state',
+      'sync_games_state',
+      'sync_places_state',
+    ];
+
+    for (const syncType of stateTypes) {
+      const { data } = await supabase
+        .from('interactions')
+        .select('id, created_at')
+        .eq('type', syncType)
+        .order('created_at', { ascending: false })
+        .range(5, 50);
+
+      if (data && data.length > 0) {
+        const idsToDelete = data.map((row) => row.id);
+        await supabase.from('interactions').delete().in('id', idsToDelete);
+      }
+    }
   } catch {
     // Silencioso
   }

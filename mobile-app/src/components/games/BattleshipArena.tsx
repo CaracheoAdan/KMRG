@@ -588,7 +588,7 @@ export const BattleshipArena: React.FC<Props> = ({
 
   // Aviso interactivo dinámico ("No cabe aquí", etc.)
   const [helpBanner, setHelpBanner] = useState<{ text: string; isError: boolean } | null>(null);
-  const helpBannerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const helpBannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animaciones
   const radarPulseAnim = useRef(new Animated.Value(0)).current;

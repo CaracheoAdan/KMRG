@@ -30,8 +30,8 @@ export const DashboardPage: React.FC = () => {
       if (interactionsResult.status === 'fulfilled' && Array.isArray(interactionsResult.value)) {
         setInteractions(interactionsResult.value);
       }
-      if (messagesResult.status === 'rejected' || interactionsResult.status === 'rejected') {
-        throw messagesResult.status === 'rejected' ? messagesResult.reason : (interactionsResult as PromiseRejectedResult).reason;
+      if (messagesResult.status === 'rejected' && interactionsResult.status === 'rejected') {
+        throw messagesResult.reason;
       }
     } catch (error: unknown) {
       console.error('Error al cargar datos:', error);
@@ -330,19 +330,24 @@ export const DashboardPage: React.FC = () => {
                   >
                     {/* Content & Color Indicator */}
                     <td className="py-4 px-4 sm:px-6 align-middle">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 ring-2 ring-slate-100 shadow-sm"
+                            style={{
+                              backgroundColor: message.theme_color || '#457b9d',
+                            }}
+                            title={`Color temático: ${message.theme_color}`}
+                          />
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                            De: <strong>{message.sender || 'Javier'}</strong> → Para: <strong>{message.recipient || 'Karlita'}</strong>
+                          </span>
+                        </div>
                         <span
-                          className="w-3.5 h-3.5 rounded-full shrink-0 ring-2 ring-slate-100 shadow-sm"
-                          style={{
-                            backgroundColor: message.theme_color || '#457b9d',
-                          }}
-                          title={`Color temático: ${message.theme_color}`}
-                        />
-                        <span
-                          className="text-slate-800 font-serif font-medium leading-relaxed"
+                          className="text-slate-800 font-serif font-medium leading-relaxed pl-5"
                           title={message.content}
                         >
-                          {truncateContent(message.content, 80)}
+                          {truncateContent(message.content, 85)}
                         </span>
                       </div>
                     </td>

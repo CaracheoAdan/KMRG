@@ -28,6 +28,7 @@ try {
 import { Ionicons } from './ui/Icon';
 import { VoiceNoteData, UserProfile } from '../types';
 import { FONTS } from '../theme/designSystem';
+import { SupabaseMediaService } from '../services/SupabaseMediaService';
 
 interface Props {
   voiceNotes: VoiceNoteData[];
@@ -282,9 +283,18 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     const uri = recordedUriRef.current;
     let finalAudioUri = uri || '';
 
-    if (uri && FileSystemModule) {
+    if (uri) {
       try {
-        const base64Data = await FileSystemModule.readAsStringAsync(uri, {
+        finalAudioUri = await SupabaseMediaService.uploadAudio(uri, 'audio');
+      } catch (err) {
+        console.warn('Error subiendo audio a storage, usando fallback:', err);
+      }
+    }
+
+    // Fallback: solo si no se subió a Supabase Storage y sigue siendo file:// local, intentar guardar base64
+    if (finalAudioUri.startsWith('file://') && FileSystemModule) {
+      try {
+        const base64Data = await FileSystemModule.readAsStringAsync(finalAudioUri, {
           encoding: FileSystemModule.EncodingType.Base64,
         });
         if (base64Data) {

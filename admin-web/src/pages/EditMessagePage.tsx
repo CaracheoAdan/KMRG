@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import axios from 'axios';
-import { getMessages, updateMessage } from '../lib/messages.api';
+import { getMessageById, getMessages, updateMessage } from '../lib/messages.api';
 import { Message } from '../types';
-import { MessageForm, MessageFormValues, PRESET_COLORS } from '../components/MessageForm';
+import { MessageForm, MessageFormValues } from '../components/MessageForm';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 
@@ -45,15 +45,27 @@ export const EditMessagePage: React.FC = () => {
     setIsLoading(true);
     setLoadError(null);
 
-    getMessages()
-      .then((list) => {
+    // Intentar obtener directamente por ID con fallback a la lista
+    getMessageById(id)
+      .then((data) => {
         if (cancelled) return;
-        const found = list.find((item) => item.id === id);
-        if (!found) {
-          setLoadError('No se encontró el mensaje solicitado.');
+        if (data) {
+          setMessage(data);
         } else {
-          setMessage(found);
+          setLoadError('No se encontró el mensaje solicitado.');
         }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        return getMessages().then((list) => {
+          if (cancelled) return;
+          const found = list.find((item) => item.id === id);
+          if (!found) {
+            setLoadError('No se encontró el mensaje solicitado.');
+          } else {
+            setMessage(found);
+          }
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -74,6 +86,8 @@ export const EditMessagePage: React.FC = () => {
     setSubmitError(null);
     try {
       await updateMessage(id, {
+        sender: data.sender,
+        recipient: data.recipient,
         content: data.content.trim(),
         scheduled_date: data.scheduled_date,
         theme_color: data.theme_color,
@@ -108,46 +122,52 @@ export const EditMessagePage: React.FC = () => {
           <span>Volver a mensajes</span>
         </Link>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          Editar Mensaje
+          Editar Mensaje Programado
         </h1>
         <p className="text-sm text-slate-500">
-          Modifica el contenido, la fecha programada, el color temático o el estado de lectura.
+          Modifica el texto, la fecha o el color de esta carta.
         </p>
       </div>
 
-      {isLoading ? (
-        <Card padding="lg" className="border-slate-200/90 shadow-sm flex items-center justify-center py-16">
-          <div className="flex items-center gap-3 text-slate-500 text-sm">
-            <Loader2 className="w-5 h-5 text-rose-400 animate-spin" aria-hidden="true" />
-            <span>Cargando mensaje...</span>
+      {isLoading && (
+        <Card padding="lg" className="flex items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3 text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin text-slate-600" aria-hidden="true" />
+            <p className="text-sm font-medium">Cargando información del mensaje...</p>
           </div>
         </Card>
-      ) : loadError || !message ? (
-        <Card padding="lg" className="border-slate-200/90 shadow-sm space-y-4">
-          <div
-            role="alert"
-            className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3 text-red-800 text-sm"
-          >
+      )}
+
+      {loadError && !isLoading && (
+        <Card padding="lg" className="border-red-200 bg-red-50/50">
+          <div className="flex items-start gap-3 text-red-800">
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" aria-hidden="true" />
-            <div className="flex-1 font-medium">
-              {loadError || 'No se encontró el mensaje.'}
+            <div className="flex-1 space-y-3">
+              <p className="text-sm font-medium">{loadError}</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/dashboard')}
+                className="border-red-300 text-red-700 hover:bg-red-100/60"
+              >
+                Volver al listado
+              </Button>
             </div>
           </div>
-          <div className="flex justify-end">
-            <Button variant="secondary" size="sm" onClick={() => navigate('/dashboard')}>
-              Regresar al listado
-            </Button>
-          </div>
         </Card>
-      ) : (
+      )}
+
+      {!isLoading && !loadError && message && (
         <MessageForm
           initialValues={{
+            sender: message.sender || 'Javier',
+            recipient: message.recipient || 'Karla',
             content: message.content,
             scheduled_date: normalizeDateInput(message.scheduled_date),
-            theme_color: message.theme_color || PRESET_COLORS[0].hex,
+            theme_color: message.theme_color,
             is_read: message.is_read,
           }}
-          showReadToggle
+          showReadToggle={true}
           submitLabel="Guardar Cambios"
           errorMessage={submitError}
           onSubmit={handleSubmit}

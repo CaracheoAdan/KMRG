@@ -4,12 +4,14 @@ import { requireCsrfHeader } from '../middlewares/csrf.middleware';
 import { validate } from '../middlewares/validate.middleware';
 import {
   listMessages,
+  getMessageById,
   createMessage,
   updateMessage,
   deleteMessage,
 } from '../controllers/messages.controller';
 import {
   listMilestones,
+  getMilestoneById,
   createMilestone,
   updateMilestone,
   deleteMilestone,
@@ -33,12 +35,14 @@ router.use(requireAdminAuth);
 
 // ── Messages CRUD ──
 router.get('/messages', listMessages);
+router.get('/messages/:id', validate({ params: uuidParamSchema }), getMessageById);
 router.post('/messages', validate({ body: createMessageSchema }), createMessage);
 router.put('/messages/:id', validate({ params: uuidParamSchema, body: updateMessageSchema }), updateMessage);
 router.delete('/messages/:id', validate({ params: uuidParamSchema }), deleteMessage);
 
 // ── Milestones CRUD ──
 router.get('/milestones', listMilestones);
+router.get('/milestones/:id', validate({ params: uuidParamSchema }), getMilestoneById);
 router.post('/milestones', validate({ body: createMilestoneSchema }), createMilestone);
 router.put('/milestones/:id', validate({ params: uuidParamSchema, body: updateMilestoneSchema }), updateMilestone);
 router.delete('/milestones/:id', validate({ params: uuidParamSchema }), deleteMilestone);
@@ -47,4 +51,3 @@ router.delete('/milestones/:id', validate({ params: uuidParamSchema }), deleteMi
 router.get('/interactions', listInteractions);
 
 export default router;
-

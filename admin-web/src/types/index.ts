@@ -1,5 +1,7 @@
 export interface Message {
   id: string;
+  sender?: string;
+  recipient?: string;
   content: string;
   scheduled_date: string;
   theme_color: string;
@@ -9,6 +11,7 @@ export interface Message {
 
 export interface Milestone {
   id: string;
+  author?: string;
   title: string;
   date: string;
   image_url: string;
@@ -17,6 +20,7 @@ export interface Milestone {
 
 export interface Interaction {
   id: string;
+  sender?: string;
   type: string;
   payload: Record<string, unknown>;
   created_at: string;
@@ -42,6 +46,8 @@ export interface ApiResponse<T> {
 }
 
 export interface CreateMessagePayload {
+  sender?: string;
+  recipient?: string;
   content: string;
   scheduled_date: string;
   theme_color: string;
@@ -51,6 +57,7 @@ export interface CreateMessagePayload {
 export type UpdateMessagePayload = Partial<CreateMessagePayload>;
 
 export interface CreateMilestonePayload {
+  author?: string;
   title: string;
   date: string;
   image_url: string;

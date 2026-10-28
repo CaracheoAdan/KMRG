@@ -163,6 +163,24 @@ export const TodayScreen: React.FC = () => {
     setMessage(todayMsg);
     setHomeState(syncedHome);
 
+    // Registrar y sincronizar automáticamente el Push Token para notificaciones remotas
+    void registerDevicePushToken().then((token) => {
+      if (token && syncedHome.pushTokens?.[currentProfile] !== token) {
+        const nextHome: HomeState = {
+          ...syncedHome,
+          pushTokens: {
+            ...(syncedHome.pushTokens || {}),
+            [currentProfile]: token,
+          },
+        };
+        setHomeState(nextHome);
+        void saveHomeState(currentProfile, nextHome);
+      }
+    });
+
+    // Poda periódica en segundo plano para mantener la BD ligera
+    void pruneOldInteractions();
+
     if (todayMsg && !todayMsg.is_read) {
       await markMessageAsRead(todayMsg.id);
       void markSupabaseMessageRead(todayMsg.id);
