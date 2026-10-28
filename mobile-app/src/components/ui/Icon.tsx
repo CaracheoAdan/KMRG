@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import {
   Plus, PlusCircle, BarChart3, Undo2, Delete, Ship, BookOpen, Lightbulb, Calendar, Camera,
-  Check, CheckCircle2, CheckCheck, ChevronLeft, ChevronRight, X, XCircle, Palette, Compass,
+  Check, CheckCircle2, CheckCheck, ChevronLeft, ChevronRight, ChevronDown, X, XCircle, Palette, Compass,
   Pencil, Maximize2, Minimize2, Film, Fingerprint, Flame, Heart, HeartCrack, Hourglass, Home,
   Image as ImageIcon, Images, Infinity as InfinityIcon, Gamepad2, Keyboard, MapPin, Lock, LockOpen,
   MailOpen, Mail, Map as MapIcon, Mic, Navigation, UserCircle, SkipForward, Radio, RefreshCw,
@@ -54,6 +54,11 @@ const ICON_MAP: Record<string, LucideComp> = {
   'download-outline': Download,
   'eye-outline': Eye,
   'archive': BookOpen,
+  'alert-circle-outline': Info,
+  'chevron-down': ChevronDown,
+  'paper-plane': Send,
+  'checkmark-done-circle': CheckCheck,
+  'bar-chart-outline': BarChart3,
   'share-outline': Send,
   'share-social': Send,
   'create-outline': Pencil,
