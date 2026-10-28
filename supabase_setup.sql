@@ -1,7 +1,7 @@
 -- ==========================================================
 -- SCRIPT DE MIGRACIÓN SUPABASE - SISTEMA KMRG ETERNO
 -- Ejecuta este script en el SQL Editor de tu panel de Supabase:
--- https://supabase.com/dashboard/project/pnkhsdoprjssiimwlijc/sql
+-- https://supabase.com/dashboard/project/your-project-id/sql
 -- ==========================================================
 
 -- 1. Habilitar extensión UUID si no está activa
