@@ -74,6 +74,50 @@ const SERIF_FONT = Platform.select({
   default: 'Georgia, serif',
 });
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const NEGATIVE_FEELINGS = ['triste', 'enojado', 'cansado'];
+const POSITIVE_FEELINGS = ['feliz', 'enamorado', 'divertido', 'tranquilo'];
+const POSITIVE_TEXT = /(feliz|content|alegr|ganas de verte|enamorad|genial|emocionad|de maravilla)/i;
+const NEGATIVE_TEXT = /(triste|enoj|molest|frustrad|agotad|estres|mal día|deprim)/i;
+const hasMoodMismatch = (feeling: string, status?: string) => {
+  if (!status) return false;
+  if (NEGATIVE_FEELINGS.includes(feeling) && POSITIVE_TEXT.test(status)) return true;
+  if (POSITIVE_FEELINGS.includes(feeling) && NEGATIVE_TEXT.test(status)) return true;
+  return false;
+};
+
+const parseTime12 = (timeStr?: string): { hour12: number; minute: number; isPM: boolean } => {
+  if (!timeStr || !timeStr.includes(':')) {
+    return { hour12: 8, minute: 0, isPM: true };
+  }
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  let m = parseInt(mStr, 10);
+  if (isNaN(h)) h = 20;
+  if (isNaN(m)) m = 0;
+  h = Math.max(0, Math.min(23, h));
+  m = Math.max(0, Math.min(59, m));
+  const isPM = h >= 12;
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return { hour12, minute: m, isPM };
+};
+
+const formatTime24 = (hour12: number, minute: number, isPM: boolean): string => {
+  let h24 = hour12 % 12;
+  if (isPM) h24 += 12;
+  const hh = String(h24).padStart(2, '0');
+  const mm = String(minute).padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
+const QUICK_TIME_PRESETS = [
+  { label: '09:00 AM', time: '09:00', icon: 'sunny-outline', desc: 'Desayuno' },
+  { label: '02:30 PM', time: '14:30', icon: 'restaurant-outline', desc: 'Comida' },
+  { label: '06:00 PM', time: '18:00', icon: 'cafe-outline', desc: 'Tarde' },
+  { label: '08:00 PM', time: '20:00', icon: 'sparkles-outline', desc: 'Cena' },
+  { label: '09:30 PM', time: '21:30', icon: 'moon-outline', desc: 'Cine' },
+];
+
 export const TodayScreen: React.FC = () => {
   const { colors, isDark, primaryColor } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -120,6 +164,28 @@ export const TodayScreen: React.FC = () => {
   const [tempEventTime, setTempEventTime] = useState('');
   const [hasEventTime, setHasEventTime] = useState(false);
   const [showEventDatePicker, setShowEventDatePicker] = useState(false);
+
+  const time12 = useMemo(() => parseTime12(tempEventTime || '20:00'), [tempEventTime]);
+
+  const adjustHour = (delta: number) => {
+    let nextHour = time12.hour12 + delta;
+    if (nextHour > 12) nextHour = 1;
+    if (nextHour < 1) nextHour = 12;
+    setTempEventTime(formatTime24(nextHour, time12.minute, time12.isPM));
+  };
+
+  const adjustMinute = (delta: number) => {
+    let nextMin = time12.minute + delta;
+    if (nextMin >= 60) nextMin = 0;
+    if (nextMin < 0) nextMin = 55;
+    nextMin = Math.round(nextMin / 5) * 5;
+    if (nextMin >= 60) nextMin = 0;
+    setTempEventTime(formatTime24(time12.hour12, nextMin, time12.isPM));
+  };
+
+  const toggleAMPM = (pm: boolean) => {
+    setTempEventTime(formatTime24(time12.hour12, time12.minute, pm));
+  };
 
   // Animaciones
   const heartScale = useRef(new Animated.Value(1)).current;
@@ -647,17 +713,7 @@ export const TodayScreen: React.FC = () => {
   };
 
 
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-  const NEGATIVE_FEELINGS = ['triste', 'enojado', 'cansado'];
-  const POSITIVE_FEELINGS = ['feliz', 'enamorado', 'divertido', 'tranquilo'];
-  const POSITIVE_TEXT = /(feliz|content|alegr|ganas de verte|enamorad|genial|emocionad|de maravilla)/i;
-  const NEGATIVE_TEXT = /(triste|enoj|molest|frustrad|agotad|estres|mal día|deprim)/i;
-  const hasMoodMismatch = (feeling: string, status?: string) => {
-    if (!status) return false;
-    if (NEGATIVE_FEELINGS.includes(feeling) && POSITIVE_TEXT.test(status)) return true;
-    if (POSITIVE_FEELINGS.includes(feeling) && NEGATIVE_TEXT.test(status)) return true;
-    return false;
-  };
+
 
   const partnerRoleForLabel = currentProfile === 'Karla' ? 'Javier' : 'Karla';
   return (
@@ -1784,42 +1840,157 @@ export const TodayScreen: React.FC = () => {
             </View>
 
             {hasEventTime && (
-              <View style={styles.timePickerContainer}>
-                <View style={styles.timeInputRow}>
-                  <Ionicons name="time-outline" size={18} color={primaryColor} />
-                  <TextInput
-                    value={tempEventTime}
-                    onChangeText={setTempEventTime}
-                    placeholder="20:00"
-                    placeholderTextColor="#94a3b8"
-                    maxLength={5}
-                    style={styles.timeInputBox}
-                    keyboardType="numbers-and-punctuation"
-                  />
-                  <Text style={styles.timeHintText}>(24h ej. 19:30)</Text>
-                </View>
-                <View style={styles.quickTimeChipsRow}>
-                  {['13:30', '18:00', '20:00', '21:30'].map((preset) => (
+              <View style={styles.clockPickerCard}>
+                <View style={styles.clockDisplayRow}>
+                  {/* Selector Hora */}
+                  <View style={styles.clockColumn}>
                     <TouchableOpacity
-                      key={preset}
-                      onPress={() => setTempEventTime(preset)}
+                      onPress={() => adjustHour(1)}
+                      style={[styles.clockStepBtn, { backgroundColor: `${primaryColor}15` }]}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Aumentar hora"
+                    >
+                      <Ionicons name="chevron-up" size={20} color={primaryColor} />
+                    </TouchableOpacity>
+                    <View style={styles.clockDigitBox}>
+                      <Text style={[styles.clockDigitText, { color: colors.text }]}>
+                        {String(time12.hour12).padStart(2, '0')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => adjustHour(-1)}
+                      style={[styles.clockStepBtn, { backgroundColor: `${primaryColor}15` }]}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Disminuir hora"
+                    >
+                      <Ionicons name="chevron-down" size={20} color={primaryColor} />
+                    </TouchableOpacity>
+                    <Text style={styles.clockSubLabel}>HORA</Text>
+                  </View>
+
+                  <Text style={[styles.clockColon, { color: primaryColor }]}>:</Text>
+
+                  {/* Selector Minutos */}
+                  <View style={styles.clockColumn}>
+                    <TouchableOpacity
+                      onPress={() => adjustMinute(5)}
+                      style={[styles.clockStepBtn, { backgroundColor: `${primaryColor}15` }]}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Aumentar minutos"
+                    >
+                      <Ionicons name="chevron-up" size={20} color={primaryColor} />
+                    </TouchableOpacity>
+                    <View style={styles.clockDigitBox}>
+                      <Text style={[styles.clockDigitText, { color: colors.text }]}>
+                        {String(time12.minute).padStart(2, '0')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => adjustMinute(-5)}
+                      style={[styles.clockStepBtn, { backgroundColor: `${primaryColor}15` }]}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Disminuir minutos"
+                    >
+                      <Ionicons name="chevron-down" size={20} color={primaryColor} />
+                    </TouchableOpacity>
+                    <Text style={styles.clockSubLabel}>MINUTO</Text>
+                  </View>
+
+                  {/* Selector AM / PM */}
+                  <View style={styles.clockAmPmColumn}>
+                    <TouchableOpacity
+                      onPress={() => toggleAMPM(false)}
                       style={[
-                        styles.quickTimeChip,
-                        tempEventTime === preset && { backgroundColor: primaryColor, borderColor: primaryColor },
+                        styles.clockAmPmBtn,
+                        !time12.isPM && { backgroundColor: primaryColor, borderColor: primaryColor },
                       ]}
                       activeOpacity={0.7}
                     >
+                      <Ionicons
+                        name="sunny"
+                        size={12}
+                        color={!time12.isPM ? '#ffffff' : colors.textMuted}
+                        style={{ marginRight: 3 }}
+                      />
                       <Text
                         style={[
-                          styles.quickTimeChipText,
-                          tempEventTime === preset && { color: '#ffffff', fontWeight: '800' },
+                          styles.clockAmPmText,
+                          !time12.isPM && { color: '#ffffff', fontWeight: '800' },
                         ]}
                       >
-                        {preset}
+                        AM
                       </Text>
                     </TouchableOpacity>
-                  ))}
+
+                    <TouchableOpacity
+                      onPress={() => toggleAMPM(true)}
+                      style={[
+                        styles.clockAmPmBtn,
+                        time12.isPM && { backgroundColor: primaryColor, borderColor: primaryColor },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="moon"
+                        size={12}
+                        color={time12.isPM ? '#ffffff' : colors.textMuted}
+                        style={{ marginRight: 3 }}
+                      />
+                      <Text
+                        style={[
+                          styles.clockAmPmText,
+                          time12.isPM && { color: '#ffffff', fontWeight: '800' },
+                        ]}
+                      >
+                        PM
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
+
+                {/* Resumen del reloj */}
+                <View style={styles.clockSelectedSummaryRow}>
+                  <Ionicons name="time" size={14} color={primaryColor} />
+                  <Text style={[styles.clockSelectedSummaryText, { color: primaryColor }]}>
+                    {String(time12.hour12).padStart(2, '0')}:{String(time12.minute).padStart(2, '0')} {time12.isPM ? 'PM' : 'AM'} ({formatTime24(time12.hour12, time12.minute, time12.isPM)} hrs)
+                  </Text>
+                </View>
+
+                {/* Presets rápidos con iconos */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.quickPresetsScroll}
+                >
+                  {QUICK_TIME_PRESETS.map((p) => {
+                    const isSelected = tempEventTime === p.time;
+                    return (
+                      <TouchableOpacity
+                        key={p.time}
+                        onPress={() => setTempEventTime(p.time)}
+                        style={[
+                          styles.quickPresetChip,
+                          isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
+                        ]}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons
+                          name={p.icon as any}
+                          size={13}
+                          color={isSelected ? '#ffffff' : primaryColor}
+                        />
+                        <Text
+                          style={[
+                            styles.quickPresetChipText,
+                            isSelected && { color: '#ffffff', fontWeight: '800' },
+                          ]}
+                        >
+                          {p.desc} ({p.label})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
             )}
 
@@ -2719,50 +2890,104 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     color: c.textSecondary,
     fontWeight: '600',
   },
-  timePickerContainer: {
+  clockPickerCard: {
     backgroundColor: c.surfaceAlt,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: c.border,
+    alignItems: 'center',
   },
-  timeInputRow: {
+  clockDisplayRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  clockColumn: {
+    alignItems: 'center',
+    width: 58,
+  },
+  clockStepBtn: {
+    width: 38,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clockDigitBox: {
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clockDigitText: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  clockSubLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: c.textMuted,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  clockColon: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 14,
+  },
+  clockAmPmColumn: {
+    justifyContent: 'center',
     gap: 8,
+    marginLeft: 4,
+    marginBottom: 12,
+  },
+  clockAmPmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+  },
+  clockAmPmText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: c.textSecondary,
+  },
+  clockSelectedSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
     marginBottom: 8,
   },
-  timeInputBox: {
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    fontSize: 14,
+  clockSelectedSummaryText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: c.text,
-    width: 70,
-    textAlign: 'center',
   },
-  timeHintText: {
-    fontSize: 11,
-    color: c.textMuted,
-  },
-  quickTimeChipsRow: {
+  quickPresetsScroll: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
+    paddingVertical: 2,
   },
-  quickTimeChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  quickPresetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
     backgroundColor: c.surface,
     borderWidth: 1,
     borderColor: c.border,
   },
-  quickTimeChipText: {
+  quickPresetChipText: {
     fontSize: 11,
     fontWeight: '600',
     color: c.text,

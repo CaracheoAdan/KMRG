@@ -86,24 +86,43 @@ export const toLocalDateString = (dateInput?: string | Date | null): string => {
   return `${year}-${month}-${day}`;
 };
 
+const SPANISH_MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const SPANISH_MONTHS_LONG = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
+
 export const formatDisplayDate = (
   dateInput?: string | Date | null,
   options?: Intl.DateTimeFormatOptions
 ): string => {
   if (!dateInput) return '';
-  const str = toLocalDateString(dateInput);
-  const parts = str.split('-').map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) return str;
-  // Usar las 12:00 del mediodía local para evitar cualquier salto de huso horario
-  const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-  return d.toLocaleDateString(
-    'es-ES',
-    options || {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
+  try {
+    const str = toLocalDateString(dateInput);
+    const parts = str.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return String(dateInput);
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+    if (isNaN(d.getTime())) return String(dateInput);
+
+    try {
+      return d.toLocaleDateString(
+        'es-ES',
+        options || {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+        }
+      );
+    } catch {
+      const day = parts[2];
+      const monthIdx = parts[1] - 1;
+      const isShort = options?.month === 'short';
+      const monthStr = (isShort ? SPANISH_MONTHS_SHORT : SPANISH_MONTHS_LONG)[monthIdx] || `${parts[1]}`;
+      return `${day} ${monthStr}`;
     }
-  );
+  } catch {
+    return String(dateInput || '');
+  }
 };
 
 export const toLocalDateAtHour = (dateInput: string | Date, hour: number): Date => {

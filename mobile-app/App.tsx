@@ -97,23 +97,52 @@ class RootErrorBoundary extends React.Component<
     console.error('[RootErrorBoundary] Error atrapado en raíz:', error, errorInfo);
   }
 
+  handleResetState = async () => {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const raw = await AsyncStorage.getItem('kmrg_home_state_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Limpiar únicamente campos problemáticos de la cita si causaron el fallo
+        parsed.nextEventTitle = '';
+        parsed.nextEventDate = '';
+        parsed.nextEventTime = '';
+        await AsyncStorage.setItem('kmrg_home_state_v1', JSON.stringify(parsed));
+      }
+    } catch (e) {
+      console.warn('Error al limpiar estado en modo seguro:', e);
+    }
+    this.setState({ hasError: false, error: null });
+  };
+
   render() {
     if (this.state.hasError) {
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#ffffff' }}>
-          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginBottom: 10, textAlign: 'center' }}>
+          <Text style={{ fontSize: 36, marginBottom: 8 }}>💕</Text>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginBottom: 8, textAlign: 'center' }}>
             KMRG Amor
           </Text>
-          <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24 }}>
-            La sesión se ha protegido. Toca el botón para reiniciar la pantalla.
+          <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, paddingHorizontal: 16 }}>
+            La sesión se ha protegido. Puedes reintentar o restaurar la pantalla de inicio en modo seguro.
           </Text>
-          <TouchableOpacity
-            onPress={() => this.setState({ hasError: false, error: null })}
-            style={{ backgroundColor: '#ec4899', paddingHorizontal: 28, paddingVertical: 14, borderRadius: 16 }}
-            activeOpacity={0.85}
-          >
-            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Reintentar</Text>
-          </TouchableOpacity>
+          <View style={{ width: '100%', maxWidth: 280, gap: 12 }}>
+            <TouchableOpacity
+              onPress={() => this.setState({ hasError: false, error: null })}
+              style={{ backgroundColor: '#ec4899', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Reintentar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={this.handleResetState}
+              style={{ backgroundColor: '#f1f5f9', paddingVertical: 14, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#cbd5e1' }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#475569', fontWeight: 'bold', fontSize: 15 }}>Restablecer Pantalla</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
