@@ -46,10 +46,35 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 // Dimensión del lienzo para que quepa en cualquier teléfono sin scroll
 const CANVAS_SIZE = Math.min(SCREEN_W - 32, Math.floor(SCREEN_H * 0.38), 340);
 
+const DEFAULT_DRAW_GUESS_FALLBACK: DrawGuessState = {
+  phase: 'choosing_word',
+  currentRound: 1,
+  drawer: 'Karla',
+  guesser: 'Javier',
+  strokes: [],
+  attempts: [],
+  revealedIndices: [],
+  usedHint: false,
+  roundPoints: 100,
+  scoreKarla: 0,
+  scoreJavier: 0,
+  guesserScoreKarla: 0,
+  guesserScoreJavier: 0,
+  correctGuessesKarla: 0,
+  correctGuessesJavier: 0,
+  totalGuessTimeKarla: 0,
+  totalGuessTimeJavier: 0,
+  usedWords: [],
+  roundsHistory: [],
+  winner: null,
+  winsKarla: 0,
+  winsJavier: 0,
+};
+
 interface DrawGuessArenaProps {
   currentProfile: UserProfile;
   primaryColor?: string;
-  gameState: DrawGuessState;
+  gameState?: DrawGuessState | null;
   onUpdateGameState: (nextState: DrawGuessState) => Promise<void>;
   onFinishGameReward: (winner: UserProfile | 'Empate', points: number) => Promise<void>;
   onBack: () => void;
@@ -59,12 +84,16 @@ interface DrawGuessArenaProps {
 export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
   currentProfile,
   primaryColor = '#10b981', // Verde Esmeralda oficial
-  gameState,
+  gameState: rawGameState,
   onUpdateGameState,
   onFinishGameReward,
   onBack,
   onOpenScoreBreakdown,
 }) => {
+  const gameState: DrawGuessState = {
+    ...DEFAULT_DRAW_GUESS_FALLBACK,
+    ...(rawGameState || {}),
+  };
   // Configuración de herramientas del dibujante
   const [currentColor, setCurrentColor] = useState<string>(CANVAS_COLORS[0]);
   const [currentWidth, setCurrentWidth] = useState<number>(CANVAS_STROKE_WIDTHS[1].width);

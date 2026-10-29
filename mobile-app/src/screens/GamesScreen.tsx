@@ -292,6 +292,7 @@ export const GamesScreen: React.FC = () => {
       hangman: { ...DEFAULT_GAMES_STATE.hangman, ...(loaded.hangman || {}) },
       chess: { ...DEFAULT_GAMES_STATE.chess, ...(loaded.chess || {}) },
       battleship: { ...DEFAULT_GAMES_STATE.battleship, ...(loaded.battleship || {}) },
+      drawGuess: { ...DEFAULT_GAMES_STATE.drawGuess, ...(loaded.drawGuess || {}) },
     });
 
     try {
