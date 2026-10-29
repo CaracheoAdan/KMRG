@@ -5,6 +5,7 @@ import {
   Text,
   View,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   TextInput,
   Modal,
@@ -27,6 +28,7 @@ import {
   getMoviesState,
   saveMoviesState,
   DEFAULT_MOVIES_STATE,
+  mergeMoviesStates,
 } from '../services/CoupleSyncService';
 import { toLocalDateString, formatDisplayDate } from '../services/StorageService';
 import { supabase } from '../config/supabase';
@@ -49,6 +51,177 @@ const GENRES = [
 ];
 
 type SubTab = 'pending' | 'watched' | 'bucket' | 'roulette';
+
+// Optimiza en tiempo real las URLs de pósters (IMDb, TMDB, TVMaze) para que pesen ~12KB en vez de ~3MB
+// sin borrar ni alterar ninguna película guardada
+function optimizePosterUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+
+  // IMDb / Amazon Media CDN: redimensionar a 180px de ancho con calidad óptima
+  if (trimmed.includes('media-amazon.com/images/') || trimmed.includes('media-imdb.com/images/')) {
+    return trimmed.replace(/\._V1_.*?\.(jpg|jpeg|png)$/i, '._V1_QL75_UX180_.jpg');
+  }
+
+  // TMDB CDN: usar w185 para miniaturas de lista
+  if (trimmed.includes('image.tmdb.org/t/p/')) {
+    return trimmed.replace(/\/t\/p\/(w500|w780|original)\//, '/t/p/w185/');
+  }
+
+  // TVMaze CDN: usar medium_portrait en lugar de original_untouched
+  if (trimmed.includes('static.tvmaze.com/uploads/images/original_untouched/')) {
+    return trimmed.replace('/original_untouched/', '/medium_portrait/');
+  }
+
+  return trimmed;
+}
+
+interface MovieCardItemProps {
+  movie: MovieItem;
+  colors: ThemePalette;
+  styles: any;
+  onPressMovie: (movie: MovieItem) => void;
+  onRemoveReview: (movie: MovieItem) => void;
+  onDeleteMovie: (movie: MovieItem) => void;
+}
+
+const MovieCardItem = React.memo<MovieCardItemProps>(
+  ({ movie, colors, styles, onPressMovie, onRemoveReview, onDeleteMovie }) => {
+    const avg =
+      movie.ratingJavier && movie.ratingKarla
+        ? ((movie.ratingJavier + movie.ratingKarla) / 2).toFixed(1)
+        : null;
+    const thumbUri = optimizePosterUrl(movie.posterUrl);
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.82}
+        onPress={() => onPressMovie(movie)}
+        style={[styles.movieCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      >
+        <View style={styles.movieCardTop}>
+          {thumbUri ? (
+            <Image
+              source={{ uri: thumbUri }}
+              style={styles.movieCardPoster}
+              resizeMode="cover"
+              resizeMethod="resize"
+              fadeDuration={0}
+            />
+          ) : (
+            <LinearGradient
+              colors={[colors.primaryLight, colors.surfaceAlt]}
+              style={styles.moviePosterPlaceholder}
+            >
+              <Ionicons name="film" size={22} color={colors.primary} />
+              <Text
+                style={[styles.posterPlaceholderTitle, { color: colors.primary }]}
+                numberOfLines={2}
+              >
+                {movie.title}
+              </Text>
+            </LinearGradient>
+          )}
+
+          <View style={{ flex: 1, paddingRight: 6 }}>
+            <View style={styles.genreRow}>
+              <View style={[styles.genreBadge, { backgroundColor: colors.primaryLight }]}>
+                <Text
+                  style={[styles.genreBadgeText, { color: colors.primary }]}
+                  numberOfLines={1}
+                >
+                  {movie.genre}
+                </Text>
+              </View>
+              <Text style={styles.addedByText} numberOfLines={1}>
+                {movie.year ? `${movie.year} • ` : ''}Por{' '}
+                {movie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
+              </Text>
+            </View>
+            <Text style={[styles.movieTitle, { color: colors.text }]} numberOfLines={2}>
+              {movie.title}
+            </Text>
+            {movie.director ? (
+              <Text style={[styles.movieDirectorText, { color: colors.textMuted }]} numberOfLines={1}>
+                Dir. {movie.director}
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.cardRightActions}>
+            {movie.watched && avg ? (
+              <View style={[styles.avgBadge, { backgroundColor: colors.primary }]}>
+                <Ionicons name="star" size={13} color={colors.primaryOn} />
+                <Text style={[styles.avgBadgeText, { color: colors.primaryOn }]}>{avg}</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => onPressMovie(movie)}
+                style={[
+                  styles.markWatchedBtn,
+                  {
+                    borderColor: colors.primary,
+                    backgroundColor: colors.primaryLight,
+                  },
+                ]}
+              >
+                <Ionicons name="star" size={13} color={colors.primary} />
+                <Text style={[styles.markWatchedText, { color: colors.primary }]}>Calificar</Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+              {movie.watched && (
+                <TouchableOpacity
+                  onPress={() => onRemoveReview(movie)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="arrow-undo-outline" size={16} color="#e11d48" />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => onDeleteMovie(movie)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {(movie.watched || movie.notes) && (
+          <View style={[styles.watchedReviewSection, { borderTopColor: `${colors.border}80` }]}>
+            {movie.watched && (movie.ratingKarla || movie.ratingJavier) ? (
+              <View style={styles.movieRatingPillsRow}>
+                {movie.ratingKarla ? (
+                  <View style={[styles.miniRatingPill, { backgroundColor: '#fdf2f8' }]}>
+                    <Text style={[styles.miniRatingText, { color: '#db2777' }]}>
+                      Karlita: ★ {movie.ratingKarla}
+                    </Text>
+                  </View>
+                ) : null}
+                {movie.ratingJavier ? (
+                  <View style={[styles.miniRatingPill, { backgroundColor: '#f0f9ff' }]}>
+                    <Text style={[styles.miniRatingText, { color: '#0284c7' }]}>
+                      Javier: ★ {movie.ratingJavier}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {movie.notes ? (
+              <Text style={[styles.movieNotesInline, { color: colors.textSecondary }]}>
+                “{movie.notes}”
+              </Text>
+            ) : null}
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  }
+);
 
 export const MoviesScreen: React.FC = () => {
   const { colors, isDark, primaryColor } = useTheme();
@@ -112,7 +285,7 @@ export const MoviesScreen: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'interactions' },
         (payload: any) => {
           if (payload.new?.type === 'sync_movies_state' && payload.new?.payload) {
-            setState((prev) => ({ ...prev, ...payload.new.payload }));
+            setState((prev) => mergeMoviesStates(prev, payload.new.payload as MoviesAndPlansState));
           }
         }
       )
@@ -159,7 +332,7 @@ async function searchMovieCatalog(
           year: r.release_date || r.first_air_date ? String(r.release_date || r.first_air_date).slice(0, 4) : '',
           director: '',
           genre: preferredGenre || (r.media_type === 'tv' ? 'Serie' : 'Película'),
-          posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : '',
+          posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w185${r.poster_path}` : '',
           synopsis: r.overview || '',
         }));
       }
@@ -193,7 +366,7 @@ async function searchMovieCatalog(
             genre:
               preferredGenre ||
               (item.q === 'TV series' || item.q === 'tvMiniSeries' ? 'Serie' : 'Película'),
-            posterUrl: item.i?.imageUrl || '',
+            posterUrl: optimizePosterUrl(item.i?.imageUrl) || '',
             synopsis: item.s ? `Reparto: ${item.s}` : '',
           }));
         }
@@ -217,7 +390,7 @@ async function searchMovieCatalog(
           year,
           director: '',
           genre: preferredGenre || (show.genres && show.genres[0]) || 'Serie',
-          posterUrl: show.image?.original || show.image?.medium || '',
+          posterUrl: show.image?.medium || show.image?.original || '',
           synopsis: cleanSummary,
         };
       });
@@ -766,9 +939,11 @@ async function searchMovieCatalog(
                       >
                         {item.posterUrl ? (
                           <Image
-                            source={{ uri: item.posterUrl }}
+                            source={{ uri: optimizePosterUrl(item.posterUrl) }}
                             style={styles.posterResultImg}
                             resizeMode="cover"
+                            resizeMethod="resize"
+                            fadeDuration={0}
                           />
                         ) : (
                           <View
@@ -797,20 +972,39 @@ async function searchMovieCatalog(
               )}
             </View>
 
-            {/* Lista Desplazable de Películas (Tarjetas Completas Sin Cortes) */}
-            <ScrollView
+            {/* Lista Virtualizada de Películas (Tarjetas Completas Sin Cortes y 60fps) */}
+            <FlatList
               style={{ flex: 1 }}
+              data={activeMovieList}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={6}
+              maxToRenderPerBatch={6}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
               contentContainerStyle={[
                 styles.cardsScrollContent,
-                activeMovieList.length === 0 && { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+                activeMovieList.length === 0 && {
+                  flexGrow: 1,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                },
               ]}
-              showsVerticalScrollIndicator={false}
-            >
-              {activeMovieList.length === 0 ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%', paddingVertical: 20 }}>
+              ListEmptyComponent={
+                <View
+                  style={{
+                    flex: 1,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    width: '100%',
+                    paddingVertical: 20,
+                  }}
+                >
                   <EmptyState
                     icon={subTab === 'pending' ? 'film-outline' : 'sparkles-outline'}
-                    title={subTab === 'pending' ? 'Sin películas pendientes' : 'Aún no han calificado'}
+                    title={
+                      subTab === 'pending' ? 'Sin películas pendientes' : 'Aún no han calificado'
+                    }
                     message={
                       subTab === 'pending'
                         ? 'Escribe arriba el título para agregar su próxima peli juntos con póster oficial.'
@@ -818,150 +1012,18 @@ async function searchMovieCatalog(
                     }
                   />
                 </View>
-              ) : (
-                activeMovieList.map((movie) => {
-                  const avg =
-                    movie.ratingJavier && movie.ratingKarla
-                      ? ((movie.ratingJavier + movie.ratingKarla) / 2).toFixed(1)
-                      : null;
-
-                  return (
-                    <PressableScale
-                      key={movie.id}
-                      onPress={() => openRateModal(movie)}
-                      style={[styles.movieCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                      scaleTo={0.98}
-                    >
-                      <View style={styles.movieCardTop}>
-                        {movie.posterUrl ? (
-                          <Image
-                            source={{ uri: movie.posterUrl }}
-                            style={styles.movieCardPoster}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <LinearGradient
-                            colors={[colors.primaryLight, colors.surfaceAlt]}
-                            style={styles.moviePosterPlaceholder}
-                          >
-                            <Ionicons name="film" size={22} color={colors.primary} />
-                            <Text
-                              style={[styles.posterPlaceholderTitle, { color: colors.primary }]}
-                              numberOfLines={2}
-                            >
-                              {movie.title}
-                            </Text>
-                          </LinearGradient>
-                        )}
-
-                        <View style={{ flex: 1, paddingRight: 6 }}>
-                          <View style={styles.genreRow}>
-                            <View
-                              style={[
-                                styles.genreBadge,
-                                { backgroundColor: colors.primaryLight },
-                              ]}
-                            >
-                              <Text
-                                style={[styles.genreBadgeText, { color: colors.primary }]}
-                                numberOfLines={1}
-                              >
-                                {movie.genre}
-                              </Text>
-                            </View>
-                            <Text style={styles.addedByText} numberOfLines={1}>
-                              {movie.year ? `${movie.year} • ` : ''}Por{' '}
-                              {movie.addedBy === 'Karla' ? 'Karlita' : 'Javier'}
-                            </Text>
-                          </View>
-                          <Text style={[styles.movieTitle, { color: colors.text }]} numberOfLines={2}>
-                            {movie.title}
-                          </Text>
-                          {movie.director ? (
-                            <Text style={[styles.movieDirectorText, { color: colors.textMuted }]} numberOfLines={1}>
-                              Dir. {movie.director}
-                            </Text>
-                          ) : null}
-                        </View>
-
-                        <View style={styles.cardRightActions}>
-                          {movie.watched && avg ? (
-                            <View style={[styles.avgBadge, { backgroundColor: colors.primary }]}>
-                              <Ionicons name="star" size={13} color={colors.primaryOn} />
-                              <Text style={[styles.avgBadgeText, { color: colors.primaryOn }]}>
-                                {avg}
-                              </Text>
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              onPress={() => openRateModal(movie)}
-                              style={[
-                                styles.markWatchedBtn,
-                                {
-                                  borderColor: colors.primary,
-                                  backgroundColor: colors.primaryLight,
-                                },
-                              ]}
-                            >
-                              <Ionicons name="star" size={13} color={colors.primary} />
-                              <Text style={[styles.markWatchedText, { color: colors.primary }]}>
-                                Calificar
-                              </Text>
-                            </TouchableOpacity>
-                          )}
-
-                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-                            {movie.watched && (
-                              <TouchableOpacity
-                                onPress={() => handleRemoveMovieReview(movie)}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              >
-                                <Ionicons name="arrow-undo-outline" size={16} color="#e11d48" />
-                              </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                              onPress={() => handleDeleteMovie(movie)}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </View>
-
-                      {(movie.watched || movie.notes) && (
-                        <View style={[styles.watchedReviewSection, { borderTopColor: `${colors.border}80` }]}>
-                          {movie.watched && (movie.ratingKarla || movie.ratingJavier) ? (
-                            <View style={styles.movieRatingPillsRow}>
-                              {movie.ratingKarla ? (
-                                <View style={[styles.miniRatingPill, { backgroundColor: '#fdf2f8' }]}>
-                                  <Text style={[styles.miniRatingText, { color: '#db2777' }]}>
-                                    Karlita: ★ {movie.ratingKarla}
-                                  </Text>
-                                </View>
-                              ) : null}
-                              {movie.ratingJavier ? (
-                                <View style={[styles.miniRatingPill, { backgroundColor: '#f0f9ff' }]}>
-                                  <Text style={[styles.miniRatingText, { color: '#0284c7' }]}>
-                                    Javier: ★ {movie.ratingJavier}
-                                  </Text>
-                                </View>
-                              ) : null}
-                            </View>
-                          ) : null}
-
-                          {movie.notes ? (
-                            <Text style={[styles.movieNotesInline, { color: colors.textSecondary }]}>
-                              “{movie.notes}”
-                            </Text>
-                          ) : null}
-                        </View>
-                      )}
-                    </PressableScale>
-                  );
-                })
+              }
+              renderItem={({ item: movie }) => (
+                <MovieCardItem
+                  movie={movie}
+                  colors={colors}
+                  styles={styles}
+                  onPressMovie={openRateModal}
+                  onRemoveReview={handleRemoveMovieReview}
+                  onDeleteMovie={handleDeleteMovie}
+                />
               )}
-            </ScrollView>
+            />
           </View>
         )}
 
@@ -1167,9 +1229,10 @@ async function searchMovieCatalog(
                 <View style={styles.modalHeader}>
                   {selectedMovie.posterUrl ? (
                     <Image
-                      source={{ uri: selectedMovie.posterUrl }}
+                      source={{ uri: optimizePosterUrl(selectedMovie.posterUrl) }}
                       style={styles.modalPosterThumb}
                       resizeMode="cover"
+                      resizeMethod="resize"
                     />
                   ) : null}
                   <View style={{ flex: 1 }}>

@@ -680,7 +680,7 @@ function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   };
 }
 
-function mergeMoviesStates(
+export function mergeMoviesStates(
   base: MoviesAndPlansState,
   incoming: MoviesAndPlansState
 ): MoviesAndPlansState {
