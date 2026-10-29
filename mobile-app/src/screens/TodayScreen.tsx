@@ -369,10 +369,6 @@ export const TodayScreen: React.FC = () => {
           ) {
             const senderName = newInteraction.sender === 'Javier' ? 'Javier' : 'Karlita';
             void notifyHeartbeatInWidget(senderName);
-            Alert.alert(
-              'Pensando en ti',
-              `${senderName} acaba de enviarte un latido desde su corazón.`
-            );
           }
         }
       )
@@ -704,6 +700,17 @@ export const TodayScreen: React.FC = () => {
     };
     await updateAndSyncHome(nextHome);
 
+    const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+    const recipientPushToken = homeState.pushTokens?.[recipientRole];
+    if (recipientPushToken) {
+      void sendPartnerPushNotification(
+        recipientPushToken,
+        `✨ Estado de ${getDisplayName(currentProfile)}`,
+        `${getDisplayName(currentProfile)} actualizó su estado: "${finalStatus}"`,
+        { type: 'MOOD_UPDATE', sender: currentProfile }
+      );
+    }
+
     setIsMoodModalOpen(false);
   };
 
@@ -721,6 +728,18 @@ export const TodayScreen: React.FC = () => {
       nextEventTitle: title,
       nextEventDate: tempEventDate,
     });
+
+    const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+    const recipientPushToken = homeState.pushTokens?.[recipientRole];
+    if (recipientPushToken) {
+      void sendPartnerPushNotification(
+        recipientPushToken,
+        `📅 Nueva cita con ${getDisplayName(currentProfile)}`,
+        `Agendó: "${title}" (${tempEventDate})`,
+        { type: 'NEXT_EVENT', sender: currentProfile }
+      );
+    }
+
     setIsNextEventModalOpen(false);
   };
 

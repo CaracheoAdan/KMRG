@@ -3,10 +3,12 @@ import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { KmrgCoupleWidget } from './KmrgCoupleWidget';
 import { KmrgMiniWidget } from './KmrgMiniWidget';
 import { getStoredWidgetData } from '../services/WidgetSyncService';
+import { checkMissedPartnerNotifications } from '../services/NotificationService';
 import { computeTimeTogether } from './types';
 
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   const { widgetInfo, widgetAction } = props;
+  void checkMissedPartnerNotifications();
   const data = await getStoredWidgetData();
 
   // Recalcular días de relación dinámicamente con la fecha actual del dispositivo

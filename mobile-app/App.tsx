@@ -9,7 +9,11 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { ThemeSelectorModal } from './src/components/ThemeSelectorModal';
 import { CustomAlertProvider } from './src/components/CustomAlertModal';
 import { syncSupabaseMessages, syncSupabaseMilestones } from './src/services/SupabaseService';
-import { registerDevicePushToken, scheduleDailyMessage } from './src/services/NotificationService';
+import {
+  registerDevicePushToken,
+  scheduleDailyMessage,
+  startGlobalPartnerNotificationWatcher,
+} from './src/services/NotificationService';
 import {
   getHomeState,
   saveHomeState,
@@ -23,33 +27,38 @@ function MainNavigator() {
   const { primaryColor } = useTheme();
 
   useEffect(() => {
-    if (profile) {
-      void Promise.all([
-        syncSupabaseMessages(profile),
-        syncSupabaseMilestones(),
-        getHomeState(),
-        getMoviesState(),
-        getSpecialPlacesState(),
-        getGamesState(),
-      ]).then(async ([_, __, homeState]) => {
-        void scheduleDailyMessage();
-        try {
-          const pushToken = await registerDevicePushToken();
-          if (pushToken && homeState.pushTokens?.[profile] !== pushToken) {
-            const nextHome = {
-              ...homeState,
-              pushTokens: {
-                ...(homeState.pushTokens || {}),
-                [profile]: pushToken,
-              },
-            };
-            void saveHomeState(profile, nextHome);
-          }
-        } catch (e) {
-          console.warn('[App] Error registrando push token:', e);
+    if (!profile) return;
+    const stopWatcher = startGlobalPartnerNotificationWatcher(profile);
+
+    void Promise.all([
+      syncSupabaseMessages(profile),
+      syncSupabaseMilestones(),
+      getHomeState(),
+      getMoviesState(),
+      getSpecialPlacesState(),
+      getGamesState(),
+    ]).then(async ([_, __, homeState]) => {
+      void scheduleDailyMessage();
+      try {
+        const pushToken = await registerDevicePushToken();
+        if (pushToken && homeState.pushTokens?.[profile] !== pushToken) {
+          const nextHome = {
+            ...homeState,
+            pushTokens: {
+              ...(homeState.pushTokens || {}),
+              [profile]: pushToken,
+            },
+          };
+          void saveHomeState(profile, nextHome);
         }
-      });
-    }
+      } catch (e) {
+        console.warn('[App] Error registrando push token:', e);
+      }
+    });
+
+    return () => {
+      stopWatcher();
+    };
   }, [profile]);
 
   if (isLoading) {
