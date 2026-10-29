@@ -298,7 +298,7 @@ export const MoviesScreen: React.FC = () => {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadData]);
+  }, [loadData, currentProfile]);
 
   const updateAndSync = async (nextState: MoviesAndPlansState) => {
     setState(nextState);

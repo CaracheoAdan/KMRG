@@ -59,6 +59,7 @@ import {
 import {
   getHomeState,
   saveHomeState,
+  mergeHomeStates,
   DEFAULT_HOME_STATE,
 } from '../services/CoupleSyncService';
 import {
@@ -336,8 +337,8 @@ export const TodayScreen: React.FC = () => {
             newInteraction.payload &&
             newInteraction.sender !== currentProfile
           ) {
-            const incomingHome = newInteraction.payload as Partial<HomeState>;
-            setHomeState((prev) => ({ ...prev, ...incomingHome }));
+            const incomingHome = newInteraction.payload as HomeState;
+            setHomeState((prev) => mergeHomeStates(prev, incomingHome));
 
             const partnerRole: 'Javier' | 'Karla' = currentProfile === 'Karla' ? 'Javier' : 'Karla';
             const partnerDisplayName = getDisplayName(partnerRole);

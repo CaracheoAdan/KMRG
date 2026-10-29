@@ -498,7 +498,7 @@ function normalizeHomeState(state: HomeState): HomeState {
   };
 }
 
-function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
+export function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   const normBase = normalizeHomeState(base);
   const normIncoming = normalizeHomeState(incoming);
 
@@ -736,7 +736,7 @@ export function mergeMoviesStates(
   };
 }
 
-function mergeSpecialPlaces(
+export function mergeSpecialPlaces(
   base: SpecialPlacesState,
   incoming: SpecialPlacesState
 ): SpecialPlacesState {
@@ -943,6 +943,7 @@ function normalizeMoviesState(state: MoviesAndPlansState): MoviesAndPlansState {
     movies,
     bucketList,
     foodOptions: foodOptions.length > 0 ? foodOptions : DEFAULT_MOVIES_STATE.foodOptions,
+    deletedIds: Array.isArray(state.deletedIds) ? state.deletedIds : [],
   };
 }
 

@@ -325,7 +325,7 @@ export const GamesScreen: React.FC = () => {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadAll]);
+  }, [loadAll, currentProfile]);
 
   const persistSudoku = async (nextSudoku: SavedSudokuSession) => {
     setSudoku(nextSudoku);

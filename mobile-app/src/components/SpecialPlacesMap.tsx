@@ -25,6 +25,7 @@ import { SpecialPlace, PlaceCategory, UserProfile } from '../types';
 import {
   getSpecialPlacesState,
   saveSpecialPlacesState,
+  mergeSpecialPlaces,
   DEFAULT_SPECIAL_PLACES,
 } from '../services/CoupleSyncService';
 import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
@@ -196,7 +197,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             payload.new?.payload?.places &&
             payload.new?.sender !== currentProfile
           ) {
-            setPlaces(payload.new.payload.places);
+            setPlaces((prev) => mergeSpecialPlaces({ places: prev }, payload.new.payload).places);
           }
         }
       )
@@ -205,7 +206,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadPlaces]);
+  }, [loadPlaces, currentProfile]);
 
   // Autocompletado en vivo mientras escribes una calle, restaurante o ciudad en el buscador del mapa
   useEffect(() => {
