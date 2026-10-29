@@ -49,6 +49,7 @@ import {
   getWeeklyResetKey,
   createDefaultBreakdown,
   createDefaultGameScoreItem,
+  mergeGamesStates,
 } from '../services/CoupleSyncService';
 import { supabase } from '../config/supabase';
 
@@ -311,10 +312,7 @@ export const GamesScreen: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'interactions' },
         (payload: any) => {
           if (payload.new?.type === 'sync_games_state' && payload.new?.payload) {
-            setGamesState((prev) => ({
-              ...prev,
-              ...payload.new.payload,
-            }));
+            setGamesState((prev) => mergeGamesStates(prev, payload.new.payload as GamesState));
           }
         }
       )
@@ -1233,12 +1231,17 @@ export const GamesScreen: React.FC = () => {
   };
 
   // 5) Confirmar "¡Flota Lista!" (sincronizando la posición arrastrada) y pasar a batalla
-  const handleConfirmFleetReady = async (forceStartBoth = false) => {
+  const handleConfirmFleetReady = async (fleetToSave?: BattleshipShip[], forceStartBoth = false) => {
     const isK = currentProfile === 'Karla';
-    const nextReadyK = forceStartBoth ? true : isK ? !bs.readyKarla : bs.readyKarla;
-    const nextReadyJ = forceStartBoth ? true : !isK ? !bs.readyJavier : bs.readyJavier;
+    const myFleetToPersist = (fleetToSave && fleetToSave.length === 5)
+      ? fleetToSave
+      : (localSetupFleet && localSetupFleet.length === 5)
+      ? localSetupFleet
+      : syncedMyFleet;
+
+    const nextReadyK = forceStartBoth ? true : isK ? true : bs.readyKarla;
+    const nextReadyJ = forceStartBoth ? true : !isK ? true : bs.readyJavier;
     const bothReady = nextReadyK && nextReadyJ;
-    const finalMyFleet = localSetupFleet || syncedMyFleet;
 
     if (bothReady) {
       setBattleshipRadarMode('attack');
@@ -1251,8 +1254,8 @@ export const GamesScreen: React.FC = () => {
         phase: bothReady ? 'battle' : 'setup',
         readyKarla: nextReadyK,
         readyJavier: nextReadyJ,
-        fleetKarla: isK ? finalMyFleet : bs.fleetKarla,
-        fleetJavier: !isK ? finalMyFleet : bs.fleetJavier,
+        fleetKarla: isK ? myFleetToPersist : bs.fleetKarla,
+        fleetJavier: !isK ? myFleetToPersist : bs.fleetJavier,
       },
     });
   };
@@ -1554,7 +1557,7 @@ export const GamesScreen: React.FC = () => {
             onAcceptInvite={() => void handleAcceptBattleshipInvite()}
             onReadyFleet={(fleet) => {
               setLocalSetupFleet(fleet);
-              void handleConfirmFleetReady();
+              void handleConfirmFleetReady(fleet);
             }}
             onFire={(idx) => void handleBattleshipFire(idx)}
             onReset={() => void handleResetBattleship()}

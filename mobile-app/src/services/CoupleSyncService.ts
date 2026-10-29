@@ -778,7 +778,7 @@ function mergeScoreItem(a?: GameScoreItem, b?: GameScoreItem): GameScoreItem {
   };
 }
 
-function mergeGamesStates(base: GamesState, incoming: GamesState): GamesState {
+export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesState {
   const normBase = normalizeGamesState(base);
   const normIncoming = normalizeGamesState(incoming);
 
@@ -826,11 +826,79 @@ function mergeGamesStates(base: GamesState, incoming: GamesState): GamesState {
       scoreKarla: Math.max(normBase.hangman.scoreKarla || 0, normIncoming.hangman.scoreKarla || 0),
       scoreJavier: Math.max(normBase.hangman.scoreJavier || 0, normIncoming.hangman.scoreJavier || 0),
     },
-    battleship: {
-      ...normIncoming.battleship,
-      winsKarla: Math.max(normBase.battleship.winsKarla || 0, normIncoming.battleship.winsKarla || 0),
-      winsJavier: Math.max(normBase.battleship.winsJavier || 0, normIncoming.battleship.winsJavier || 0),
-    },
+    battleship: (() => {
+      const baseBs = normBase.battleship;
+      const incBs = normIncoming.battleship;
+
+      // Si se está reiniciando explícitamente a setup/idle
+      const isReset = incBs.phase === 'setup' && (baseBs.phase === 'finished' || baseBs.phase === 'battle');
+      const isNewGame = incBs.phase === 'setup' || incBs.phase === 'invited';
+
+      // Ready flags acumulativos (no perder si ya estaba lista)
+      const readyK = isReset ? incBs.readyKarla : (baseBs.readyKarla || incBs.readyKarla);
+      const readyJ = isReset ? incBs.readyJavier : (baseBs.readyJavier || incBs.readyJavier);
+      const bothReady = readyK && readyJ;
+
+      // Flota de Karla: preservar la confirmada si ya está lista
+      const fleetK = (incBs.readyKarla && Array.isArray(incBs.fleetKarla) && incBs.fleetKarla.length === 5)
+        ? incBs.fleetKarla
+        : (baseBs.readyKarla && Array.isArray(baseBs.fleetKarla) && baseBs.fleetKarla.length === 5)
+        ? baseBs.fleetKarla
+        : (Array.isArray(incBs.fleetKarla) && incBs.fleetKarla.length === 5)
+        ? incBs.fleetKarla
+        : baseBs.fleetKarla;
+
+      // Flota de Javier: preservar la confirmada si ya está lista
+      const fleetJ = (incBs.readyJavier && Array.isArray(incBs.fleetJavier) && incBs.fleetJavier.length === 5)
+        ? incBs.fleetJavier
+        : (baseBs.readyJavier && Array.isArray(baseBs.fleetJavier) && baseBs.fleetJavier.length === 5)
+        ? baseBs.fleetJavier
+        : (Array.isArray(incBs.fleetJavier) && incBs.fleetJavier.length === 5)
+        ? incBs.fleetJavier
+        : baseBs.fleetJavier;
+
+      // Disparos acumulativos sin duplicados (ningún tiro confirmado se pierde)
+      const shotsK = isNewGame
+        ? (incBs.shotsByKarla || [])
+        : Array.from(new Set([...(baseBs.shotsByKarla || []), ...(incBs.shotsByKarla || [])]));
+      const shotsJ = isNewGame
+        ? (incBs.shotsByJavier || [])
+        : Array.from(new Set([...(baseBs.shotsByJavier || []), ...(incBs.shotsByJavier || [])]));
+
+      let phase = incBs.phase;
+      if (incBs.winner || baseBs.winner) {
+        phase = 'finished';
+      } else if (!isNewGame && (bothReady || incBs.phase === 'battle' || baseBs.phase === 'battle')) {
+        phase = 'battle';
+      }
+
+      const baseTotalShots = (baseBs.shotsByKarla?.length || 0) + (baseBs.shotsByJavier?.length || 0);
+      const incTotalShots = (incBs.shotsByKarla?.length || 0) + (incBs.shotsByJavier?.length || 0);
+      const lastShot = isNewGame
+        ? null
+        : incTotalShots >= baseTotalShots
+        ? incBs.lastShot || baseBs.lastShot
+        : baseBs.lastShot || incBs.lastShot;
+
+      const turn = incTotalShots >= baseTotalShots ? incBs.turn : baseBs.turn;
+
+      return {
+        ...baseBs,
+        ...incBs,
+        phase,
+        readyKarla: readyK,
+        readyJavier: readyJ,
+        fleetKarla: fleetK,
+        fleetJavier: fleetJ,
+        shotsByKarla: shotsK,
+        shotsByJavier: shotsJ,
+        turn,
+        lastShot,
+        winner: incBs.winner || baseBs.winner || null,
+        winsKarla: Math.max(baseBs.winsKarla || 0, incBs.winsKarla || 0),
+        winsJavier: Math.max(baseBs.winsJavier || 0, incBs.winsJavier || 0),
+      };
+    })(),
   };
 }
 
