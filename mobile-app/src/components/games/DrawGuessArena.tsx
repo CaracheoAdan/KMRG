@@ -87,11 +87,32 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
   onOpenScoreBreakdown,
 }) => {
   const gameState: DrawGuessState = useMemo(() => {
+    const raw: Partial<DrawGuessState> = rawGameState || {};
+    const phase = (!raw.phase || raw.phase === 'idle') ? 'choosing_word' : raw.phase;
+    const drawer: UserProfile = raw.drawer || 'Karla';
+    const guesser: UserProfile = drawer === 'Karla' ? 'Javier' : 'Karla';
     return {
       ...DEFAULT_DRAW_GUESS_FALLBACK,
-      ...(rawGameState || {}),
+      ...raw,
+      phase,
+      drawer,
+      guesser,
     };
   }, [rawGameState]);
+
+  // Si la partida está en idle o no inicializada, promover inmediatamente a choosing_word
+  useEffect(() => {
+    if (!rawGameState?.phase || rawGameState.phase === 'idle') {
+      void onUpdateGameState({
+        ...gameState,
+        phase: 'choosing_word',
+        currentRound: gameState.currentRound || 1,
+        drawer: gameState.drawer || 'Karla',
+        guesser: (gameState.drawer || 'Karla') === 'Karla' ? 'Javier' : 'Karla',
+        updatedAt: Date.now(),
+      });
+    }
+  }, [rawGameState?.phase]);
 
   // Herramientas del dibujante
   const [currentColor, setCurrentColor] = useState<string>(CANVAS_COLORS[0]);
@@ -786,7 +807,18 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       {/* ================= 2. FILA DE PALABRA / GUIONES + TEMPORIZADOR INTEGRADO ================= */}
       <View style={styles.wordTimerRow}>
         <View style={styles.wordSection}>
-          {isMeDrawer ? (
+          {gameState.phase === 'choosing_word' ? (
+            <View style={styles.drawerWordGroup}>
+              <Ionicons
+                name={isMeDrawer ? 'color-palette' : 'time-outline'}
+                size={16}
+                color={isMeDrawer ? primaryColor : '#f59e0b'}
+              />
+              <Text style={[styles.drawerWordLabel, { color: isMeDrawer ? primaryColor : '#b45309', fontWeight: '800' }]}>
+                {isMeDrawer ? '¡ELIGE TU PALABRA!' : `ESPERANDO A ${drawerDisplayName.toUpperCase()}…`}
+              </Text>
+            </View>
+          ) : isMeDrawer ? (
             <View style={styles.drawerWordGroup}>
               <Text style={styles.drawerWordLabel}>DIBUJA:</Text>
               <Text style={[styles.drawerWordHighlight, { color: primaryColor }]} numberOfLines={1}>
@@ -1113,19 +1145,46 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         ) : (
           /* Estado de espera o fin */
           <View style={styles.dockIdleBox}>
-            <Text style={styles.dockIdleText}>
-              {gameState.phase === 'choosing_word'
-                ? isMeDrawer
-                  ? 'Elige tu palabra arriba'
-                  : `Esperando a ${drawerDisplayName}…`
-                : 'Partida en curso'}
-            </Text>
+            <View
+              style={[
+                styles.dockNoticePill,
+                {
+                  backgroundColor: isMeDrawer ? '#ecfdf5' : '#f0f9ff',
+                  borderColor: isMeDrawer ? '#a7f3d0' : '#bae6fd',
+                },
+              ]}
+            >
+              <Ionicons
+                name={isMeDrawer ? 'brush' : 'search'}
+                size={15}
+                color={isMeDrawer ? primaryColor : '#0284c7'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.dockIdleText,
+                  { color: isMeDrawer ? '#065f46' : '#0369a1' },
+                ]}
+              >
+                {gameState.phase === 'choosing_word'
+                  ? isMeDrawer
+                    ? 'Te toca dibujar · Elige una de las 3 palabras'
+                    : `Te toca adivinar · Esperando que ${drawerDisplayName} elija palabra…`
+                  : gameState.phase === 'round_end'
+                  ? `Fin de la ronda ${gameState.currentRound}`
+                  : gameState.phase === 'game_over'
+                  ? '¡Partida finalizada!'
+                  : isMeDrawer
+                  ? 'Te toca dibujar'
+                  : `Te toca adivinar el dibujo de ${drawerDisplayName}`}
+              </Text>
+            </View>
           </View>
         )}
       </View>
 
-      {/* ================= MODAL: ELECCIÓN DE PALABRA (DIBUJANTE, 15S) ================= */}
-      <Modal visible={gameState.phase === 'choosing_word' && isMeDrawer} transparent animationType="fade">
+      {/* ================= OVERLAY: ELECCIÓN DE PALABRA (DIBUJANTE, 15S) ================= */}
+      {gameState.phase === 'choosing_word' && isMeDrawer && (
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
@@ -1201,7 +1260,7 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
             )}
           </View>
         </View>
-      </Modal>
+      )}
 
       {/* ================= SPLASH DE INICIO DE RONDA (1.5S) ================= */}
       {showRoundSplash && (
@@ -1213,8 +1272,8 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         </Animated.View>
       )}
 
-      {/* ================= MODAL: FIN DE RONDA (REVELACIÓN + REPLAY) ================= */}
-      <Modal visible={gameState.phase === 'round_end'} transparent animationType="slide">
+      {/* ================= OVERLAY: FIN DE RONDA (REVELACIÓN + REPLAY) ================= */}
+      {gameState.phase === 'round_end' && (
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={{ alignItems: 'center', marginBottom: 14 }}>
@@ -1269,10 +1328,10 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
             </View>
           </View>
         </View>
-      </Modal>
+      )}
 
-      {/* ================= MODAL: FIN DE PARTIDA (GANADOR Y REVANCHA) ================= */}
-      <Modal visible={gameState.phase === 'game_over'} transparent animationType="slide">
+      {/* ================= OVERLAY: FIN DE PARTIDA (GANADOR Y REVANCHA) ================= */}
+      {gameState.phase === 'game_over' && (
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={{ alignItems: 'center', marginBottom: 14 }}>
@@ -1325,7 +1384,7 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
             </View>
           </View>
         </View>
-      </Modal>
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -1726,16 +1785,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dockIdleText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
-    color: '#94a3b8',
+    color: '#0f172a',
+  },
+  dockNoticePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+    zIndex: 9999,
+    elevation: 20,
   },
   modalCard: {
     width: '100%',

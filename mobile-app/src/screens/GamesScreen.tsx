@@ -1510,8 +1510,26 @@ export const GamesScreen: React.FC = () => {
   };
 
   const handleResetDrawGuess = async () => {
-    const nextDg = {
+    const nextDg: GamesState['drawGuess'] = {
       ...DEFAULT_GAMES_STATE.drawGuess,
+      phase: 'choosing_word',
+      currentRound: 1,
+      drawer: 'Karla',
+      guesser: 'Javier',
+      wordChoices: null,
+      selectedWord: null,
+      drawerWord: null,
+      strokes: [],
+      attempts: [],
+      revealedIndices: [],
+      usedHint: false,
+      scoreKarla: 0,
+      scoreJavier: 0,
+      guesserScoreKarla: 0,
+      guesserScoreJavier: 0,
+      correctGuessesKarla: 0,
+      correctGuessesJavier: 0,
+      roundsHistory: [],
       updatedAt: Date.now(),
     };
     await updateAndSyncGames({
@@ -2299,6 +2317,12 @@ export const GamesScreen: React.FC = () => {
                     onPress={() => {
                       const toLaunch = pendingGameToLaunch;
                       setPendingGameToLaunch(null);
+                      if (toLaunch === 'drawguess') {
+                        const dg = gamesState.drawGuess;
+                        if (!dg || !dg.phase || dg.phase === 'idle' || dg.phase === 'game_over') {
+                          void handleResetDrawGuess();
+                        }
+                      }
                       setActiveGame(toLaunch);
                     }}
                   />

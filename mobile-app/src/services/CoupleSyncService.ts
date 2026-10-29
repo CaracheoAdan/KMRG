@@ -420,7 +420,7 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     winsJavier: 0,
   },
   drawGuess: {
-    phase: 'idle',
+    phase: 'choosing_word',
     currentRound: 1,
     drawer: 'Karla',
     guesser: 'Javier',
@@ -1213,6 +1213,9 @@ function normalizeGamesState(state: GamesState): GamesState {
     drawGuess: {
       ...DEFAULT_GAMES_STATE.drawGuess,
       ...(state?.drawGuess || {}),
+      phase: (!state?.drawGuess?.phase || state?.drawGuess?.phase === 'idle') ? 'choosing_word' : state.drawGuess.phase,
+      drawer: state?.drawGuess?.drawer || 'Karla',
+      guesser: state?.drawGuess?.guesser || 'Javier',
       winsKarla: resetGamesForNewWeek ? 0 : state?.drawGuess?.winsKarla || 0,
       winsJavier: resetGamesForNewWeek ? 0 : state?.drawGuess?.winsJavier || 0,
     },
