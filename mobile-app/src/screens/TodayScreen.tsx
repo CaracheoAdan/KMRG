@@ -38,6 +38,7 @@ import {
   resolveFeelingType,
   getFeelingLabel,
 } from '../components/MoodMascot';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getTodayMessage,
   markMessageAsRead,
@@ -45,6 +46,9 @@ import {
   toLocalDateString,
   getCachedMilestones,
   calculateTimeTogether,
+  parseLetterContentAndPhoto,
+  getRelationshipCelebrationInfo,
+  SPECIAL_DAY_MILESTONES,
 } from '../services/StorageService';
 import {
   syncSupabaseMessages,
@@ -55,6 +59,7 @@ import {
 import {
   registerDevicePushToken,
   sendPartnerPushNotification,
+  checkAndNotifySpecialRelationshipDay,
 } from '../services/NotificationService';
 import {
   getHomeState,
@@ -140,6 +145,8 @@ export const TodayScreen: React.FC = () => {
 
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
+  const [letterReplyDraft, setLetterReplyDraft] = useState('');
+  const [isSpecialDayModalOpen, setIsSpecialDayModalOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
   const [petNameDraft, setPetNameDraft] = useState('Pochito');
@@ -276,7 +283,7 @@ export const TodayScreen: React.FC = () => {
       // NUNCA consume el estado de ánimo (mood)
       let partnerNote = '';
       if (todayMsg && todayMsg.sender === partnerRole && todayMsg.content?.trim()) {
-        partnerNote = todayMsg.content.trim();
+        partnerNote = parseLetterContentAndPhoto(todayMsg.content).text;
       } else if (
         syncedHome.stickyNote &&
         syncedHome.stickyNote.author === partnerRole &&
@@ -389,7 +396,7 @@ export const TodayScreen: React.FC = () => {
 
           if (newMsg.sender === partnerRole && toLocalDateString(newMsg.scheduled_date) <= todayStr) {
             setMessage(newMsg);
-            const cleanText = (newMsg.content || '').trim();
+            const cleanText = parseLetterContentAndPhoto(newMsg.content).text;
             void syncWidgetData({
               noteText: cleanText,
               noteSender: cleanText ? partnerDisplayName : '',
@@ -420,6 +427,78 @@ export const TodayScreen: React.FC = () => {
     [homeState.anniversaryDate, currentDateTick]
   );
   const daysTogether = timeTogether.totalDays;
+
+  // Detección automática de Mesario (cumplemes), Aniversario o Números Redondos (100, 200, 365, 500 días)
+  const celebrationInfo = useMemo(
+    () => getRelationshipCelebrationInfo(homeState.anniversaryDate),
+    [homeState.anniversaryDate, currentDateTick]
+  );
+
+  useEffect(() => {
+    if (!celebrationInfo.isSpecialToday) return;
+    const todayKey = `@kmrg_celebrated_special_day_${toLocalDateString(new Date())}_${celebrationInfo.totalDays}`;
+    void AsyncStorage.getItem(todayKey).then((alreadyShown) => {
+      if (!alreadyShown) {
+        void AsyncStorage.setItem(todayKey, '1');
+        setIsSpecialDayModalOpen(true);
+        void checkAndNotifySpecialRelationshipDay(homeState.anniversaryDate);
+      }
+    });
+  }, [celebrationInfo.isSpecialToday, celebrationInfo.totalDays, homeState.anniversaryDate]);
+
+  const currentLetterExtra = message ? homeState.letterExtras?.[message.id] : undefined;
+  const parsedTodayLetter = useMemo(
+    () => parseLetterContentAndPhoto(message?.content, currentLetterExtra?.photoUrl),
+    [message?.content, currentLetterExtra?.photoUrl]
+  );
+
+  useEffect(() => {
+    if (isLetterModalOpen && message) {
+      setLetterReplyDraft(homeState.letterExtras?.[message.id]?.replyText || '');
+    }
+  }, [isLetterModalOpen, message?.id]);
+
+  const handleSaveLetterReactionOrReply = async (reactionEmoji?: string, explicitReply?: string) => {
+    if (!message) return;
+    const prevExtra = homeState.letterExtras?.[message.id];
+    const nextReaction = reactionEmoji !== undefined ? reactionEmoji : prevExtra?.reaction;
+    const nextReply = explicitReply !== undefined ? explicitReply.trim() : (prevExtra?.replyText || '');
+
+    const nextExtras = {
+      ...(homeState.letterExtras || {}),
+      [message.id]: {
+        ...(prevExtra || {}),
+        messageId: message.id,
+        photoUrl: parsedTodayLetter.photoUrl || prevExtra?.photoUrl,
+        reaction: nextReaction,
+        replyText: nextReply,
+        repliedBy: currentProfile,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
+    const nextHome: HomeState = {
+      ...homeState,
+      letterExtras: nextExtras,
+    };
+    await updateAndSyncHome(nextHome);
+
+    const recipientRole = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+    const recipientToken = homeState.pushTokens?.[recipientRole];
+    if (recipientToken) {
+      const myName = getDisplayName(currentProfile);
+      void sendPartnerPushNotification(
+        recipientToken,
+        explicitReply !== undefined
+          ? `💌 Nota de ${myName} en tu carta`
+          : `💌 ${myName} reaccionó a tu carta`,
+        explicitReply !== undefined && nextReply
+          ? `${nextReaction ? nextReaction + ' ' : ''}“${nextReply}”`
+          : `Reaccionó con ${nextReaction} a tu carta del día.`,
+        { type: 'LETTER_REACTION', messageId: message.id, sender: currentProfile }
+      );
+    }
+  };
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
@@ -819,18 +898,36 @@ export const TodayScreen: React.FC = () => {
                       maxFontSizeMultiplier={1.2}
                     >
                       “{message
-                        ? message.content
+                        ? parsedTodayLetter.text
                         : currentProfile === 'Karla'
                         ? 'Cada instante de mi día estás en mi mente y en mi corazón, mi vida.'
                         : `Programa una carta sorpresa para ${getDisplayName('Karla')} desde la pestaña Escribir.`}”
                     </Text>
-                    {message && message.content.length > 120 && (
-                      <Text
-                        style={[styles.readMoreHint, { color: colors.primary }]}
-                        maxFontSizeMultiplier={1.2}
-                      >
-                        Toca para leer completa 💌
-                      </Text>
+                    {message && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                        {parsedTodayLetter.photoUrl && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: `${colors.primary}18`, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 }}>
+                            <Ionicons name="image" size={11} color={colors.primary} />
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}>Foto adjunta</Text>
+                          </View>
+                        )}
+                        {currentLetterExtra?.reaction && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.surface, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 }}>
+                            <Text style={{ fontSize: 10.5 }}>{currentLetterExtra.reaction}</Text>
+                            {currentLetterExtra.replyText ? (
+                              <Text style={{ fontSize: 10, color: colors.textSecondary, maxWidth: 110 }} numberOfLines={1}>
+                                “{currentLetterExtra.replyText}”
+                              </Text>
+                            ) : null}
+                          </View>
+                        )}
+                        <Text
+                          style={[styles.readMoreHint, { color: colors.primary, marginTop: 0 }]}
+                          maxFontSizeMultiplier={1.2}
+                        >
+                          {parsedTodayLetter.photoUrl ? 'Ver foto y reaccionar 💌' : 'Toca para abrir y reaccionar 💌'}
+                        </Text>
+                      </View>
                     )}
                   </>
                 )}
@@ -867,13 +964,38 @@ export const TodayScreen: React.FC = () => {
             style={styles.dsCard}
             accessibilityLabel="Cambiar fecha de aniversario"
           >
-            <View style={styles.dsCardHeader}>
-              <View style={[styles.dsIconCircle, { backgroundColor: colors.primaryLight }]}>
-                <Ionicons name="infinite" size={15} color={colors.primary} />
+            <View style={[styles.dsCardHeader, { justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <View style={[styles.dsIconCircle, { backgroundColor: colors.primaryLight }]}>
+                  <Ionicons name="infinite" size={15} color={colors.primary} />
+                </View>
+                <Text style={styles.dsCardLabel} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                  TIEMPO JUNTOS
+                </Text>
               </View>
-              <Text style={styles.dsCardLabel} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                TIEMPO JUNTOS
-              </Text>
+              <TouchableOpacity
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  setIsSpecialDayModalOpen(true);
+                }}
+                style={{
+                  paddingHorizontal: 7,
+                  paddingVertical: 2.5,
+                  borderRadius: 999,
+                  backgroundColor: celebrationInfo.isSpecialToday ? colors.primary : colors.primaryLight,
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: '800',
+                    color: celebrationInfo.isSpecialToday ? colors.primaryOn : colors.primary,
+                  }}
+                >
+                  {celebrationInfo.isSpecialToday ? '🎉 ¡Hoy!' : `🥂 ${celebrationInfo.nextMesarioDaysLeft}d`}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.daysNumberRow}>
@@ -1670,17 +1792,25 @@ export const TodayScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* ================= MODAL: LEER CARTA DEL DÍA COMPLETA ================= */}
+      {/* ================= MODAL: LEER CARTA DEL DÍA COMPLETA (CON FOTO, REACCIONES Y NOTA DE AGRADECIMIENTO) ================= */}
       <Modal
         visible={isLetterModalOpen}
         transparent
         animationType="fade"
         onRequestClose={() => setIsLetterModalOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { maxHeight: '88%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Carta del Día</Text>
+              <View>
+                <Text style={styles.modalTitle}>Carta del Día 💌</Text>
+                <Text style={styles.modalSubtitle}>
+                  Escrita con amor por {message?.sender === 'Karla' ? 'Karlita' : 'Javier'}
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => setIsLetterModalOpen(false)}
                 style={styles.closeBtn}
@@ -1688,7 +1818,224 @@ export const TodayScreen: React.FC = () => {
                 <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.fullLetterText}>“{message?.content}”</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.fullLetterText}>“{parsedTodayLetter.text}”</Text>
+
+              {parsedTodayLetter.photoUrl && (
+                <View style={{ marginTop: 12, marginBottom: 8, borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: colors.border }}>
+                  <Image
+                    source={{ uri: parsedTodayLetter.photoUrl }}
+                    style={{ width: '100%', height: 210, backgroundColor: colors.surfaceAlt }}
+                    resizeMode="cover"
+                  />
+                </View>
+              )}
+
+              {/* Barra de Reacciones Rápidas a la Carta */}
+              <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>
+                  Deja una reacción en esta carta:
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
+                  {['❤️', '🥺', '🥰', '😭', '🔥', '✨'].map((emoji) => {
+                    const isSelected = currentLetterExtra?.reaction === emoji;
+                    return (
+                      <TouchableOpacity
+                        key={emoji}
+                        onPress={() => void handleSaveLetterReactionOrReply(emoji)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          borderRadius: 12,
+                          alignItems: 'center',
+                          backgroundColor: isSelected ? `${primaryColor}22` : colors.surfaceAlt,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? primaryColor : colors.border,
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontSize: 19 }}>{emoji}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Nota de agradecimiento pegada a la carta */}
+              <View style={{ marginTop: 14, backgroundColor: '#fffbeb', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#fde68a' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <Ionicons name="bookmark" size={14} color="#d97706" />
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#92400e' }}>
+                    Nota de agradecimiento pegada a esta carta
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput
+                    value={letterReplyDraft}
+                    onChangeText={setLetterReplyDraft}
+                    placeholder="Escribe una pequeña nota de agradecimiento..."
+                    placeholderTextColor="#b4530988"
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#ffffff',
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 8,
+                      fontSize: 12.5,
+                      color: '#78350f',
+                      borderWidth: 1,
+                      borderColor: '#fcd34d',
+                    }}
+                    maxLength={160}
+                  />
+                  <TouchableOpacity
+                    onPress={async () => {
+                      await handleSaveLetterReactionOrReply(undefined, letterReplyDraft);
+                      Alert.alert('¡Nota pegada! 💌', 'Tu nota de agradecimiento quedó guardada en esta carta.');
+                    }}
+                    style={{
+                      backgroundColor: primaryColor,
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      borderRadius: 10,
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>Pegar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ================= MODAL: MESARIO Y DÍAS ESPECIALES AUTOMÁTICOS ================= */}
+      <Modal
+        visible={isSpecialDayModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsSpecialDayModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { alignItems: 'center', paddingVertical: 22 }]}>
+            <View
+              style={{
+                width: 68,
+                height: 68,
+                borderRadius: 34,
+                backgroundColor: `${primaryColor}18`,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 10,
+                borderWidth: 2,
+                borderColor: `${primaryColor}45`,
+              }}
+            >
+              <Text style={{ fontSize: 34 }}>{celebrationInfo.emoji}</Text>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: `${primaryColor}18`,
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+                borderRadius: 999,
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '800', color: primaryColor }}>
+                {celebrationInfo.badgeText.toUpperCase()}
+              </Text>
+            </View>
+
+            <Text style={{ fontSize: 21, fontWeight: '900', color: colors.text, textAlign: 'center', marginBottom: 6 }}>
+              {celebrationInfo.title}
+            </Text>
+
+            <Text style={{ fontSize: 13.5, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 8, lineHeight: 20, marginBottom: 16 }}>
+              {celebrationInfo.subtitle}
+            </Text>
+
+            {/* Próximas Metas y Mesarios */}
+            <View style={{ width: '100%', backgroundColor: colors.surfaceAlt, borderRadius: 16, padding: 14, gap: 10, borderWidth: 1, borderColor: colors.border, marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 18 }}>🥂</Text>
+                  <View>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
+                      Mesario #{celebrationInfo.nextMesarioNumber}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                      Cada mes en su día especial
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ backgroundColor: `${primaryColor}18`, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
+                  <Text style={{ fontSize: 11.5, fontWeight: '800', color: primaryColor }}>
+                    En {celebrationInfo.nextMesarioDaysLeft} {celebrationInfo.nextMesarioDaysLeft === 1 ? 'día' : 'días'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ height: 1, backgroundColor: colors.border }} />
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 18 }}>✨</Text>
+                  <View>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
+                      Meta de {celebrationInfo.nextMilestoneDays} Días
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                      Celebración de días redondos (100, 200, 365, 500...)
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
+                  <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#b45309' }}>
+                    En {celebrationInfo.nextMilestoneDaysLeft}d
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsSpecialDayModalOpen(false);
+                  setShowAnniversaryPicker(true);
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceAlt,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary }}>
+                  Editar fecha
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setIsSpecialDayModalOpen(false)}
+                style={{
+                  flex: 1.4,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  backgroundColor: primaryColor,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13.5, fontWeight: '800', color: '#ffffff' }}>
+                  {celebrationInfo.isSpecialToday ? '¡Celebrar Juntos! 💜' : 'Cerrar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

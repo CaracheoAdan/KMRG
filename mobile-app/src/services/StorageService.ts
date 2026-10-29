@@ -408,3 +408,167 @@ export const addLocalMilestone = async (milestone: {
   await AsyncStorage.setItem(MILESTONES_KEY, JSON.stringify(updated));
   return newMilestone;
 };
+
+
+const LETTER_PHOTO_REGEX = /\n?\[\[FOTO:(https?:\/\/[^\]]+|data:image\/[^\]]+)\]\]/i;
+
+/**
+ * Empaqueta el texto de una carta junto con su foto opcional para que viaje
+ * de forma segura dentro de la tabla messages (incluyendo cartas programadas a futuro).
+ */
+export const encodeLetterWithPhoto = (text: string, photoUrl?: string | null): string => {
+  const cleanText = (text || '').replace(LETTER_PHOTO_REGEX, '').trim();
+  const cleanPhoto = (photoUrl || '').trim();
+  if (!cleanPhoto) return cleanText;
+  return `${cleanText}\n[[FOTO:${cleanPhoto}]]`;
+};
+
+/**
+ * Extrae el texto limpio de una carta y su fotografía adjunta (si la tiene).
+ */
+export const parseLetterContentAndPhoto = (
+  rawContent?: string | null,
+  extraPhotoUrl?: string | null
+): { text: string; photoUrl: string | null } => {
+  const raw = rawContent || '';
+  const match = raw.match(LETTER_PHOTO_REGEX);
+  const embeddedPhoto = match && match[1] ? match[1].trim() : null;
+  const cleanText = raw.replace(LETTER_PHOTO_REGEX, '').trim();
+  return {
+    text: cleanText,
+    photoUrl: (extraPhotoUrl && extraPhotoUrl.trim()) || embeddedPhoto || null,
+  };
+};
+
+export const SPECIAL_DAY_MILESTONES = [
+  50, 100, 150, 200, 250, 300, 365, 400, 500, 600, 700, 730, 800, 900, 1000, 1500, 2000,
+];
+
+export interface RelationshipCelebrationInfo {
+  isSpecialToday: boolean;
+  type: 'anniversary' | 'mesario' | 'milestone_days' | 'regular';
+  badgeText: string;
+  title: string;
+  subtitle: string;
+  emoji: string;
+  totalDays: number;
+  totalMonths: number;
+  nextMesarioDaysLeft: number;
+  nextMesarioNumber: number;
+  nextMilestoneDays: number;
+  nextMilestoneDaysLeft: number;
+}
+
+/**
+ * Detecta automáticamente si hoy es Aniversario, Mesario (cumplemes) o un Día Redondo
+ * (100, 200, 365, 500 días, etc.) y calcula cuánto falta para los siguientes.
+ */
+export const getRelationshipCelebrationInfo = (
+  anniversaryDateStr?: string | null,
+  nowInput: Date = new Date()
+): RelationshipCelebrationInfo => {
+  const breakdown = calculateTimeTogether(anniversaryDateStr, nowInput);
+  const totalDays = breakdown.totalDays;
+  const totalMonths = breakdown.years * 12 + breakdown.months;
+
+  // Calcular días restantes para el próximo mesario
+  const clean = toLocalDateString(anniversaryDateStr || '2024-02-14');
+  const parts = clean.split('-').map(Number);
+  const startDay = parts.length === 3 && !isNaN(parts[2]) ? parts[2] : 14;
+
+  const todayMidnight = new Date(
+    nowInput.getFullYear(),
+    nowInput.getMonth(),
+    nowInput.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+
+  let nextMesarioDate = new Date(nowInput.getFullYear(), nowInput.getMonth(), startDay, 0, 0, 0, 0);
+  if (nextMesarioDate.getTime() <= todayMidnight.getTime()) {
+    nextMesarioDate = new Date(nowInput.getFullYear(), nowInput.getMonth() + 1, startDay, 0, 0, 0, 0);
+  }
+  const nextMesarioDaysLeft = Math.max(
+    1,
+    Math.round((nextMesarioDate.getTime() - todayMidnight.getTime()) / (1000 * 60 * 60 * 24))
+  );
+  const nextMesarioNumber = totalMonths + 1;
+
+  // Calcular próximo número redondo (100, 200, 365, 500...)
+  const nextMilestoneDays =
+    SPECIAL_DAY_MILESTONES.find((m) => m > totalDays) || Math.ceil((totalDays + 1) / 500) * 500;
+  const nextMilestoneDaysLeft = Math.max(1, nextMilestoneDays - totalDays);
+
+  // 1. ¿Es Aniversario Anual?
+  if (breakdown.years >= 1 && breakdown.months === 0 && breakdown.days === 0) {
+    const yrLabel = breakdown.years === 1 ? '1 Año' : `${breakdown.years} Años`;
+    return {
+      isSpecialToday: true,
+      type: 'anniversary',
+      badgeText: `🎉 ¡Feliz Aniversario #${breakdown.years}!`,
+      title: `¡Felices ${yrLabel} Juntos!`,
+      subtitle: `Hoy cumplen exactamente ${yrLabel} (${totalDays} días) construyendo la historia más bonita.`,
+      emoji: '👑',
+      totalDays,
+      totalMonths,
+      nextMesarioDaysLeft,
+      nextMesarioNumber,
+      nextMilestoneDays,
+      nextMilestoneDaysLeft,
+    };
+  }
+
+  // 2. ¿Es Mesario (Cumplemes)?
+  if (totalMonths >= 1 && breakdown.days === 0) {
+    const mLabel = totalMonths === 1 ? '1 Mes' : `${totalMonths} Meses`;
+    return {
+      isSpecialToday: true,
+      type: 'mesario',
+      badgeText: `🥂 ¡Feliz Mesario #${totalMonths}!`,
+      title: `¡Felices ${mLabel} de Amor!`,
+      subtitle: `Hoy cumplen un mes más juntos (${totalDays} días compartiendo risas, sueños y momentos únicos).`,
+      emoji: '🥂',
+      totalDays,
+      totalMonths,
+      nextMesarioDaysLeft,
+      nextMesarioNumber,
+      nextMilestoneDays,
+      nextMilestoneDaysLeft,
+    };
+  }
+
+  // 3. ¿Es Día Redondo Especial (100, 200, 365, 500 días...)?
+  if (SPECIAL_DAY_MILESTONES.includes(totalDays)) {
+    return {
+      isSpecialToday: true,
+      type: 'milestone_days',
+      badgeText: `✨ ¡${totalDays} Días Juntos!`,
+      title: `¡Celebrando ${totalDays} Días de Amor!`,
+      subtitle: `Hoy alcanzan la cifra especial de ${totalDays} días juntos. ¡Cada día cuenta en nuestra historia!`,
+      emoji: '🎉',
+      totalDays,
+      totalMonths,
+      nextMesarioDaysLeft,
+      nextMesarioNumber,
+      nextMilestoneDays,
+      nextMilestoneDaysLeft,
+    };
+  }
+
+  return {
+    isSpecialToday: false,
+    type: 'regular',
+    badgeText: `Próximo mesario en ${nextMesarioDaysLeft}d`,
+    title: `${totalDays} Días Juntos`,
+    subtitle: `Faltan ${nextMesarioDaysLeft} ${nextMesarioDaysLeft === 1 ? 'día' : 'días'} para su mesario #${nextMesarioNumber} y ${nextMilestoneDaysLeft}d para los ${nextMilestoneDays} días.`,
+    emoji: '💜',
+    totalDays,
+    totalMonths,
+    nextMesarioDaysLeft,
+    nextMesarioNumber,
+    nextMilestoneDays,
+    nextMilestoneDaysLeft,
+  };
+};

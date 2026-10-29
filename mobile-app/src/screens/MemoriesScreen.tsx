@@ -38,7 +38,10 @@ import {
   formatDisplayDate,
   addLocalMilestone,
   toLocalDateString,
+  parseLetterContentAndPhoto,
 } from '../services/StorageService';
+import { exportCoupleBookToPdf } from '../services/BookExportService';
+import { getSpecialPlacesState } from '../services/CoupleSyncService';
 import {
   syncSupabaseMilestones,
   createSupabaseMilestone,
@@ -64,6 +67,7 @@ type ViewMode = 'timeline' | 'album' | 'calendar' | 'map';
 
 interface TimelineLetterItemProps {
   item: Message;
+  extra?: { photoUrl?: string; reaction?: string; replyText?: string };
   isLast: boolean;
   primaryColor: string;
   colors: ThemePalette;
@@ -73,7 +77,8 @@ interface TimelineLetterItemProps {
 }
 
 const TimelineLetterItem = React.memo<TimelineLetterItemProps>(
-  ({ item, isLast, primaryColor, colors, styles, onSelectSealed, onSelectOpen }) => {
+  ({ item, extra, isLast, primaryColor, colors, styles, onSelectSealed, onSelectOpen }) => {
+    const parsed = parseLetterContentAndPhoto(item.content, extra?.photoUrl);
     const formattedDate = formatDisplayDate(item.scheduled_date, {
       day: 'numeric',
       month: 'short',
@@ -151,8 +156,28 @@ const TimelineLetterItem = React.memo<TimelineLetterItemProps>(
                   ]}
                   numberOfLines={4}
                 >
-                  “{item.content || 'Sin contenido'}”
+                  “{parsed.text || 'Sin contenido'}”
                 </Text>
+                {(parsed.photoUrl || extra?.reaction || extra?.replyText) && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    {parsed.photoUrl && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${primaryColor}15`, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 999 }}>
+                        <Ionicons name="image" size={11} color={primaryColor} />
+                        <Text style={{ fontSize: 10.5, fontWeight: '700', color: primaryColor }}>Con foto</Text>
+                      </View>
+                    )}
+                    {extra?.reaction && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fdf2f8', paddingHorizontal: 7, paddingVertical: 2.5, borderRadius: 999 }}>
+                        <Text style={{ fontSize: 11 }}>{extra.reaction}</Text>
+                      </View>
+                    )}
+                    {extra?.replyText ? (
+                      <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.textSecondary, flex: 1 }} numberOfLines={1}>
+                        💬 “{extra.replyText}”
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
                 <View style={styles.readMoreRow}>
                   <Ionicons name="mail-open-outline" size={13} color={primaryColor} />
                   <Text style={[styles.readMoreText, { color: primaryColor }]}>
@@ -201,6 +226,7 @@ export const MemoriesScreen: React.FC = () => {
 
   useEffect(() => {
     if (selectedLetter) {
+      setLetterReplyInput(homeState.letterExtras?.[selectedLetter.id]?.replyText || '');
       letterAnim.setValue(0);
       Animated.spring(letterAnim, {
         toValue: 1,
@@ -220,6 +246,8 @@ export const MemoriesScreen: React.FC = () => {
 
   // Modales de Libro de Amor y Cápsulas del Tiempo
   const [isLoveBookOpen, setIsLoveBookOpen] = useState(false);
+  const [isExportingBookPdf, setIsExportingBookPdf] = useState(false);
+  const [letterReplyInput, setLetterReplyInput] = useState('');
   const [isTimeCapsuleOpen, setIsTimeCapsuleOpen] = useState(false);
   const [homeState, setHomeState] = useState(() => DEFAULT_HOME_STATE);
 
@@ -232,6 +260,52 @@ export const MemoriesScreen: React.FC = () => {
   const handleSaveCapsule = async (newCap: TimeCapsuleItem) => {
     const updatedCapsules = [newCap, ...(homeState.timeCapsules || [])];
     const nextHome = { ...homeState, timeCapsules: updatedCapsules };
+    setHomeState(nextHome);
+    await saveHomeState(currentProfile, nextHome);
+  };
+
+  const handleExportPrintableBookPdf = async () => {
+    if (isExportingBookPdf) return;
+    setIsExportingBookPdf(true);
+    try {
+      const [latestHome, placesState] = await Promise.all([
+        getHomeState(),
+        getSpecialPlacesState(),
+      ]);
+      await exportCoupleBookToPdf({
+        anniversaryDate: latestHome.anniversaryDate,
+        primaryColor,
+        loveReasons: latestHome.loveReasons || [],
+        messages: memories,
+        milestones,
+        places: placesState.places || [],
+        letterExtras: latestHome.letterExtras || {},
+      });
+    } finally {
+      setIsExportingBookPdf(false);
+    }
+  };
+
+  const handleSaveSelectedLetterReaction = async (reactionEmoji?: string, replyNote?: string) => {
+    if (!selectedLetter) return;
+    const prevExtra = homeState.letterExtras?.[selectedLetter.id];
+    const parsed = parseLetterContentAndPhoto(selectedLetter.content, prevExtra?.photoUrl);
+    const nextExtra = {
+      ...(prevExtra || {}),
+      messageId: selectedLetter.id,
+      photoUrl: parsed.photoUrl || undefined,
+      reaction: reactionEmoji !== undefined ? reactionEmoji : prevExtra?.reaction,
+      replyText: replyNote !== undefined ? replyNote.trim() : prevExtra?.replyText,
+      repliedBy: currentProfile,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextHome = {
+      ...homeState,
+      letterExtras: {
+        ...(homeState.letterExtras || {}),
+        [selectedLetter.id]: nextExtra,
+      },
+    };
     setHomeState(nextHome);
     await saveHomeState(currentProfile, nextHome);
   };
@@ -646,6 +720,7 @@ export const MemoriesScreen: React.FC = () => {
           renderItem={({ item, index }) => (
             <TimelineLetterItem
               item={item}
+              extra={homeState.letterExtras?.[item.id]}
               isLast={index === memories.length - 1}
               primaryColor={primaryColor}
               colors={colors}
@@ -673,6 +748,20 @@ export const MemoriesScreen: React.FC = () => {
             <Text style={styles.screenSubtitle}>Cada recuerdo, cada lugar y cada fotografía</Text>
           </View>
           <View style={styles.headerButtonsRow}>
+            <PressableScale
+              onPress={() => void handleExportPrintableBookPdf()}
+              disabled={isExportingBookPdf}
+              style={[styles.headerActionBtn, { backgroundColor: '#8b5cf6' }]}
+              scaleTo={0.92}
+              accessibilityLabel="Exportar Nuestro Libro en PDF"
+            >
+              {isExportingBookPdf ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Ionicons name="book" size={18} color="#ffffff" />
+              )}
+            </PressableScale>
+
             <PressableScale
               onPress={() => setIsLoveBookOpen(true)}
               style={[styles.headerActionBtn, { backgroundColor: '#f59e0b' }]}
@@ -1017,14 +1106,93 @@ export const MemoriesScreen: React.FC = () => {
                 style={styles.letterScrollArea}
                 showsVerticalScrollIndicator={false}
               >
-                <Text
-                  style={[
-                    styles.letterFullContent,
-                    { color: colors.text, fontFamily: SERIF_FONT },
-                  ]}
-                >
-                  {selectedLetter?.content}
-                </Text>
+                {(() => {
+                  const extra = selectedLetter ? homeState.letterExtras?.[selectedLetter.id] : undefined;
+                  const parsed = parseLetterContentAndPhoto(selectedLetter?.content, extra?.photoUrl);
+                  return (
+                    <>
+                      <Text
+                        style={[
+                          styles.letterFullContent,
+                          { color: colors.text, fontFamily: SERIF_FONT },
+                        ]}
+                      >
+                        {parsed.text}
+                      </Text>
+
+                      {parsed.photoUrl && (
+                        <View style={{ marginTop: 12, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
+                          <Image
+                            source={{ uri: parsed.photoUrl }}
+                            style={{ width: '100%', height: 200 }}
+                            resizeMode="cover"
+                          />
+                        </View>
+                      )}
+
+                      {/* Reacciones y nota de agradecimiento en la carta */}
+                      <View style={{ marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 10 }}>
+                          {['❤️', '🥺', '🥰', '😭', '🔥', '✨'].map((emoji) => {
+                            const active = extra?.reaction === emoji;
+                            return (
+                              <TouchableOpacity
+                                key={emoji}
+                                onPress={() => void handleSaveSelectedLetterReaction(emoji, undefined)}
+                                style={{
+                                  flex: 1,
+                                  paddingVertical: 6,
+                                  borderRadius: 10,
+                                  alignItems: 'center',
+                                  backgroundColor: active ? `${primaryColor}22` : colors.surfaceAlt,
+                                  borderWidth: 1,
+                                  borderColor: active ? primaryColor : colors.border,
+                                }}
+                              >
+                                <Text style={{ fontSize: 17 }}>{emoji}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <TextInput
+                            value={letterReplyInput}
+                            onChangeText={setLetterReplyInput}
+                            placeholder="Pegar nota de agradecimiento..."
+                            placeholderTextColor={colors.textMuted}
+                            style={{
+                              flex: 1,
+                              backgroundColor: colors.surfaceAlt,
+                              borderRadius: 10,
+                              paddingHorizontal: 10,
+                              paddingVertical: 7,
+                              fontSize: 12,
+                              color: colors.text,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                            }}
+                            maxLength={160}
+                          />
+                          <TouchableOpacity
+                            onPress={async () => {
+                              await handleSaveSelectedLetterReaction(undefined, letterReplyInput);
+                              Alert.alert('¡Guardado! 💌', 'Tu nota quedó pegada a esta carta.');
+                            }}
+                            style={{
+                              backgroundColor: selectedLetter?.theme_color || primaryColor,
+                              paddingHorizontal: 11,
+                              paddingVertical: 8,
+                              borderRadius: 10,
+                            }}
+                          >
+                            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 11.5 }}>Pegar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </>
+                  );
+                })()}
               </ScrollView>
 
               <View style={styles.letterModalFooter}>

@@ -142,6 +142,15 @@ export interface TodaySongData {
   updatedAt: string;
 }
 
+export interface LetterExtraData {
+  messageId: string;
+  photoUrl?: string;
+  reaction?: string;
+  replyText?: string;
+  repliedBy?: UserProfile;
+  updatedAt: string;
+}
+
 export interface HomeState {
   anniversaryDate: string; // YYYY-MM-DD
   nextEventTitle: string;
@@ -172,6 +181,7 @@ export interface HomeState {
   };
   quickNotes?: QuickNoteMessage[];
   todaySong?: TodaySongData;
+  letterExtras?: Record<string, LetterExtraData>;
   deletedIds?: string[];
 }
 

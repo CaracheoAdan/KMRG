@@ -12,7 +12,11 @@ import {
   KeyboardAvoidingView,
   Animated,
   Modal,
+  Image,
+  ScrollView,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { SupabaseMediaService } from '../services/SupabaseMediaService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '../components/ui/Icon';
@@ -27,10 +31,13 @@ import {
   toLocalDateString,
   getSentMessages,
   formatDisplayDate,
+  encodeLetterWithPhoto,
+  parseLetterContentAndPhoto,
 } from '../services/StorageService';
 import { syncWidgetData } from '../services/WidgetSyncService';
 import { sendPartnerPushNotification } from '../services/NotificationService';
-import { getHomeState, saveHomeState } from '../services/CoupleSyncService';
+import { getHomeState, saveHomeState, DEFAULT_HOME_STATE } from '../services/CoupleSyncService';
+import { HomeState } from '../types';
 
 const SERIF_FONT = Platform.select({
   ios: 'Georgia',
@@ -60,6 +67,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSealingEnvelope, setIsSealingEnvelope] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [selectedPhotoUri, setSelectedPhotoUri] = useState<string | null>(null);
+  const [homeState, setHomeState] = useState<HomeState>(DEFAULT_HOME_STATE);
 
   const [sealedModalData, setSealedModalData] = useState<{
     scheduledDate: string;
@@ -74,8 +83,9 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   const loadSentLetters = async (userProfile: UserProfile) => {
     try {
-      const letters = await getSentMessages(userProfile);
+      const [letters, home] = await Promise.all([getSentMessages(userProfile), getHomeState()]);
       setSentLetters(letters);
+      if (home) setHomeState(home);
     } catch {
       // Ignorar
     }
@@ -100,9 +110,36 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const hasSentToday = Boolean(todayLetter);
 
   // Iniciar edición únicamente cuando se llama desde la tarjeta del día en Enviadas
+  const handlePickLetterPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permiso requerido', 'Se necesita acceso a tu galería para adjuntar una foto a la carta.');
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.5,
+        base64: true,
+      });
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const asset = res.assets[0];
+        const uri = asset.base64 ? 'data:image/jpeg;base64,' + asset.base64 : asset.uri;
+        setSelectedPhotoUri(uri);
+      }
+    } catch (e) {
+      console.warn('Error seleccionando foto para carta:', e);
+    }
+  };
+
   const handleStartEditLetter = (letter: Message) => {
+    const extraPhoto = homeState.letterExtras?.[letter.id]?.photoUrl;
+    const parsed = parseLetterContentAndPhoto(letter.content, extraPhoto);
     setEditingMessageId(letter.id);
-    setContent(letter.content);
+    setContent(parsed.text);
+    setSelectedPhotoUri(parsed.photoUrl);
     setScheduledDate(toLocalDateString(letter.scheduled_date));
     setThemeColor(letter.theme_color || primaryColor);
     setActiveTab('write');
@@ -111,6 +148,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const handleCancelEdit = () => {
     setEditingMessageId(null);
     setContent('');
+    setSelectedPhotoUri(null);
     setScheduledDate(getTodayString());
     setActiveTab('sent');
   };
@@ -126,27 +164,48 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       const todayStr = getTodayString();
       const isToday = scheduledDate <= todayStr;
 
+      let finalPhotoUrl: string | null = null;
+      if (selectedPhotoUri) {
+        finalPhotoUrl = await SupabaseMediaService.uploadPhoto(selectedPhotoUri, 'memories');
+      }
+      const encodedContent = encodeLetterWithPhoto(content.trim(), finalPhotoUrl);
+
       if (editingMessageId) {
         // Guardar corrección de la carta de hoy
         const result = await updateSupabaseMessage(editingMessageId, {
-          content: content.trim(),
+          content: encodedContent,
           scheduled_date: scheduledDate,
           theme_color: themeColor,
         });
 
         if (result.success) {
-          if (isToday) {
-            void getHomeState().then((home) => {
-              void saveHomeState(profile, {
-                ...home,
-                stickyNote: {
-                  author: profile,
-                  text: content.trim(),
-                  updatedAt: new Date().toISOString(),
-                },
-              });
-            });
-          }
+          void getHomeState().then((home) => {
+            const prevExtra = home.letterExtras?.[editingMessageId];
+            const nextExtras = {
+              ...(home.letterExtras || {}),
+              [editingMessageId]: {
+                ...(prevExtra || { messageId: editingMessageId }),
+                messageId: editingMessageId,
+                photoUrl: finalPhotoUrl || undefined,
+                updatedAt: new Date().toISOString(),
+              },
+            };
+            const nextHome: HomeState = {
+              ...home,
+              letterExtras: nextExtras,
+              ...(isToday
+                ? {
+                    stickyNote: {
+                      author: profile,
+                      text: content.trim(),
+                      updatedAt: new Date().toISOString(),
+                    },
+                  }
+                : {}),
+            };
+            setHomeState(nextHome);
+            void saveHomeState(profile, nextHome);
+          });
 
           Alert.alert(
             '¡Carta actualizada!',
@@ -154,6 +213,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           );
           setEditingMessageId(null);
           setContent('');
+          setSelectedPhotoUri(null);
           setScheduledDate(getTodayString());
           await loadSentLetters(profile);
           setActiveTab('sent');
@@ -165,24 +225,38 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         const result = await createSupabaseMessage({
           sender: profile,
           recipient,
-          content: content.trim(),
+          content: encodedContent,
           scheduled_date: scheduledDate,
           theme_color: themeColor,
         });
 
         if (result.success) {
-          if (isToday) {
-            void getHomeState().then((home) => {
-              void saveHomeState(profile, {
-                ...home,
-                stickyNote: {
-                  author: profile,
-                  text: content.trim(),
-                  updatedAt: new Date().toISOString(),
-                },
-              });
-            });
-          }
+          const savedId = result.data?.id;
+          void getHomeState().then((home) => {
+            const nextExtras = { ...(home.letterExtras || {}) };
+            if (savedId && finalPhotoUrl) {
+              nextExtras[savedId] = {
+                messageId: savedId,
+                photoUrl: finalPhotoUrl,
+                updatedAt: new Date().toISOString(),
+              };
+            }
+            const nextHome: HomeState = {
+              ...home,
+              letterExtras: nextExtras,
+              ...(isToday
+                ? {
+                    stickyNote: {
+                      author: profile,
+                      text: content.trim(),
+                      updatedAt: new Date().toISOString(),
+                    },
+                  }
+                : {}),
+            };
+            setHomeState(nextHome);
+            void saveHomeState(profile, nextHome);
+          });
 
           void getHomeState().then((home) => {
             const token = home?.pushTokens?.[recipient];
@@ -353,8 +427,54 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 textAlignVertical="top"
               />
 
-              {/* Pie de la hoja: contador discreto */}
-              <View style={styles.paperFooter}>
+              {/* Vista previa de foto adjunta si existe */}
+              {selectedPhotoUri && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 4, padding: 6, borderRadius: 12, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border }}>
+                  <Image
+                    source={{ uri: selectedPhotoUri }}
+                    style={{ width: 46, height: 46, borderRadius: 8 }}
+                    resizeMode="cover"
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+                      📸 Fotografía adjunta a la carta
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                      Se revelará al abrir el sobre
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSelectedPhotoUri(null)}
+                    style={{ padding: 6 }}
+                    accessibilityLabel="Quitar foto de la carta"
+                  >
+                    <Ionicons name="close-circle" size={20} color="#e11d48" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Pie de la hoja: botón para adjuntar foto + contador */}
+              <View style={[styles.paperFooter, { justifyContent: 'space-between', alignItems: 'center' }]}>
+                <TouchableOpacity
+                  onPress={() => void handlePickLetterPhoto()}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 999,
+                    backgroundColor: `${themeColor}18`,
+                    borderWidth: 1,
+                    borderColor: `${themeColor}45`,
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="camera" size={14} color={themeColor} />
+                  <Text style={{ fontSize: 11.5, fontWeight: '700', color: themeColor }}>
+                    {selectedPhotoUri ? 'Cambiar foto' : 'Adjuntar foto'}
+                  </Text>
+                </TouchableOpacity>
                 <Text style={[styles.paperCharCounter, { color: colors.textMuted }]}>
                   {content.length > 0 ? `${content.length} caracteres` : 'Escribe con el corazón'}
                 </Text>
@@ -579,15 +699,46 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                         </View>
                       </View>
 
-                      <Text
-                        style={[
-                          styles.sentSnippet,
-                          { color: colors.textSecondary },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        “{letter.content}”
-                      </Text>
+                      {(() => {
+                        const extra = homeState.letterExtras?.[letter.id];
+                        const parsed = parseLetterContentAndPhoto(letter.content, extra?.photoUrl);
+                        return (
+                          <>
+                            <Text
+                              style={[
+                                styles.sentSnippet,
+                                { color: colors.textSecondary },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              “{parsed.text}”
+                            </Text>
+                            {(parsed.photoUrl || extra?.reaction || extra?.replyText) && !isFuture && (
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                                {parsed.photoUrl && (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${colors.primary}15`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 }}>
+                                    <Ionicons name="image" size={11} color={colors.primary} />
+                                    <Text style={{ fontSize: 10.5, fontWeight: '700', color: colors.primary }}>Con foto</Text>
+                                  </View>
+                                )}
+                                {extra?.reaction && (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fdf2f8', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: '#fbcfe8' }}>
+                                    <Text style={{ fontSize: 11 }}>{extra.reaction}</Text>
+                                    <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#db2777' }}>
+                                      Reacción de {recipientDisplay}
+                                    </Text>
+                                  </View>
+                                )}
+                                {extra?.replyText ? (
+                                  <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.text, flex: 1 }} numberOfLines={1}>
+                                    💬 “{extra.replyText}”
+                                  </Text>
+                                ) : null}
+                              </View>
+                            )}
+                          </>
+                        );
+                      })()}
                     </View>
                   );
                 })
@@ -666,6 +817,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           if (sealedModalData) {
             setSealedModalData(null);
             setContent('');
+            setSelectedPhotoUri(null);
             void loadSentLetters(profile);
             navigation.navigate('Hoy');
           }
@@ -771,6 +923,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               onPress={() => {
                 setSealedModalData(null);
                 setContent('');
+                setSelectedPhotoUri(null);
                 void loadSentLetters(profile);
                 navigation.navigate('Hoy');
               }}

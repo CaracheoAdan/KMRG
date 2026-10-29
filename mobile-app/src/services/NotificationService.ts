@@ -11,7 +11,7 @@ import {
   GamesState,
   SpecialPlacesState,
 } from './CoupleSyncService';
-import { getCachedMessages, toLocalDateString, toLocalDateAtHour } from './StorageService';
+import { getCachedMessages, toLocalDateString, toLocalDateAtHour, getRelationshipCelebrationInfo } from './StorageService';
 import { notifyHeartbeatInWidget } from './WidgetSyncService';
 
 const NOTIFIED_EVENTS_STORAGE_KEY = '@kmrg_notified_events_v1';
@@ -451,6 +451,36 @@ export async function processPartnerInteractionForNotification(
       );
       return;
     }
+
+    // 2g. Reacción o nota de agradecimiento en una carta
+    const prevExtras = prev.letterExtras || {};
+    const incExtras = incHome.letterExtras || {};
+    for (const [msgId, extra] of Object.entries(incExtras)) {
+      if (!extra || extra.repliedBy !== sender) continue;
+      const prevEx = prevExtras[msgId];
+      const prevTime = new Date(prevEx?.updatedAt || 0).getTime();
+      const incTime = new Date(extra.updatedAt || 0).getTime();
+      if (incTime > prevTime) {
+        if (extra.replyText && extra.replyText !== prevEx?.replyText) {
+          await showInstantSystemNotification(
+            `💌 Nota de ${senderName} en tu carta`,
+            `${extra.reaction ? extra.reaction + ' ' : ''}“${extra.replyText}”`,
+            `letter_reply_${msgId}_${extra.updatedAt}`,
+            { type: 'LETTER_REPLY', messageId: msgId, sender }
+          );
+          return;
+        }
+        if (extra.reaction && extra.reaction !== prevEx?.reaction) {
+          await showInstantSystemNotification(
+            `💌 Reacción de ${senderName}`,
+            `${senderName} reaccionó con ${extra.reaction} a tu carta.`,
+            `letter_react_${msgId}_${extra.reaction}`,
+            { type: 'LETTER_REACTION', messageId: msgId, sender }
+          );
+          return;
+        }
+      }
+    }
     return;
   }
 
@@ -747,12 +777,46 @@ async function initNotificationSnapshots(): Promise<void> {
  * Suscripción global en vivo (Realtime + Polling de respaldo + AppState)
  * para notificar latidos, cartas, estados, juegos y recuerdos en la barra del teléfono.
  */
+
+/**
+ * Verifica automáticamente si hoy cumplen un nuevo mes juntos ("Mesario"),
+ * Aniversario anual o un número redondo de días (100, 200, 365, 500 días)
+ * y lanza una notificación festiva en la barra del teléfono.
+ */
+export async function checkAndNotifySpecialRelationshipDay(
+  anniversaryDate?: string | null
+): Promise<void> {
+  try {
+    let anniv = anniversaryDate;
+    if (!anniv) {
+      const homeRaw = await AsyncStorage.getItem('@kmrg_couple_home_state_v2');
+      if (homeRaw) {
+        const parsed = JSON.parse(homeRaw);
+        anniv = parsed?.anniversaryDate;
+      }
+    }
+    const info = getRelationshipCelebrationInfo(anniv || '2024-02-14', new Date());
+    if (!info.isSpecialToday) return;
+
+    const todayStr = toLocalDateString(new Date());
+    await showInstantSystemNotification(
+      `${info.badgeText} 💜`,
+      info.subtitle,
+      `special_day_${info.type}_${todayStr}`,
+      { type: 'SPECIAL_RELATIONSHIP_DAY', celebrationType: info.type, totalDays: info.totalDays }
+    );
+  } catch {
+    // Ignorar error
+  }
+}
+
 export function startGlobalPartnerNotificationWatcher(
   currentProfile: UserProfile
 ): () => void {
   void ensureNotifiedCacheLoaded();
   void initNotificationSnapshots();
   void checkMissedPartnerNotifications(currentProfile);
+  void checkAndNotifySpecialRelationshipDay();
 
   const channel = supabase
     .channel(`kmrg-global-partner-notifications-${currentProfile}`)

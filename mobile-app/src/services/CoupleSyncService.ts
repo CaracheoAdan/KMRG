@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import {
   BucketItem,
   HomeState,
+  LetterExtraData,
   LoveReason,
   MovieItem,
   MoviesAndPlansState,
@@ -677,6 +678,31 @@ export function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState
     },
     quickNotes,
     todaySong,
+    letterExtras: (() => {
+      const mergedExtras: Record<string, LetterExtraData> = {
+        ...(normBase.letterExtras || {}),
+      };
+      for (const [msgId, incExtra] of Object.entries(normIncoming.letterExtras || {})) {
+        const existing = mergedExtras[msgId];
+        if (!existing) {
+          mergedExtras[msgId] = incExtra;
+        } else {
+          const baseT = new Date(existing.updatedAt || 0).getTime();
+          const incT = new Date(incExtra.updatedAt || 0).getTime();
+          const winner = incT >= baseT ? incExtra : existing;
+          const older = incT >= baseT ? existing : incExtra;
+          mergedExtras[msgId] = {
+            ...older,
+            ...winner,
+            photoUrl: winner.photoUrl || older.photoUrl,
+            reaction: winner.reaction || older.reaction,
+            replyText: winner.replyText || older.replyText,
+            repliedBy: winner.repliedBy || older.repliedBy,
+          };
+        }
+      }
+      return mergedExtras;
+    })(),
   };
 }
 
