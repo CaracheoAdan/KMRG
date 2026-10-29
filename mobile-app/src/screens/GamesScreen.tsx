@@ -1250,8 +1250,8 @@ export const GamesScreen: React.FC = () => {
     setLocalSetupFleet(randomFleet);
   };
 
-  // 5) Confirmar "¡Flota Lista!" (sincronizando la posición arrastrada) y pasar a batalla
-  const handleConfirmFleetReady = async (fleetToSave?: BattleshipShip[], forceStartBoth = false) => {
+  // 5) Confirmar "¡Flota Lista!" o desbloquear para modificar flota y pasar a batalla cuando ambos estén listos
+  const handleConfirmFleetReady = async (fleetToSave?: BattleshipShip[], readyState = true) => {
     const isK = currentProfile === 'Karla';
     const myFleetToPersist = (fleetToSave && fleetToSave.length === 5)
       ? fleetToSave
@@ -1259,8 +1259,8 @@ export const GamesScreen: React.FC = () => {
       ? localSetupFleet
       : syncedMyFleet;
 
-    const nextReadyK = forceStartBoth ? true : isK ? true : bs.readyKarla;
-    const nextReadyJ = forceStartBoth ? true : !isK ? true : bs.readyJavier;
+    const nextReadyK = isK ? readyState : bs.readyKarla;
+    const nextReadyJ = !isK ? readyState : bs.readyJavier;
     const bothReady = nextReadyK && nextReadyJ;
 
     if (bothReady) {
@@ -1272,6 +1272,7 @@ export const GamesScreen: React.FC = () => {
       battleship: {
         ...bs,
         phase: bothReady ? 'battle' : 'setup',
+        lastUpdatedBy: currentProfile,
         readyKarla: nextReadyK,
         readyJavier: nextReadyJ,
         fleetKarla: isK ? myFleetToPersist : bs.fleetKarla,
@@ -1566,9 +1567,9 @@ export const GamesScreen: React.FC = () => {
             battleshipState={bs}
             onSendInvite={() => void handleSendBattleshipInvite()}
             onAcceptInvite={() => void handleAcceptBattleshipInvite()}
-            onReadyFleet={(fleet) => {
+            onReadyFleet={(fleet, ready = true) => {
               setLocalSetupFleet(fleet);
-              void handleConfirmFleetReady(fleet);
+              void handleConfirmFleetReady(fleet, ready);
             }}
             onFire={(idx) => void handleBattleshipFire(idx)}
             onReset={() => void handleResetBattleship()}

@@ -38,7 +38,7 @@ interface Props {
   battleshipState: GamesState['battleship'];
   onSendInvite: () => void;
   onAcceptInvite: () => void;
-  onReadyFleet: (fleet: BattleshipShip[]) => void;
+  onReadyFleet: (fleet: BattleshipShip[], ready?: boolean) => void;
   onFire: (idx: number) => void;
   onReset: () => void;
   onDragStateChange?: (isDragging: boolean) => void;
@@ -726,10 +726,6 @@ export const BattleshipArena: React.FC<Props> = ({
       const ship = myFleet.find((s) => s.id === shipId);
       if (!ship) return;
 
-      if (amIReady) {
-        handleConfirmReady();
-      }
-
       const isHoriz =
         (ship.orientation ||
           (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V')) === 'H';
@@ -808,9 +804,12 @@ export const BattleshipArena: React.FC<Props> = ({
         s.id === shipId ? { ...s, orientation: newOrient, cells: validCells! } : s
       );
       setLocalSetupFleet(updated);
+      if (amIReady) {
+        onReadyFleet(updated, false);
+      }
       void triggerGameHaptic('selection');
     },
-    [myFleet]
+    [myFleet, amIReady, onReadyFleet]
   );
 
   // ============================================================================
@@ -820,10 +819,6 @@ export const BattleshipArena: React.FC<Props> = ({
     (shipId: string, targetCellIdx: number) => {
       const ship = myFleet.find((s) => s.id === shipId);
       if (!ship) return;
-
-      if (amIReady) {
-        handleConfirmReady();
-      }
 
       const isHoriz =
         (ship.orientation ||
@@ -891,20 +886,23 @@ export const BattleshipArena: React.FC<Props> = ({
         s.id === shipId ? { ...s, cells: placed! } : s
       );
       setLocalSetupFleet(updated);
+      if (amIReady) {
+        onReadyFleet(updated, false);
+      }
       void triggerGameHaptic('selection');
     },
-    [myFleet]
+    [myFleet, amIReady, onReadyFleet]
   );
 
   // ============================================================================
   // REVOLVER ALEATORIAMENTE (Sin desbordes ni choques)
   // ============================================================================
   const handleRandomizeFleet = () => {
-    if (amIReady) {
-      handleConfirmReady();
-    }
     const randomized = createRandomBattleshipFleet();
     setLocalSetupFleet(randomized);
+    if (amIReady) {
+      onReadyFleet(randomized, false);
+    }
     void triggerGameHaptic('medium');
     showBanner('Flota redistribuida al azar');
   };
@@ -912,9 +910,14 @@ export const BattleshipArena: React.FC<Props> = ({
   const handleConfirmReady = () => {
     if (myFleet && isFleetValid) {
       void triggerGameHaptic('success');
-      onReadyFleet(myFleet);
+      onReadyFleet(myFleet, true);
       setRadarMode('attack');
     }
+  };
+
+  const handleUnlockFleet = () => {
+    void triggerGameHaptic('light');
+    onReadyFleet(myFleet, false);
   };
 
   const handleFireAtCell = (idx: number) => {
@@ -981,7 +984,7 @@ export const BattleshipArena: React.FC<Props> = ({
             } = stateRef.current;
 
             if (ready) {
-              unlockFleet();
+              onReadyFleet(currentFleet, false);
             }
 
             const currentShip = currentFleet.find((s) => s.id === shipId);
@@ -1497,7 +1500,7 @@ export const BattleshipArena: React.FC<Props> = ({
                     onPress={() => {
                       void triggerGameHaptic('selection');
                       if (amIReady) {
-                        handleConfirmReady();
+                        handleUnlockFleet();
                       }
                       if (isSel) {
                         handleSmartRotate(s.id);
@@ -1569,7 +1572,7 @@ export const BattleshipArena: React.FC<Props> = ({
                   label="Modificar Flota"
                   icon="create-outline"
                   variant="secondary"
-                  onPress={handleConfirmReady}
+                  onPress={handleUnlockFleet}
                 />
               </View>
             )}

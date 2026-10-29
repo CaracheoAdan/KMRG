@@ -306,6 +306,7 @@ export interface GamesState {
   battleship: {
     phase: 'idle' | 'invited' | 'setup' | 'battle' | 'finished';
     invitedBy: UserProfile | null;
+    lastUpdatedBy?: UserProfile | null;
     readyKarla: boolean;
     readyJavier: boolean;
     fleetKarla: BattleshipShip[];
@@ -836,9 +837,18 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
         (baseBs.phase === 'finished' || baseBs.phase === 'battle');
       const isNewGame = incBs.phase === 'setup' || incBs.phase === 'invited' || incBs.phase === 'idle';
 
-      // Ready flags acumulativos (no perder si ya estaba lista, salvo en reinicio)
-      const readyK = isReset ? incBs.readyKarla : (baseBs.readyKarla || incBs.readyKarla);
-      const readyJ = isReset ? incBs.readyJavier : (baseBs.readyJavier || incBs.readyJavier);
+      // Ready flags: respetar cambios explícitos del jugador que emite (confirmar o desbloquear "Modificar Flota")
+      // sin sobrescribir el estado de listo del otro jugador
+      const readyK = isReset
+        ? incBs.readyKarla
+        : incBs.lastUpdatedBy === 'Karla'
+        ? incBs.readyKarla
+        : (baseBs.readyKarla || incBs.readyKarla);
+      const readyJ = isReset
+        ? incBs.readyJavier
+        : incBs.lastUpdatedBy === 'Javier'
+        ? incBs.readyJavier
+        : (baseBs.readyJavier || incBs.readyJavier);
       const bothReady = readyK && readyJ;
 
       // Flota de Karla: preservar la confirmada si ya está lista
