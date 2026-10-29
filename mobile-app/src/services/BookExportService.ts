@@ -1,4 +1,6 @@
 import { Alert, Platform, Share } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import {
   LetterExtraData,
   LoveReason,
@@ -13,19 +15,16 @@ import {
   toLocalDateString,
 } from './StorageService';
 
-let PrintModule: any = null;
-let SharingModule: any = null;
+let FileSystemModule: any = null;
 
 try {
-  PrintModule = require('expo-print');
+  FileSystemModule = require('expo-file-system/legacy');
 } catch {
-  PrintModule = null;
-}
-
-try {
-  SharingModule = require('expo-sharing');
-} catch {
-  SharingModule = null;
+  try {
+    FileSystemModule = require('expo-file-system');
+  } catch {
+    FileSystemModule = null;
+  }
 }
 
 function escapeHtml(raw?: string | null): string {
@@ -46,6 +45,7 @@ export interface ExportBookOptions {
   milestones?: Milestone[];
   places?: SpecialPlace[];
   letterExtras?: Record<string, LetterExtraData>;
+  mode?: 'share' | 'print' | 'auto';
 }
 
 /**
@@ -127,7 +127,7 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
               <p class="letter-content">“${escapeHtml(parsed.text).replace(/\n/g, '<br/>')}”</p>
               ${
                 parsed.photoUrl
-                  ? `<div class="letter-photo-wrap"><img src="${escapeHtml(parsed.photoUrl)}" class="letter-photo" alt="Foto en carta" /></div>`
+                  ? `<div class="letter-photo-wrap"><img src="${escapeHtml(parsed.photoUrl)}" class="letter-photo" alt="Foto en carta" onerror="this.style.display='none'" /></div>`
                   : ''
               }
               ${
@@ -158,7 +158,7 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
             <div class="memory-item">
               ${
                 ms.image_url
-                  ? `<img src="${escapeHtml(ms.image_url)}" class="memory-img" alt="${escapeHtml(ms.title)}" />`
+                  ? `<img src="${escapeHtml(ms.image_url)}" class="memory-img" alt="${escapeHtml(ms.title)}" onerror="this.style.display='none'" />`
                   : ''
               }
               <div class="memory-caption">
@@ -499,17 +499,23 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
 }
 
 /**
- * Genera el archivo PDF de "Nuestro Libro" y abre el menú nativo para guardarlo o imprimirlo.
+ * Genera el archivo PDF de "Nuestro Libro" y permite compartirlo o imprimirlo.
  */
 export async function exportCoupleBookToPdf(options: ExportBookOptions): Promise<boolean> {
+  const { mode = 'auto' } = options;
+
   try {
     const html = generatePrintableBookHtml(options);
 
+    // 1. Entorno Web
     if (Platform.OS === 'web') {
-      if (PrintModule?.printAsync) {
-        await PrintModule.printAsync({ html });
-        return true;
-      }
+      try {
+        if (typeof Print.printAsync === 'function') {
+          await Print.printAsync({ html });
+          return true;
+        }
+      } catch {}
+
       if (typeof window !== 'undefined') {
         const win = window.open('', '_blank');
         if (win) {
@@ -523,37 +529,124 @@ export async function exportCoupleBookToPdf(options: ExportBookOptions): Promise
       return false;
     }
 
-    if (PrintModule?.printToFileAsync) {
-      const { uri } = await PrintModule.printToFileAsync({
-        html,
-        base64: false,
-      });
+    // 2. Modo Impresión directa / Vista previa nativa (Android / iOS)
+    if (mode === 'print') {
+      if (typeof Print.printAsync === 'function') {
+        await Print.printAsync({ html });
+        return true;
+      }
+    }
 
-      if (SharingModule?.shareAsync) {
-        const available = await SharingModule.isAvailableAsync().catch(() => false);
-        if (available) {
-          await SharingModule.shareAsync(uri, {
+    // 3. Generar archivo PDF con printToFileAsync
+    let generatedUri: string | null = null;
+    let base64Data: string | null = null;
+
+    if (typeof Print.printToFileAsync === 'function') {
+      try {
+        const result = await Print.printToFileAsync({
+          html,
+          base64: true,
+        });
+        generatedUri = result.uri;
+        base64Data = result.base64 || null;
+      } catch (fileErr) {
+        console.warn('[BookExportService] printToFileAsync falló, intentando printAsync:', fileErr);
+      }
+    }
+
+    // Si falló printToFileAsync pero tenemos printAsync, abrir directamente el diálogo nativo de impresión
+    if (!generatedUri) {
+      if (typeof Print.printAsync === 'function') {
+        await Print.printAsync({ html });
+        return true;
+      }
+      Alert.alert('Aviso', 'El servicio de impresión no está disponible en este dispositivo.');
+      return false;
+    }
+
+    // 4. Asegurar que el archivo esté en un directorio con permisos de lectura/compartición
+    let shareUri = generatedUri;
+    const cleanFileName = `Nuestro_Libro_de_Amor_${Date.now()}.pdf`;
+
+    if (FileSystemModule) {
+      try {
+        const targetDir = FileSystemModule.documentDirectory || FileSystemModule.cacheDirectory;
+        if (targetDir) {
+          const destination = `${targetDir}${cleanFileName}`;
+          if (base64Data) {
+            await FileSystemModule.writeAsStringAsync(destination, base64Data, {
+              encoding: FileSystemModule.EncodingType?.Base64 || 'base64',
+            });
+            shareUri = destination;
+          } else if (generatedUri) {
+            await FileSystemModule.copyAsync({
+              from: generatedUri,
+              to: destination,
+            });
+            shareUri = destination;
+          }
+        }
+      } catch (fsErr) {
+        console.warn('[BookExportService] No se pudo guardar con nombre limpio en FileSystem:', fsErr);
+      }
+    }
+
+    // 5. Intentar compartir el archivo mediante expo-sharing
+    let shareSuccess = false;
+    if (typeof Sharing.isAvailableAsync === 'function') {
+      try {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable && typeof Sharing.shareAsync === 'function') {
+          await Sharing.shareAsync(shareUri, {
             mimeType: 'application/pdf',
-            dialogTitle: 'Guardar o Imprimir Nuestro Libro de Amor (PDF)',
+            dialogTitle: 'Nuestro Libro de Amor — Karlita & Javier (PDF)',
             UTI: 'com.adobe.pdf',
           });
+          shareSuccess = true;
           return true;
         }
+      } catch (sharingErr) {
+        console.warn('[BookExportService] Error en expo-sharing shareAsync:', sharingErr);
       }
+    }
 
-      await Share.share({
-        url: uri,
-        title: 'Nuestro Libro de Amor (PDF)',
-        message: '📖 Nuestro Libro de Amor — Karlita & Javier',
-      });
+    // 6. Fallback a React Native Share estándar
+    if (!shareSuccess) {
+      try {
+        await Share.share({
+          url: shareUri,
+          title: 'Nuestro Libro de Amor (PDF)',
+          message: '📖 Nuestro Libro de Amor — Karlita & Javier',
+        });
+        return true;
+      } catch (rnShareErr) {
+        console.warn('[BookExportService] Error en React Native Share:', rnShareErr);
+      }
+    }
+
+    // 7. Fallback definitivo: si falló compartir el archivo, abrir la vista de impresión/guardado directo de Android/iOS
+    if (typeof Print.printAsync === 'function') {
+      await Print.printAsync({ html });
       return true;
     }
 
-    Alert.alert('Aviso', 'El módulo de impresión PDF no está disponible en este dispositivo.');
+    Alert.alert('Error', 'No se pudo compartir el archivo PDF en este dispositivo.');
     return false;
-  } catch (error) {
+  } catch (error: any) {
     console.warn('[BookExportService] Error exportando libro PDF:', error);
-    Alert.alert('Error', 'No se pudo generar el archivo PDF en este momento.');
+    // Último recurso: intentar printAsync si todavía es posible
+    try {
+      const html = generatePrintableBookHtml(options);
+      if (typeof Print.printAsync === 'function') {
+        await Print.printAsync({ html });
+        return true;
+      }
+    } catch {}
+
+    Alert.alert(
+      'Error al exportar',
+      error?.message ? `No se pudo generar el libro: ${error.message}` : 'No se pudo generar el archivo PDF en este momento.'
+    );
     return false;
   }
 }

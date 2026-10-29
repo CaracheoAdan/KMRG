@@ -21,6 +21,7 @@ import { calculateTimeTogether, formatDisplayDate } from '../services/StorageSer
 
 let PrintModule: any = null;
 let SharingModule: any = null;
+let FileSystemModule: any = null;
 let captureRef: any = null;
 
 try {
@@ -33,6 +34,16 @@ try {
   SharingModule = require('expo-sharing');
 } catch {
   SharingModule = null;
+}
+
+try {
+  FileSystemModule = require('expo-file-system/legacy');
+} catch {
+  try {
+    FileSystemModule = require('expo-file-system');
+  } catch {
+    FileSystemModule = null;
+  }
 }
 
 try {
@@ -254,20 +265,33 @@ export const LoveBookModal: React.FC<Props> = ({
             result: 'tmpfile',
           });
 
+          let shareUri = uri;
+          if (FileSystemModule?.cacheDirectory) {
+            const dest = `${FileSystemModule.cacheDirectory}Collage_Nuestro_Amor_${Date.now()}.png`;
+            try {
+              await FileSystemModule.copyAsync({ from: uri, to: dest });
+              shareUri = dest;
+            } catch {}
+          }
+
           if (SharingModule?.shareAsync) {
-            const isShareAvailable = await SharingModule.isAvailableAsync().catch(() => false);
-            if (isShareAvailable) {
-              await SharingModule.shareAsync(uri, {
-                mimeType: 'image/png',
-                dialogTitle: 'Guardar Collage de Fotos',
-                UTI: 'public.png',
-              });
-              return;
+            try {
+              const isShareAvailable = await SharingModule.isAvailableAsync().catch(() => false);
+              if (isShareAvailable) {
+                await SharingModule.shareAsync(shareUri, {
+                  mimeType: 'image/png',
+                  dialogTitle: 'Guardar Collage de Fotos',
+                  UTI: 'public.png',
+                });
+                return;
+              }
+            } catch (shareErr) {
+              console.warn('Fallo shareAsync en collage, usando Share fallback:', shareErr);
             }
           }
 
           await Share.share({
-            url: uri,
+            url: shareUri,
             title: 'Collage de Nuestro Amor',
             message: `💖 Nuestro Collage de Amor (${timeTogetherLabel}).`,
           });

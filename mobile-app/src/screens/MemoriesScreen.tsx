@@ -264,7 +264,7 @@ export const MemoriesScreen: React.FC = () => {
     await saveHomeState(currentProfile, nextHome);
   };
 
-  const handleExportPrintableBookPdf = async () => {
+  const runBookExport = async (mode: 'share' | 'print' | 'auto' = 'auto') => {
     if (isExportingBookPdf) return;
     setIsExportingBookPdf(true);
     try {
@@ -280,10 +280,36 @@ export const MemoriesScreen: React.FC = () => {
         milestones,
         places: placesState.places || [],
         letterExtras: latestHome.letterExtras || {},
+        mode,
       });
+    } catch (err: any) {
+      console.warn('Error al exportar libro:', err);
+      Alert.alert('Error al exportar', err?.message || 'No se pudo generar el libro en PDF.');
     } finally {
       setIsExportingBookPdf(false);
     }
+  };
+
+  const handleExportPrintableBookPdf = () => {
+    if (isExportingBookPdf) return;
+    Alert.alert(
+      '📖 Nuestro Libro de Amor',
+      '¿Cómo deseas abrir o guardar tu libro en PDF?',
+      [
+        {
+          text: '📤 Compartir archivo PDF',
+          onPress: () => void runBookExport('share'),
+        },
+        {
+          text: '🖨️ Imprimir / Vista Previa',
+          onPress: () => void runBookExport('print'),
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const handleSaveSelectedLetterReaction = async (reactionEmoji?: string, replyNote?: string) => {
