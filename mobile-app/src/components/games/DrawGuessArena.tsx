@@ -752,150 +752,91 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
     >
-      {/* ================= 1. HEADER COMPACTO ≈56PX ================= */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity
-          onPress={() => {
-            void triggerGameHaptic('light');
-            onBack();
-          }}
-          style={styles.headerBackBtn}
-          accessibilityLabel="Volver al Lobby"
+      {/* ================= 1. MARCADOR COMPACTO UNIFICADO (K vs J + RONDA) ================= */}
+      <View style={[styles.compactScoreCard, GAMES_THEME.shadows.card]}>
+        {/* Jugador Karlita */}
+        <View style={styles.scorePlayerCol}>
+          <View style={[styles.miniAvatarCircle, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
+            <Text style={styles.miniAvatarTextKarla}>K</Text>
+          </View>
+          <View>
+            <Text style={styles.scorePlayerName}>Karlita</Text>
+            <Text style={styles.scorePlayerPoints}>{gameState.scoreKarla || 0} pts</Text>
+          </View>
+        </View>
+
+        {/* Medallón Central: Ronda X de 6 */}
+        <View style={styles.roundCenterBadge}>
+          <Ionicons name="trophy" size={13} color="#f59e0b" />
+          <Text style={styles.roundCenterText}>Ronda {gameState.currentRound || 1} de 6</Text>
+        </View>
+
+        {/* Jugador Javier */}
+        <View style={[styles.scorePlayerCol, { flexDirection: 'row-reverse' }]}>
+          <View style={[styles.miniAvatarCircle, { backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }]}>
+            <Text style={styles.miniAvatarTextJavier}>J</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.scorePlayerName}>Javier</Text>
+            <Text style={styles.scorePlayerPoints}>{gameState.scoreJavier || 0} pts</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ================= 2. FILA DE PALABRA / GUIONES + TEMPORIZADOR INTEGRADO ================= */}
+      <View style={styles.wordTimerRow}>
+        <View style={styles.wordSection}>
+          {isMeDrawer ? (
+            <View style={styles.drawerWordGroup}>
+              <Text style={styles.drawerWordLabel}>DIBUJA:</Text>
+              <Text style={[styles.drawerWordHighlight, { color: primaryColor }]} numberOfLines={1}>
+                {gameState.drawerWord || gameState.selectedWord || '...'}
+              </Text>
+              {gameState.selectedWordCategory && (
+                <View style={styles.categoryBadgePill}>
+                  <Text style={styles.categoryBadgeText}>
+                    {gameState.categoryEmoji || '🎨'} {gameState.selectedWordCategory}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.guesserWordGroup}>
+              <Text style={styles.guesserDashesText} numberOfLines={1} adjustsFontSizeToFit>
+                {activeWordMask}
+              </Text>
+              {gameState.selectedWordCategory && (
+                <View style={styles.categoryBadgePill}>
+                  <Text style={styles.categoryBadgeText}>
+                    {gameState.categoryEmoji || '🎨'} {gameState.selectedWordCategory}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* Temporizador integrado: rojo en últimos 10s */}
+        <View
+          style={[
+            styles.integratedTimerPill,
+            secondsLeft <= 10 && styles.integratedTimerPillWarning,
+          ]}
         >
-          <Ionicons name="arrow-back" size={22} color="#0f172a" />
-        </TouchableOpacity>
-
-        <View style={styles.headerTitleRow}>
-          <View style={[styles.headerIconCircle, { backgroundColor: '#ecfdf5' }]}>
-            <Ionicons name="brush" size={17} color={primaryColor} />
-          </View>
-          <Text style={styles.headerTitleText} numberOfLines={1}>
-            Dibuja y Adivina
-          </Text>
-        </View>
-
-        {/* Avatares K y J con anillo en quien dibuja */}
-        <View style={styles.headerAvatarsRow}>
-          <View
-            style={[
-              styles.avatarWrap,
-              drawerProfile === 'Karla' && { borderColor: '#ec4899', borderWidth: 2.5 },
-            ]}
-          >
-            <View style={[styles.avatarCircle, { backgroundColor: '#fdf2f8' }]}>
-              <Text style={[styles.avatarLetter, { color: '#ec4899' }]}>K</Text>
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.avatarWrap,
-              drawerProfile === 'Javier' && { borderColor: '#0ea5e9', borderWidth: 2.5 },
-            ]}
-          >
-            <View style={[styles.avatarCircle, { backgroundColor: '#f0f9ff' }]}>
-              <Text style={[styles.avatarLetter, { color: '#0ea5e9' }]}>J</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* ================= MARCADOR DELGADO DE LA PARTIDA ================= */}
-      <View style={styles.matchScoreBar}>
-        <Text style={[styles.matchScoreText, { color: '#ec4899' }]}>
-          Karlita: <Text style={styles.matchScoreBold}>{gameState.scoreKarla} pts</Text>
-        </Text>
-        <Text style={styles.matchScoreDivider}>•</Text>
-        <Text style={[styles.matchScoreText, { color: '#0ea5e9' }]}>
-          Javier: <Text style={styles.matchScoreBold}>{gameState.scoreJavier} pts</Text>
-        </Text>
-      </View>
-
-      {/* ================= 2. BARRA DE ESTADO (RONDA, RELOJ, ROL ÚNICO) ================= */}
-      <View style={styles.statusBar}>
-        <View style={styles.roundPill}>
-          <Text style={styles.roundPillText}>Ronda {gameState.currentRound} de 6</Text>
-        </View>
-
-        {/* Rol en una sola indicación */}
-        <View style={styles.roleNoticeWrap}>
           <Ionicons
-            name={isMeDrawer ? 'color-palette' : 'search'}
+            name="time-outline"
             size={13}
-            color={isMeDrawer ? primaryColor : '#64748b'}
-            style={{ marginRight: 4 }}
+            color={secondsLeft <= 10 ? '#ef4444' : '#64748b'}
           />
-          <Text style={[styles.roleNoticeText, isMeDrawer && { color: primaryColor, fontWeight: '800' }]}>
-            {isMeDrawer ? 'Tú dibujas' : `${drawerDisplayName} dibuja`}
+          <Text
+            style={[
+              styles.integratedTimerText,
+              secondsLeft <= 10 && styles.integratedTimerTextWarning,
+            ]}
+          >
+            {secondsLeft}s
           </Text>
         </View>
-
-        {/* Anillo de tiempo circular */}
-        <View style={styles.timerCircleWrap}>
-          <Svg width={36} height={36} viewBox="0 0 36 36">
-            <Circle
-              cx={18}
-              cy={18}
-              r={14}
-              stroke="#e2e8f0"
-              strokeWidth={3}
-              fill="none"
-            />
-            <Circle
-              cx={18}
-              cy={18}
-              r={14}
-              stroke={secondsLeft <= 10 ? '#ef4444' : primaryColor}
-              strokeWidth={3}
-              fill="none"
-              strokeDasharray={`${(Math.max(0, secondsLeft) / 75) * 88} 88`}
-              strokeLinecap="round"
-              transform="rotate(-90 18 18)"
-            />
-          </Svg>
-          <View style={styles.timerInnerCount}>
-            <Text
-              style={[
-                styles.timerNumText,
-                { color: secondsLeft <= 10 ? '#ef4444' : '#0f172a' },
-              ]}
-            >
-              {secondsLeft}s
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ================= 3. FILA DE LA PALABRA (GUIONES O PALABRA COMPLETA) ================= */}
-      <View style={styles.wordRowContainer}>
-        {isMeDrawer ? (
-          <View style={styles.drawerWordRow}>
-            <Text style={styles.drawerLabelText}>Dibuja:</Text>
-            <Text style={[styles.drawerWordText, { color: primaryColor }]}>
-              {gameState.drawerWord || gameState.selectedWord || '...'}
-            </Text>
-            {gameState.selectedWordCategory && (
-              <View style={[styles.categoryChip, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]}>
-                <Text style={styles.categoryChipText}>
-                  {gameState.categoryEmoji || '🎨'} {gameState.selectedWordCategory}
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <View style={styles.guesserWordRow}>
-            <Text style={styles.guesserMaskText} numberOfLines={1} adjustsFontSizeToFit>
-              {activeWordMask}
-            </Text>
-            {gameState.selectedWordCategory && (
-              <View style={[styles.categoryChip, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}>
-                <Text style={styles.categoryChipText}>
-                  {gameState.categoryEmoji || '🎨'} {gameState.selectedWordCategory}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
       </View>
 
       {/* ================= 4. LIENZO CUADRADO 1:1 CON CUADRÍCULA TENUE ================= */}
@@ -1078,9 +1019,9 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         ) : isMeGuesser && gameState.phase === 'drawing' ? (
           /* DOCK DEL ADIVINADOR: ESTILO CHAT */
           <View style={styles.guesserDockCard}>
-            {/* Historial de últimos 3-4 intentos como burbujas */}
+            {/* Historial de últimos 3 intentos como burbujas */}
             <View style={styles.attemptsHistoryRow}>
-              {(gameState.attempts || []).slice(0, 4).map((att, i) => (
+              {(gameState.attempts || []).slice(0, 3).map((att, i) => (
                 <View
                   key={`${att.timestamp}_${i}`}
                   style={[
@@ -1303,28 +1244,20 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
 
             {/* Acciones de ronda */}
             <View style={{ gap: 8, marginTop: 12 }}>
-              <TouchableOpacity
+              <GameButton
+                label={isReplaying ? 'Reproduciendo trazos…' : 'Ver repetición del dibujo'}
+                icon="play-circle-outline"
+                variant="secondary"
                 onPress={handleStartReplay}
-                style={styles.replayButton}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="play-circle-outline" size={18} color="#0f172a" />
-                <Text style={styles.replayButtonText}>
-                  {isReplaying ? 'Reproduciendo trazos…' : 'Ver repetición del dibujo'}
-                </Text>
-              </TouchableOpacity>
+              />
 
-              <TouchableOpacity
-                onPress={() => void handleSaveDrawingToMemories()}
+              <GameButton
+                label={isSavingDrawing ? 'Guardando…' : 'Guardar en Recuerdos'}
+                icon="heart"
+                variant="secondary"
                 disabled={isSavingDrawing}
-                style={styles.saveDrawingButton}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="heart" size={17} color="#ec4899" />
-                <Text style={styles.saveDrawingButtonText}>
-                  {isSavingDrawing ? 'Guardando…' : 'Guardar en Recuerdos'}
-                </Text>
-              </TouchableOpacity>
+                onPress={() => void handleSaveDrawingToMemories()}
+              />
 
               <GameButton
                 label={gameState.currentRound >= 6 ? 'Ver Resultados Finales' : 'Siguiente Ronda'}
@@ -1402,190 +1335,161 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff5f7',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 8,
     paddingBottom: 10,
     width: '100%',
+    gap: 8,
   },
-  headerBar: {
-    height: 54,
+  // 1. Tarjeta de Marcador Compacta (ScoreBoard unificada K vs J)
+  compactScoreCard: {
     width: '100%',
-    paddingHorizontal: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
   },
-  headerBackBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  headerTitleRow: {
+  scorePlayerCol: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 8,
   },
-  headerIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  miniAvatarCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitleText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0f172a',
+  miniAvatarTextKarla: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#be185d',
   },
-  headerAvatarsRow: {
+  miniAvatarTextJavier: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0369a1',
+  },
+  scorePlayerName: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  scorePlayerPoints: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  roundCenterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fde047',
+  },
+  roundCenterText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400e',
+  },
+
+  // 2. Fila Integrada de Palabra / Guiones + Temporizador
+  wordTimerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+    minHeight: 34,
+  },
+  wordSection: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  drawerWordGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  avatarWrap: {
-    borderRadius: 20,
-    padding: 1.5,
-  },
-  avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: {
-    fontSize: 14,
+  drawerWordLabel: {
+    fontSize: 11,
     fontWeight: '800',
+    color: '#64748b',
+    letterSpacing: 0.5,
   },
-  matchScoreBar: {
+  drawerWordHighlight: {
+    fontSize: 16,
+    fontWeight: '900',
+    maxWidth: 160,
+  },
+  guesserWordGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    gap: 8,
+  },
+  guesserDashesText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: 2.5,
+  },
+  categoryBadgePill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  categoryBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#059669',
+  },
+
+  // Temporizador Integrado
+  integratedTimerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f8fafc',
-  },
-  matchScoreText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  matchScoreBold: {
-    fontWeight: '800',
-  },
-  matchScoreDivider: {
-    fontSize: 12,
-    color: '#cbd5e1',
-  },
-  statusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 16,
-    marginVertical: 4,
-  },
-  roundPill: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  roundPillText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#0f172a',
+  integratedTimerPillWarning: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
   },
-  roleNoticeWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
-  roleNoticeText: {
+  integratedTimerText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-  },
-  timerCircleWrap: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timerInnerCount: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timerNumText: {
-    fontSize: 10.5,
-    fontWeight: '900',
-  },
-  wordRowContainer: {
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 3,
-    paddingHorizontal: 16,
-    width: '100%',
-  },
-  drawerWordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  drawerLabelText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94a3b8',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  drawerWordText: {
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  guesserWordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  guesserMaskText: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#0f172a',
-    letterSpacing: 3,
-  },
-  categoryChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  categoryChipText: {
-    fontSize: 11,
     fontWeight: '800',
     color: '#475569',
   },
+  integratedTimerTextWarning: {
+    color: '#ef4444',
+  },
+
   canvasFrame: {
     alignSelf: 'center',
     position: 'relative',
-    marginVertical: 4,
+    marginVertical: 2,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   canvasDimmedOverlay: {
     position: 'absolute',
@@ -1657,7 +1561,6 @@ const styles = StyleSheet.create({
   },
   bottomDockContainer: {
     width: '100%',
-    paddingHorizontal: 16,
     marginTop: 4,
   },
   drawerDockCard: {
@@ -1666,12 +1569,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    elevation: 2,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    borderColor: '#e2e8f0',
+    ...GAMES_THEME.shadows.card,
   },
   colorsPaletteRow: {
     flexDirection: 'row',
@@ -1686,18 +1585,18 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#ffffff',
+    ...GAMES_THEME.shadows.soft,
   },
   colorDotBtnActive: {
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#0f172a',
-    transform: [{ scale: 1.08 }],
   },
   colorDotInnerWhite: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#ffffff',
   },
   toolsRow: {
@@ -1731,8 +1630,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    elevation: 2,
+    borderColor: '#e2e8f0',
+    ...GAMES_THEME.shadows.card,
   },
   attemptsHistoryRow: {
     flexDirection: 'row',

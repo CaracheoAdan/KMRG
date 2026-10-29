@@ -1793,7 +1793,7 @@ export const GamesScreen: React.FC = () => {
         case 'drawguess': {
           const dg = gamesState.drawGuess;
           if (!dg || dg.phase === 'game_over') return { text: 'Terminado', isMyTurn: false };
-          const isDrawer = dg.drawer === currentProfile;
+          const isDrawer = (dg.drawer || 'Karla') === currentProfile;
           if (dg.phase === 'choosing_word') {
             return {
               text: isDrawer ? 'Elige palabra' : 'Eligiendo...',
@@ -1802,8 +1802,8 @@ export const GamesScreen: React.FC = () => {
           }
           if (dg.phase === 'drawing') {
             return {
-              text: isDrawer ? 'Te toca dibujar' : 'Te toca adivinar',
-              isMyTurn: true,
+              text: isDrawer ? 'Tú dibujas' : `${getDisplayName(dg.drawer || 'Karla')} dibuja`,
+              isMyTurn: isDrawer,
             };
           }
           return { text: 'Siguiente ronda', isMyTurn: true };
@@ -1921,12 +1921,19 @@ export const GamesScreen: React.FC = () => {
       case 'drawguess': {
         const dg = gamesState.drawGuess;
         if (!dg) return 'Dibuja y Adivina';
-        const drawer = dg.drawer;
+        const drawer = dg.drawer || 'Karla';
         const isDrawer = drawer === currentProfile;
+        const drawerName = getDisplayName(drawer);
         if (dg.phase === 'choosing_word') {
-          return isDrawer ? 'Elige tu palabra' : `Turno de ${getDisplayName(drawer)}`;
+          return isDrawer ? 'Elige tu palabra' : `Turno de ${drawerName}`;
         }
-        return isDrawer ? 'Te toca dibujar' : 'Te toca adivinar';
+        if (dg.phase === 'drawing') {
+          return isDrawer ? 'Tú dibujas' : `${drawerName} dibuja`;
+        }
+        if (dg.phase === 'round_end') {
+          return 'Fin de ronda';
+        }
+        return 'Dibuja y Adivina';
       }
     }
   };
@@ -2321,13 +2328,12 @@ export const GamesScreen: React.FC = () => {
           <StatusBar style={isDark ? 'light' : 'dark'} />
 
           {/* Header Unificado Premium del Juego */}
-          {activeGame && activeGame !== 'drawguess' && (
+          {activeGame && (
             <GameHeader
               title={ALL_GAMES.find((g) => g.id === activeGame)?.label || 'Juego'}
               icon={(ALL_GAMES.find((g) => g.id === activeGame)?.icon as any) || 'game-controller'}
               turnLabel={getGameTurnLabel(activeGame)}
               isMyTurn={getGameStatus(activeGame).isMyTurn}
-              simplifiedHeader={activeGame === 'chess'}
               currentTurnPlayer={
                 activeGame === 'tictactoe'
                   ? gamesState.ticTacToe.turn
@@ -2335,6 +2341,8 @@ export const GamesScreen: React.FC = () => {
                   ? gamesState.chess.turn
                   : activeGame === 'battleship'
                   ? bs.turn
+                  : activeGame === 'drawguess'
+                  ? (gamesState.drawGuess?.drawer || 'Karla')
                   : null
               }
               onBack={() => setActiveGame(null)}

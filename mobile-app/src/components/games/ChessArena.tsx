@@ -77,14 +77,14 @@ export const ChessArena: React.FC<Props> = ({
   const isWinner = !!chess.winner;
   const isWhite = chess.turn === 'w';
 
-  // Dimensionamiento simétrico sin recorte en columna 'h' y con margen derecho
-  const maxH = Math.floor(SCREEN_H * 0.44);
-  const maxAvailable = Math.min(SCREEN_W - 24, maxH, 380);
-  const coordSize = 16;
-  const innerGridAvailable = maxAvailable - (coordSize * 2) - 16;
+  // Dimensionamiento simétrico que aprovecha el ancho completo con margen de 16px
+  const maxH = Math.floor(SCREEN_H * 0.48);
+  const maxAvailable = Math.min(SCREEN_W - 32, maxH, 360);
+  const coordSize = 14;
+  const innerGridAvailable = maxAvailable - (coordSize * 2) - 10;
   const cellSize = Math.floor(innerGridAvailable / 8);
   const gridWidth = cellSize * 8;
-  const frameWidth = gridWidth + (coordSize * 2) + 16;
+  const frameWidth = gridWidth + (coordSize * 2) + 10;
 
   // Animación de pulso para Jaque
   const checkPulseAnim = useRef(new Animated.Value(1)).current;
@@ -159,12 +159,6 @@ export const ChessArena: React.FC<Props> = ({
             <Text style={styles.playerName}>Javier</Text>
             <Text style={styles.playerRole}>Negras ⚔️</Text>
           </View>
-          {!isWhite && !isWinner && (
-            <View style={styles.activeTurnChipJavier}>
-              <Ionicons name="sparkles" size={10} color="#0369a1" />
-              <Text style={styles.activeTurnChipTextJavier}>Turno</Text>
-            </View>
-          )}
           {diffJavier > 0 && (
             <View style={styles.materialAdvantageBadgeJavier}>
               <Text style={styles.materialAdvantageText}>+{diffJavier}</Text>
@@ -344,12 +338,6 @@ export const ChessArena: React.FC<Props> = ({
             <Text style={styles.playerName}>Karlita</Text>
             <Text style={styles.playerRole}>Blancas 👑</Text>
           </View>
-          {isWhite && !isWinner && (
-            <View style={styles.activeTurnChipKarla}>
-              <Ionicons name="sparkles" size={10} color="#be185d" />
-              <Text style={styles.activeTurnChipTextKarla}>Turno</Text>
-            </View>
-          )}
           {diffKarla > 0 && (
             <View style={styles.materialAdvantageBadgeKarla}>
               <Text style={styles.materialAdvantageText}>+{diffKarla}</Text>
@@ -434,15 +422,23 @@ export const ChessArena: React.FC<Props> = ({
         </ScrollView>
       </View>
 
-      {/* 6. Dock Inferior: Acciones de la jugada actual (Deshacer) */}
+      {/* 6. Dock Inferior: Acciones de la partida (Deshacer y Reiniciar) */}
       <View style={[styles.dockContainer, { width: frameWidth }]}>
         <View style={{ flex: 1 }}>
           <GameButton
-            label={`Deshacer Jugada (${chessHistoryLength})`}
+            label={`Deshacer (${chessHistoryLength})`}
             icon="arrow-undo"
             variant="secondary"
             disabled={chessHistoryLength === 0}
             onPress={onUndo}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <GameButton
+            label="Reiniciar"
+            icon="reload"
+            variant="secondary"
+            onPress={onReset}
           />
         </View>
       </View>
@@ -455,9 +451,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     width: '100%',
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingVertical: 8,
   },
   checkWarningBadge: {
