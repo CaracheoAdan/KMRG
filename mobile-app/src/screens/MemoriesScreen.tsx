@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Dimensions,
   Animated,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -221,12 +222,14 @@ export const MemoriesScreen: React.FC = () => {
 
   // Modal para ver carta completa con animación de sobre
   const [selectedLetter, setSelectedLetter] = useState<Message | null>(null);
+  const [selectedReactionDraft, setSelectedReactionDraft] = useState<string | null>(null);
   const [sealedLetterPreview, setSealedLetterPreview] = useState<Message | null>(null);
   const letterAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (selectedLetter) {
       setLetterReplyInput(homeState.letterExtras?.[selectedLetter.id]?.replyText || '');
+      setSelectedReactionDraft(homeState.letterExtras?.[selectedLetter.id]?.reaction || null);
       letterAnim.setValue(0);
       Animated.spring(letterAnim, {
         toValue: 1,
@@ -1160,11 +1163,14 @@ export const MemoriesScreen: React.FC = () => {
                       <View style={{ marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 10 }}>
                           {['❤️', '🥺', '🥰', '😭', '🔥', '✨'].map((emoji) => {
-                            const active = extra?.reaction === emoji;
+                            const active = (selectedReactionDraft ?? extra?.reaction) === emoji;
                             return (
                               <TouchableOpacity
                                 key={emoji}
-                                onPress={() => void handleSaveSelectedLetterReaction(emoji, undefined)}
+                                onPress={() => {
+                                  setSelectedReactionDraft(emoji);
+                                  if (Platform.OS !== 'web') Vibration.vibrate(15);
+                                }}
                                 style={{
                                   flex: 1,
                                   paddingVertical: 6,
@@ -1202,12 +1208,14 @@ export const MemoriesScreen: React.FC = () => {
                           />
                           <TouchableOpacity
                             onPress={async () => {
-                              await handleSaveSelectedLetterReaction(undefined, letterReplyInput);
-                              Alert.alert('¡Guardado! 💌', 'Tu nota quedó pegada a esta carta.');
+                              const finalReaction = selectedReactionDraft || extra?.reaction;
+                              await handleSaveSelectedLetterReaction(finalReaction || undefined, letterReplyInput);
+                              setSelectedLetter(null);
+                              if (Platform.OS !== 'web') Vibration.vibrate(25);
                             }}
                             style={{
                               backgroundColor: selectedLetter?.theme_color || primaryColor,
-                              paddingHorizontal: 11,
+                              paddingHorizontal: 13,
                               paddingVertical: 8,
                               borderRadius: 10,
                             }}

@@ -16,6 +16,7 @@ import {
   Image,
   AppState,
   AppStateStatus,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -146,6 +147,7 @@ export const TodayScreen: React.FC = () => {
   // Modales para mantener CERO scroll en la pantalla principal
   const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
   const [letterReplyDraft, setLetterReplyDraft] = useState('');
+  const [letterReactionDraft, setLetterReactionDraft] = useState<string | null>(null);
   const [isSpecialDayModalOpen, setIsSpecialDayModalOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [isPetModalOpen, setIsPetModalOpen] = useState(false);
@@ -455,6 +457,7 @@ export const TodayScreen: React.FC = () => {
   useEffect(() => {
     if (isLetterModalOpen && message) {
       setLetterReplyDraft(homeState.letterExtras?.[message.id]?.replyText || '');
+      setLetterReactionDraft(homeState.letterExtras?.[message.id]?.reaction || null);
     }
   }, [isLetterModalOpen, message?.id]);
 
@@ -1839,11 +1842,14 @@ export const TodayScreen: React.FC = () => {
                 </Text>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
                   {['❤️', '🥺', '🥰', '😭', '🔥', '✨'].map((emoji) => {
-                    const isSelected = currentLetterExtra?.reaction === emoji;
+                    const isSelected = (letterReactionDraft ?? currentLetterExtra?.reaction) === emoji;
                     return (
                       <TouchableOpacity
                         key={emoji}
-                        onPress={() => void handleSaveLetterReactionOrReply(emoji)}
+                        onPress={() => {
+                          setLetterReactionDraft(emoji);
+                          if (Platform.OS !== 'web') Vibration.vibrate(15);
+                        }}
                         style={{
                           flex: 1,
                           paddingVertical: 8,
@@ -1891,12 +1897,14 @@ export const TodayScreen: React.FC = () => {
                   />
                   <TouchableOpacity
                     onPress={async () => {
-                      await handleSaveLetterReactionOrReply(undefined, letterReplyDraft);
-                      Alert.alert('¡Nota pegada! 💌', 'Tu nota de agradecimiento quedó guardada en esta carta.');
+                      const finalReaction = letterReactionDraft || currentLetterExtra?.reaction;
+                      await handleSaveLetterReactionOrReply(finalReaction || undefined, letterReplyDraft);
+                      setIsLetterModalOpen(false);
+                      if (Platform.OS !== 'web') Vibration.vibrate(25);
                     }}
                     style={{
                       backgroundColor: primaryColor,
-                      paddingHorizontal: 12,
+                      paddingHorizontal: 14,
                       paddingVertical: 9,
                       borderRadius: 10,
                     }}
