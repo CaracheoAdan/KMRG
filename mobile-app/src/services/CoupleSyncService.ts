@@ -983,10 +983,17 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
       const baseDg = normBase.drawGuess || DEFAULT_GAMES_STATE.drawGuess;
       const incDg = normIncoming.drawGuess || DEFAULT_GAMES_STATE.drawGuess;
 
+      const baseTs = baseDg.updatedAt || 0;
+      const incTs = incDg.updatedAt || 0;
+
       const isIncomingFresher =
-        (incDg.currentRound || 1) > (baseDg.currentRound || 1) ||
-        (incDg.roundsHistory?.length || 0) > (baseDg.roundsHistory?.length || 0) ||
-        (incDg.strokes?.length || 0) >= (baseDg.strokes?.length || 0);
+        incTs > baseTs ||
+        (incTs === baseTs && (
+          (incDg.currentRound || 1) > (baseDg.currentRound || 1) ||
+          (incDg.roundsHistory?.length || 0) > (baseDg.roundsHistory?.length || 0) ||
+          (incDg.strokes?.length || 0) !== (baseDg.strokes?.length || 0) ||
+          incDg.phase !== baseDg.phase
+        ));
 
       const activeState = isIncomingFresher ? incDg : baseDg;
       const otherState = isIncomingFresher ? baseDg : incDg;
@@ -994,6 +1001,9 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
       return {
         ...otherState,
         ...activeState,
+        strokes: activeState.strokes || [],
+        attempts: activeState.attempts || [],
+        roundsHistory: activeState.roundsHistory || [],
         winsKarla: Math.max(baseDg.winsKarla || 0, incDg.winsKarla || 0),
         winsJavier: Math.max(baseDg.winsJavier || 0, incDg.winsJavier || 0),
         scoreKarla: Math.max(baseDg.scoreKarla || 0, incDg.scoreKarla || 0),

@@ -238,6 +238,7 @@ export interface DrawGuessStroke {
   strokeWidth: number;
   points: DrawGuessPoint[];
   isEraser?: boolean;
+  isFill?: boolean;
 }
 
 export interface DrawGuessRoundRecord {
@@ -247,6 +248,7 @@ export interface DrawGuessRoundRecord {
   word: string;
   difficulty: 'facil' | 'media' | 'dificil';
   category: string;
+  categoryEmoji?: string;
   pointsBase: number;
   pointsBonus: number;
   guessed: boolean;
@@ -261,20 +263,25 @@ export interface DrawGuessState {
   drawer: UserProfile;
   guesser: UserProfile;
   wordChoices?: {
-    easy: { word: string; difficulty: string; category: string; points: number };
-    medium: { word: string; difficulty: string; category: string; points: number };
-    hard: { word: string; difficulty: string; category: string; points: number };
+    easy: { word: string; difficulty: string; category: string; categoryEmoji?: string; points: number };
+    medium: { word: string; difficulty: string; category: string; categoryEmoji?: string; points: number };
+    hard: { word: string; difficulty: string; category: string; categoryEmoji?: string; points: number };
   } | null;
   selectedWord?: string | null;
   selectedWordDifficulty?: 'facil' | 'media' | 'dificil' | null;
   selectedWordCategory?: string | null;
+  categoryEmoji?: string | null;
   wordLength?: number;
+  wordMask?: string;
+  selectedWordHash?: string | null;
+  almostHashes?: string[];
+  drawerWord?: string | null;
   roundDeadline?: number | null; // UNIX timestamp (ms)
   isPaused?: boolean;
   pausedSecondsRemaining?: number | null;
   lastActiveTimestamp?: number | null;
   strokes: DrawGuessStroke[];
-  attempts: Array<{ player: UserProfile; guess: string; timestamp: number }>;
+  attempts: Array<{ player: UserProfile; guess: string; timestamp: number; isClose?: boolean; isCorrect?: boolean }>;
   revealedIndices: number[];
   usedHint: boolean;
   roundPoints: number;
@@ -291,4 +298,6 @@ export interface DrawGuessState {
   winner: UserProfile | 'Empate' | null;
   winsKarla: number;
   winsJavier: number;
+  updatedAt?: number | string;
+  isDrawingLive?: boolean;
 }

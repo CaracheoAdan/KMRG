@@ -1512,7 +1512,7 @@ export const GamesScreen: React.FC = () => {
   const handleResetDrawGuess = async () => {
     const nextDg = {
       ...DEFAULT_GAMES_STATE.drawGuess,
-      updatedAt: new Date().toISOString(),
+      updatedAt: Date.now(),
     };
     await updateAndSyncGames({
       ...gamesState,

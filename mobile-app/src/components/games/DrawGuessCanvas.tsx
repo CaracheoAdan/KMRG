@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,39 +7,40 @@ import {
   PanResponderGestureState,
   LayoutChangeEvent,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect, Circle, Defs, Pattern } from 'react-native-svg';
 
 export interface DrawPoint {
-  x: number; // Coordenada normalizada de 0 a 1
-  y: number; // Coordenada normalizada de 0 a 1
+  x: number; // Normalizado 0 a 1
+  y: number; // Normalizado 0 a 1
 }
 
 export interface DrawStroke {
   id: string;
   color: string;
-  strokeWidth: number; // Grosor base normalizado a escala de lienzo
+  strokeWidth: number;
   points: DrawPoint[];
   isEraser?: boolean;
+  isFill?: boolean;
 }
 
 export const CANVAS_COLORS = [
-  '#0f172a', // Negro carbón
-  '#ef4444', // Rojo
-  '#f97316', // Naranja
-  '#eab308', // Amarillo
-  '#10b981', // Verde esmeralda (Acento)
-  '#0ea5e9', // Azul
-  '#8b5cf6', // Púrpura
-  '#ec4899', // Rosa
+  '#0f172a', // 1. Carbón oscuro
+  '#ef4444', // 2. Rojo carmín
+  '#f97316', // 3. Naranja
+  '#eab308', // 4. Amarillo sol
+  '#10b981', // 5. Verde esmeralda (Acento)
+  '#06b6d4', // 6. Cian
+  '#3b82f6', // 7. Azul real
+  '#ec4899', // 8. Rosa coral
 ];
 
 export const CANVAS_STROKE_WIDTHS = [
-  { id: 'thin', label: 'Fino', width: 3 },
-  { id: 'medium', label: 'Medio', width: 7 },
-  { id: 'thick', label: 'Grueso', width: 14 },
+  { id: 'thin', label: 'Fino', width: 3, dotSize: 5 },
+  { id: 'medium', label: 'Medio', width: 7, dotSize: 9 },
+  { id: 'thick', label: 'Grueso', width: 14, dotSize: 15 },
 ];
 
-export const CANVAS_BG = '#fffdfa'; // Textura papel marfil limpio
+export const CANVAS_BG = '#fcf8f2'; // Textura papel crema suave de dibujo
 
 /**
  * Convierte un arreglo de puntos normalizados en un path SVG suave con curvas Bézier cuadráticas.
@@ -79,6 +80,8 @@ interface DrawGuessCanvasProps {
   currentColor?: string;
   currentWidth?: number;
   isEraserActive?: boolean;
+  isBucketActive?: boolean;
+  onBucketFill?: (color: string) => void;
 }
 
 export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
@@ -90,11 +93,12 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
   currentColor = '#0f172a',
   currentWidth = 7,
   isEraserActive = false,
+  isBucketActive = false,
+  onBucketFill,
 }) => {
   const [canvasDim, setCanvasDim] = useState<{ width: number; height: number }>({ width: 320, height: 320 });
   const [livePoints, setLivePoints] = useState<DrawPoint[]>([]);
 
-  // Refs para evitar re-renderizados pesados en cada milisegundo de movimiento del dedo
   const currentPointsRef = useRef<DrawPoint[]>([]);
   const currentStrokeIdRef = useRef<string>('');
   const lastEmitTimeRef = useRef<number>(0);
@@ -120,6 +124,12 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt: GestureResponderEvent) => {
+        // Modo Cubeta de relleno: rellena el fondo con un tap
+        if (isBucketActive) {
+          onBucketFill?.(currentColor);
+          return;
+        }
+
         const { locationX, locationY } = evt.nativeEvent;
         const { width, height } = layoutRef.current;
         if (width <= 0 || height <= 0) return;
@@ -140,6 +150,8 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         onStrokeBatch?.(strokeId, isEraserActive ? CANVAS_BG : currentColor, currentWidth, [initialPoint], isEraserActive);
       },
       onPanResponderMove: (evt: GestureResponderEvent, _gestureState: PanResponderGestureState) => {
+        if (isBucketActive) return;
+
         const { locationX, locationY } = evt.nativeEvent;
         const { width, height } = layoutRef.current;
         if (width <= 0 || height <= 0) return;
@@ -154,19 +166,17 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         const pts = currentPointsRef.current;
         const lastPt = pts[pts.length - 1];
 
-        // Filtro de distancia mínima para optimizar a 60 fps
         if (lastPt) {
           const dx = (newPt.x - lastPt.x) * width;
           const dy = (newPt.y - lastPt.y) * height;
-          if (dx * dx + dy * dy < 5) return; // Menos de ~2.2px de distancia se omite
+          if (dx * dx + dy * dy < 4) return;
         }
 
         pts.push(newPt);
         setLivePoints([...pts]);
 
-        // Emisión por lotes cada ~70ms para sincronización en tiempo real fluida
         const now = Date.now();
-        if (now - lastEmitTimeRef.current >= 70) {
+        if (now - lastEmitTimeRef.current >= 65) {
           lastEmitTimeRef.current = now;
           onStrokeBatch?.(
             currentStrokeIdRef.current,
@@ -178,6 +188,8 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         }
       },
       onPanResponderRelease: () => {
+        if (isBucketActive) return;
+
         const pts = [...currentPointsRef.current];
         if (pts.length > 0) {
           const finishedStroke: DrawStroke = {
@@ -203,9 +215,8 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         setLivePoints([]);
       },
     });
-  }, [readOnly, currentColor, currentWidth, isEraserActive, strokes, onStrokesChange, onStrokeBatch, onStrokeEnd]);
+  }, [readOnly, currentColor, currentWidth, isEraserActive, isBucketActive, strokes, onStrokesChange, onStrokeBatch, onStrokeEnd, onBucketFill]);
 
-  // Renderizado del trazo que se está dibujando en vivo actualmente
   const liveSvgPath = useMemo(() => {
     if (livePoints.length === 0) return '';
     return pointsToSvgPath(livePoints, canvasDim.width, canvasDim.height);
@@ -214,8 +225,31 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
   return (
     <View style={styles.container} onLayout={handleLayout} {...panResponder.panHandlers}>
       <Svg width="100%" height="100%" style={styles.svgCanvas}>
-        {/* Trazos ya completados */}
+        <Defs>
+          {/* Patrón de puntos de papel artístico tenue */}
+          <Pattern id="canvasDotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <Circle cx="10" cy="10" r="0.75" fill="#d9d0c3" opacity="0.45" />
+          </Pattern>
+        </Defs>
+
+        {/* Fondo del lienzo */}
+        <Rect width="100%" height="100%" fill={CANVAS_BG} />
+        {/* Capa de cuadrícula de puntos tenue */}
+        <Rect width="100%" height="100%" fill="url(#canvasDotGrid)" />
+
+        {/* Trazos ya guardados */}
         {strokes.map((st) => {
+          if (st.isFill) {
+            return (
+              <Rect
+                key={st.id}
+                width="100%"
+                height="100%"
+                fill={st.color}
+                opacity="0.9"
+              />
+            );
+          }
           const pathD = pointsToSvgPath(st.points, canvasDim.width, canvasDim.height);
           if (!pathD) return null;
           return (
@@ -255,11 +289,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    borderColor: '#e8e2d8',
+    shadowColor: '#1e293b',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     elevation: 3,
   },
   svgCanvas: {
