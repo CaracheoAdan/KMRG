@@ -136,7 +136,7 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
                       ${extra.reaction ? `<span class="letter-reaction-badge">Reacción: ${escapeHtml(extra.reaction)}</span>` : ''}
                       ${
                         extra.replyText
-                          ? `<p class="letter-reply-text">💌 <strong>Nota de agradecimiento (${
+                          ? `<p class="letter-reply-text"><strong>Nota de agradecimiento (${
                               extra.repliedBy === 'Karla' ? 'Karlita' : 'Javier'
                             }):</strong> “${escapeHtml(extra.replyText)}”</p>`
                           : ''
@@ -180,7 +180,7 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
             .map(
               (p) => `
             <div class="place-item">
-              <div class="place-title">📍 ${escapeHtml(p.title)} <span class="place-cat">(${escapeHtml(p.category)})</span></div>
+              <div class="place-title">${escapeHtml(p.title)} <span class="place-cat">(${escapeHtml(p.category)})</span></div>
               ${p.notes ? `<div class="place-notes">“${escapeHtml(p.notes)}”</div>` : ''}
             </div>`
             )
@@ -215,9 +215,11 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
       background: linear-gradient(180deg, #faf5ff 0%, #ffffff 100%);
       page-break-after: always;
     }
-    .cover-emblem {
-      font-size: 56px;
-      margin-bottom: 16px;
+    .cover-ornament {
+      font-size: 18px;
+      letter-spacing: 8px;
+      color: ${escapeHtml(primaryColor)};
+      margin-bottom: 14px;
     }
     .cover-subtitle-top {
       font-family: sans-serif;
@@ -451,7 +453,7 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
 <body>
   <!-- PORTADA -->
   <div class="cover-page">
-    <div class="cover-emblem">📖💜</div>
+    <div class="cover-ornament">✦ ✦ ✦</div>
     <div class="cover-subtitle-top">Edición Especial Imprimible</div>
     <h1 class="cover-title">Nuestro Libro de Amor</h1>
     <div class="cover-names">Karlita &amp; Javier</div>
@@ -616,7 +618,7 @@ export async function exportCoupleBookToPdf(options: ExportBookOptions): Promise
         await Share.share({
           url: shareUri,
           title: 'Nuestro Libro de Amor (PDF)',
-          message: '📖 Nuestro Libro de Amor — Karlita & Javier',
+          message: 'Nuestro Libro de Amor — Karlita & Javier',
         });
         return true;
       } catch (rnShareErr) {

@@ -293,15 +293,15 @@ export const MemoriesScreen: React.FC = () => {
   const handleExportPrintableBookPdf = () => {
     if (isExportingBookPdf) return;
     Alert.alert(
-      '📖 Nuestro Libro de Amor',
+      'Nuestro Libro de Amor',
       '¿Cómo deseas abrir o guardar tu libro en PDF?',
       [
         {
-          text: '📤 Compartir archivo PDF',
+          text: 'Compartir archivo PDF',
           onPress: () => void runBookExport('share'),
         },
         {
-          text: '🖨️ Imprimir / Vista Previa',
+          text: 'Imprimir / Vista Previa',
           onPress: () => void runBookExport('print'),
         },
         {
