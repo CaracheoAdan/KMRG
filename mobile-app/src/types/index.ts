@@ -215,3 +215,80 @@ export interface MoviesAndPlansState {
   foodOptions: string[];
   deletedIds?: string[];
 }
+
+// =========================================================================
+// DIBUJA Y ADIVINA (PICTIONARY EN TIEMPO REAL)
+// =========================================================================
+
+export type DrawGuessPhase =
+  | 'idle'
+  | 'choosing_word'
+  | 'drawing'
+  | 'round_end'
+  | 'game_over';
+
+export interface DrawGuessPoint {
+  x: number;
+  y: number;
+}
+
+export interface DrawGuessStroke {
+  id: string;
+  color: string;
+  strokeWidth: number;
+  points: DrawGuessPoint[];
+  isEraser?: boolean;
+}
+
+export interface DrawGuessRoundRecord {
+  roundNumber: number;
+  drawer: UserProfile;
+  guesser: UserProfile;
+  word: string;
+  difficulty: 'facil' | 'media' | 'dificil';
+  category: string;
+  pointsBase: number;
+  pointsBonus: number;
+  guessed: boolean;
+  guessedAtSecondsLeft?: number;
+  usedHint?: boolean;
+  strokes: DrawGuessStroke[];
+}
+
+export interface DrawGuessState {
+  phase: DrawGuessPhase;
+  currentRound: number; // 1 a 6
+  drawer: UserProfile;
+  guesser: UserProfile;
+  wordChoices?: {
+    easy: { word: string; difficulty: string; category: string; points: number };
+    medium: { word: string; difficulty: string; category: string; points: number };
+    hard: { word: string; difficulty: string; category: string; points: number };
+  } | null;
+  selectedWord?: string | null;
+  selectedWordDifficulty?: 'facil' | 'media' | 'dificil' | null;
+  selectedWordCategory?: string | null;
+  wordLength?: number;
+  roundDeadline?: number | null; // UNIX timestamp (ms)
+  isPaused?: boolean;
+  pausedSecondsRemaining?: number | null;
+  lastActiveTimestamp?: number | null;
+  strokes: DrawGuessStroke[];
+  attempts: Array<{ player: UserProfile; guess: string; timestamp: number }>;
+  revealedIndices: number[];
+  usedHint: boolean;
+  roundPoints: number;
+  scoreKarla: number;
+  scoreJavier: number;
+  guesserScoreKarla: number;
+  guesserScoreJavier: number;
+  correctGuessesKarla: number;
+  correctGuessesJavier: number;
+  totalGuessTimeKarla: number;
+  totalGuessTimeJavier: number;
+  usedWords: string[];
+  roundsHistory: DrawGuessRoundRecord[];
+  winner: UserProfile | 'Empate' | null;
+  winsKarla: number;
+  winsJavier: number;
+}

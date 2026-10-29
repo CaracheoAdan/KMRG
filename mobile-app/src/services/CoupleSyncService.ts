@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
 import {
   BucketItem,
+  DrawGuessState,
   HomeState,
   LetterExtraData,
   LoveReason,
@@ -201,6 +202,7 @@ export interface GameScoreBreakdown {
   chess: GameScoreItem;
   hangman: GameScoreItem;
   battleship: GameScoreItem;
+  drawguess: GameScoreItem;
 }
 
 export interface WeeklyChampionSummary {
@@ -264,6 +266,7 @@ export const createDefaultBreakdown = (): GameScoreBreakdown => ({
   chess: createDefaultGameScoreItem(),
   hangman: createDefaultGameScoreItem(),
   battleship: createDefaultGameScoreItem(),
+  drawguess: createDefaultGameScoreItem(),
 });
 
 export interface GamesState {
@@ -325,6 +328,7 @@ export interface GamesState {
     winsKarla: number;
     winsJavier: number;
   };
+  drawGuess: DrawGuessState;
 }
 
 export const createInitialChessBoard = (): Array<Array<ChessPiece | null>> => {
@@ -411,6 +415,39 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     shotsByJavier: [],
     turn: 'Karla',
     lastShot: null,
+    winner: null,
+    winsKarla: 0,
+    winsJavier: 0,
+  },
+  drawGuess: {
+    phase: 'idle',
+    currentRound: 1,
+    drawer: 'Karla',
+    guesser: 'Javier',
+    wordChoices: null,
+    selectedWord: null,
+    selectedWordDifficulty: null,
+    selectedWordCategory: null,
+    wordLength: 0,
+    roundDeadline: null,
+    isPaused: false,
+    pausedSecondsRemaining: null,
+    lastActiveTimestamp: null,
+    strokes: [],
+    attempts: [],
+    revealedIndices: [],
+    usedHint: false,
+    roundPoints: 0,
+    scoreKarla: 0,
+    scoreJavier: 0,
+    guesserScoreKarla: 0,
+    guesserScoreJavier: 0,
+    correctGuessesKarla: 0,
+    correctGuessesJavier: 0,
+    totalGuessTimeKarla: 0,
+    totalGuessTimeJavier: 0,
+    usedWords: [],
+    roundsHistory: [],
     winner: null,
     winsKarla: 0,
     winsJavier: 0,
@@ -824,6 +861,7 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
     chess: mergeScoreItem(normBase.leaderboard.breakdown.chess, normIncoming.leaderboard.breakdown.chess),
     hangman: mergeScoreItem(normBase.leaderboard.breakdown.hangman, normIncoming.leaderboard.breakdown.hangman),
     battleship: mergeScoreItem(normBase.leaderboard.breakdown.battleship, normIncoming.leaderboard.breakdown.battleship),
+    drawguess: mergeScoreItem(normBase.leaderboard.breakdown.drawguess, normIncoming.leaderboard.breakdown.drawguess),
   };
 
   return {
@@ -939,6 +977,27 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
         winner: isNewGame ? null : (incBs.winner || baseBs.winner || null),
         winsKarla: Math.max(baseBs.winsKarla || 0, incBs.winsKarla || 0),
         winsJavier: Math.max(baseBs.winsJavier || 0, incBs.winsJavier || 0),
+      };
+    })(),
+    drawGuess: (() => {
+      const baseDg = normBase.drawGuess || DEFAULT_GAMES_STATE.drawGuess;
+      const incDg = normIncoming.drawGuess || DEFAULT_GAMES_STATE.drawGuess;
+
+      const isIncomingFresher =
+        (incDg.currentRound || 1) > (baseDg.currentRound || 1) ||
+        (incDg.roundsHistory?.length || 0) > (baseDg.roundsHistory?.length || 0) ||
+        (incDg.strokes?.length || 0) >= (baseDg.strokes?.length || 0);
+
+      const activeState = isIncomingFresher ? incDg : baseDg;
+      const otherState = isIncomingFresher ? baseDg : incDg;
+
+      return {
+        ...otherState,
+        ...activeState,
+        winsKarla: Math.max(baseDg.winsKarla || 0, incDg.winsKarla || 0),
+        winsJavier: Math.max(baseDg.winsJavier || 0, incDg.winsJavier || 0),
+        scoreKarla: Math.max(baseDg.scoreKarla || 0, incDg.scoreKarla || 0),
+        scoreJavier: Math.max(baseDg.scoreJavier || 0, incDg.scoreJavier || 0),
       };
     })(),
   };
@@ -1062,6 +1121,14 @@ function normalizeGamesState(state: GamesState): GamesState {
         trophiesKarla: bsWinsK * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
         trophiesJavier: bsWinsJ * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
       },
+      drawguess: rawBreakdown.drawguess || {
+        winsKarla: state?.drawGuess?.winsKarla || 0,
+        winsJavier: state?.drawGuess?.winsJavier || 0,
+        pointsKarla: state?.drawGuess?.scoreKarla || 0,
+        pointsJavier: state?.drawGuess?.scoreJavier || 0,
+        trophiesKarla: (state?.drawGuess?.winsKarla || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: (state?.drawGuess?.winsJavier || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
     };
 
     normalizedLb = {
@@ -1132,6 +1199,12 @@ function normalizeGamesState(state: GamesState): GamesState {
           : DEFAULT_GAMES_STATE.battleship.fleetJavier,
       shotsByKarla: Array.isArray(baseBs?.shotsByKarla) ? baseBs.shotsByKarla : [],
       shotsByJavier: Array.isArray(baseBs?.shotsByJavier) ? baseBs.shotsByJavier : [],
+    },
+    drawGuess: {
+      ...DEFAULT_GAMES_STATE.drawGuess,
+      ...(state?.drawGuess || {}),
+      winsKarla: resetGamesForNewWeek ? 0 : state?.drawGuess?.winsKarla || 0,
+      winsJavier: resetGamesForNewWeek ? 0 : state?.drawGuess?.winsJavier || 0,
     },
   };
 }

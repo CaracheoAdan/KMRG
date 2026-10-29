@@ -77,6 +77,14 @@ const GAME_CARDS: GameCardMeta[] = [
     color: '#0284c7',
     bgSoft: '#f0f9ff',
   },
+  {
+    key: 'drawguess',
+    title: 'Dibuja y Adivina',
+    subtitle: 'Pictionary en tiempo real',
+    icon: 'brush-outline',
+    color: '#10b981',
+    bgSoft: '#ecfdf5',
+  },
 ];
 
 const { height: SCREEN_H } = Dimensions.get('window');

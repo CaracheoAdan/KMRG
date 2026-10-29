@@ -29,6 +29,7 @@ import { ChessArena } from '../components/games/ChessArena';
 import { HangmanArena } from '../components/games/HangmanArena';
 import { HANGMAN_DICTIONARY } from '../components/games/hangmanDictionary';
 import { BattleshipArena } from '../components/games/BattleshipArena';
+import { DrawGuessArena } from '../components/games/DrawGuessArena';
 import { MoodMascot } from '../components/MoodMascot';
 import { GameHeader } from '../components/games/common/GameHeader';
 import { GameButton } from '../components/games/common/GameButton';
@@ -65,7 +66,7 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const COMPACT_BOARD_SIZE = Math.min(SCREEN_W - 56, Math.floor(SCREEN_H * 0.31), 252);
 const FULL_BOARD_SIZE = Math.min(SCREEN_W - 32, Math.floor(SCREEN_H * 0.42), 336);
 
-type GameTab = 'tictactoe' | 'sudoku' | 'chess' | 'hangman' | 'battleship';
+type GameTab = 'tictactoe' | 'sudoku' | 'chess' | 'hangman' | 'battleship' | 'drawguess';
 
 interface VictoryCelebration {
   winnerName: string;
@@ -89,6 +90,7 @@ const ALL_GAMES: Array<{
   { id: 'chess', label: 'Ajedrez', icon: 'trophy', description: 'Estrategia y jaque mate', bgTint: '#fef3c7', iconColor: '#d97706' },
   { id: 'battleship', label: 'Battleship', icon: 'boat', description: 'Hunde la flota enemiga', bgTint: '#cffafe', iconColor: '#0891b2' },
   { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle', description: 'Adivina la palabra oculta', bgTint: '#ffe4e6', iconColor: '#e11d48' },
+  { id: 'drawguess', label: 'Dibuja y Adivina', icon: 'brush', description: 'Pictionary en tiempo real', bgTint: '#ecfdf5', iconColor: '#10b981' },
 ];
 
 // HANGMAN_DICTIONARY se importa desde '../components/games/hangmanDictionary'
@@ -1480,6 +1482,43 @@ export const GamesScreen: React.FC = () => {
   const ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
   const lb = gamesState.leaderboard || DEFAULT_GAMES_STATE.leaderboard;
 
+  const handleUpdateDrawGuessState = async (nextDg: any) => {
+    await updateAndSyncGames({
+      ...gamesState,
+      drawGuess: nextDg,
+    });
+  };
+
+  const handleDrawGuessReward = async (winner: 'Karla' | 'Javier' | 'Empate', points: number) => {
+    let nextLb: GamesState['leaderboard'];
+    if (winner === 'Empate') {
+      nextLb = addLeaderboardTie(gamesState, 'drawguess');
+    } else {
+      nextLb = addLeaderboardReward(
+        gamesState,
+        winner,
+        points,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'drawguess'
+      );
+    }
+    await updateAndSyncGames({
+      ...gamesState,
+      leaderboard: nextLb,
+    });
+  };
+
+  const handleResetDrawGuess = async () => {
+    const nextDg = {
+      ...DEFAULT_GAMES_STATE.drawGuess,
+      updatedAt: new Date().toISOString(),
+    };
+    await updateAndSyncGames({
+      ...gamesState,
+      drawGuess: nextDg,
+    });
+  };
+
   // Renderizador adaptable del juego activo (En Pantalla Completa se transforma en Consola Pro Independiente)
   const renderActiveGameArena = (isFull: boolean) => {
     const proMaxBoard = Math.min(SCREEN_W - 24, Math.floor(SCREEN_H * 0.48), 380);
@@ -1496,6 +1535,7 @@ export const GamesScreen: React.FC = () => {
           { width: '100%', alignItems: 'center' },
           isFull && { backgroundColor: 'transparent', borderWidth: 0, padding: 0 },
           !isFull && { backgroundColor: colors.surface, borderColor: colors.border },
+          activeGame === 'drawguess' && { flex: 1, width: '100%', padding: 0, margin: 0 },
         ]}
       >
 
@@ -1578,6 +1618,19 @@ export const GamesScreen: React.FC = () => {
             onFire={(idx) => void handleBattleshipFire(idx)}
             onReset={() => void handleResetBattleship()}
             onDragStateChange={setIsDraggingShip}
+          />
+        )}
+
+        {/* ================= 6. DIBUJA Y ADIVINA (MODULAR) ================= */}
+        {activeGame === 'drawguess' && (
+          <DrawGuessArena
+            currentProfile={currentProfile}
+            primaryColor="#10b981"
+            gameState={gamesState.drawGuess || DEFAULT_GAMES_STATE.drawGuess}
+            onUpdateGameState={handleUpdateDrawGuessState}
+            onFinishGameReward={handleDrawGuessReward}
+            onBack={() => setActiveGame(null)}
+            onOpenScoreBreakdown={(p) => handleOpenScoreBreakdown(p || 'all')}
           />
         )}
       </View>
@@ -1670,6 +1723,23 @@ export const GamesScreen: React.FC = () => {
       });
     }
 
+    // Draw & Guess
+    if (gamesState.drawGuess && gamesState.drawGuess.phase !== 'game_over') {
+      const isMeDrawer = gamesState.drawGuess.drawer === currentProfile;
+      const drawerName = getDisplayName(gamesState.drawGuess.drawer);
+      const isChoosing = gamesState.drawGuess.phase === 'choosing_word';
+      list.push({
+        id: 'drawguess',
+        name: 'Dibuja y Adivina',
+        icon: 'brush',
+        statusText: isChoosing
+          ? (isMeDrawer ? 'Elige palabra' : `${drawerName} elige`)
+          : (isMeDrawer ? 'Te toca dibujar' : 'Te toca adivinar'),
+        detail: `Ronda ${gamesState.drawGuess.currentRound} de 6`,
+        isMyTurn: isChoosing ? isMeDrawer : true,
+      });
+    }
+
     return list;
   }, [gamesState, currentProfile, sudoku, getDisplayName]);
 
@@ -1718,6 +1788,24 @@ export const GamesScreen: React.FC = () => {
               isMyTurn: false,
             };
           return { text: 'Adivinar', isMyTurn: true };
+        }
+        case 'drawguess': {
+          const dg = gamesState.drawGuess;
+          if (!dg || dg.phase === 'game_over') return { text: 'Terminado', isMyTurn: false };
+          const isDrawer = dg.drawer === currentProfile;
+          if (dg.phase === 'choosing_word') {
+            return {
+              text: isDrawer ? 'Elige palabra' : 'Eligiendo...',
+              isMyTurn: isDrawer,
+            };
+          }
+          if (dg.phase === 'drawing') {
+            return {
+              text: isDrawer ? 'Te toca dibujar' : 'Te toca adivinar',
+              isMyTurn: true,
+            };
+          }
+          return { text: 'Siguiente ronda', isMyTurn: true };
         }
       }
     },
@@ -1785,6 +1873,22 @@ export const GamesScreen: React.FC = () => {
           const lives = 6 - wrongGuessesCount;
           return `Adivina la palabra (${lives} vidas restantes)`;
         }
+        case 'drawguess': {
+          const dg = gamesState.drawGuess;
+          if (!dg || dg.phase === 'game_over') return 'Partida finalizada';
+          const isDrawer = dg.drawer === currentProfile;
+          if (dg.phase === 'choosing_word') {
+            return isDrawer
+              ? 'Te toca elegir la palabra'
+              : `Esperando que ${partnerName} elija palabra`;
+          }
+          if (dg.phase === 'drawing') {
+            return isDrawer
+              ? '¡Dibuja la palabra en el lienzo!'
+              : '¡Adivina lo que se está dibujando!';
+          }
+          return `Ronda ${dg.currentRound} de 6 finalizada`;
+        }
       }
     },
     [gamesState, currentProfile, sudoku, wrongGuessesCount]
@@ -1813,6 +1917,16 @@ export const GamesScreen: React.FC = () => {
       }
       case 'hangman':
         return 'Adivinando palabra';
+      case 'drawguess': {
+        const dg = gamesState.drawGuess;
+        if (!dg) return 'Dibuja y Adivina';
+        const drawer = dg.drawer;
+        const isDrawer = drawer === currentProfile;
+        if (dg.phase === 'choosing_word') {
+          return isDrawer ? 'Elige tu palabra' : `Turno de ${getDisplayName(drawer)}`;
+        }
+        return isDrawer ? 'Te toca dibujar' : 'Te toca adivinar';
+      }
     }
   };
 
@@ -1843,6 +1957,9 @@ export const GamesScreen: React.FC = () => {
                 break;
               case 'hangman':
                 void handleRandomHangmanWord();
+                break;
+              case 'drawguess':
+                void handleResetDrawGuess();
                 break;
             }
           },
@@ -1926,9 +2043,6 @@ export const GamesScreen: React.FC = () => {
             return 0;
           });
 
-          const gridGames = sortedGames.slice(0, 4);
-          const fullWidthGame = sortedGames[4];
-
           const renderCard = (g: typeof ALL_GAMES[0]) => {
             const status = getGameStatus(g.id);
             const color = g.iconColor;
@@ -1948,6 +2062,10 @@ export const GamesScreen: React.FC = () => {
               miniStats = `Nivel ${diffMap[sudoku.difficulty] || sudoku.difficulty}`;
             } else if (g.id === 'hangman') {
               miniStats = `${6 - wrongGuessesCount} vidas`;
+            } else if (g.id === 'drawguess') {
+              const round = gamesState.drawGuess?.currentRound || 1;
+              const phase = gamesState.drawGuess?.phase;
+              miniStats = phase === 'game_over' ? 'Partida terminada' : `Ronda ${round} de 6`;
             }
 
             return (
@@ -1966,9 +2084,9 @@ export const GamesScreen: React.FC = () => {
                 scaleTo={0.96}
                 accessibilityLabel={`Jugar ${g.label}`}
               >
-                {/* Ícono grande en círculo pastel del color del juego */}
+                {/* Ícono en círculo pastel del color del juego */}
                 <View style={[styles.lobbyCardIconCircle, { backgroundColor: g.bgTint }]}>
-                  <Ionicons name={g.icon as any} size={28} color={color} />
+                  <Ionicons name={g.icon as any} size={24} color={color} />
                 </View>
 
                 {/* Nombre del juego centrado */}
@@ -1987,7 +2105,7 @@ export const GamesScreen: React.FC = () => {
 
                 <Text
                   style={[styles.lobbyCardDesc, { color: colors.textSecondary }]}
-                  numberOfLines={2}
+                  numberOfLines={1}
                 >
                   {g.description}
                 </Text>
@@ -2018,89 +2136,26 @@ export const GamesScreen: React.FC = () => {
             );
           };
 
-          const renderBannerCard = (g: typeof ALL_GAMES[0]) => {
-            const status = getGameStatus(g.id);
-            const color = g.iconColor;
-            const isMyTurn = status.isMyTurn;
-
-            return (
-              <PressableScale
-                key={g.id}
-                onPress={() => setPendingGameToLaunch(g.id)}
-                style={[
-                  styles.lobbyBannerCard,
-                  {
-                    backgroundColor: isDark ? colors.surface : '#ffffff',
-                    borderColor: `${color}50`,
-                    shadowColor: color,
-                  },
-                ]}
-                scaleTo={0.97}
-                accessibilityLabel={`Jugar ${g.label}`}
-              >
-                <View style={[styles.lobbyBannerIconCircle, { backgroundColor: g.bgTint }]}>
-                  <Ionicons name={g.icon as any} size={24} color={color} />
-                </View>
-
-                <View style={styles.lobbyBannerInfo}>
-                  <View style={styles.lobbyBannerTitleRow}>
-                    <Text style={[styles.lobbyBannerTitle, { color: colors.text }]}>
-                      {g.label}
-                    </Text>
-                    <View
-                      style={[
-                        styles.turnBadgePill,
-                        isMyTurn
-                          ? { backgroundColor: color, borderColor: color }
-                          : { backgroundColor: `${color}18`, borderColor: `${color}40` },
-                      ]}
-                    >
-                      {isMyTurn && (
-                        <Ionicons name="sparkles" size={10} color="#ffffff" style={{ marginRight: 3 }} />
-                      )}
-                      <Text
-                        style={[
-                          styles.lobbyBadgeText,
-                          { color: isMyTurn ? '#ffffff' : color },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {status.text}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={[styles.lobbyBannerDesc, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {g.description}
-                  </Text>
-                </View>
-
-                <Ionicons name="chevron-forward" size={18} color={`${color}aa`} />
-              </PressableScale>
-            );
-          };
-
           return (
             <View style={styles.lobbyGamesGridArea}>
               <View style={styles.lobbyGridRowsContainer}>
                 {/* Fila 1 */}
                 <View style={styles.lobbyGridRow}>
-                  <View style={styles.lobbyCol}>{renderCard(gridGames[0])}</View>
-                  <View style={styles.lobbyCol}>{renderCard(gridGames[1])}</View>
+                  {sortedGames[0] && <View style={styles.lobbyCol}>{renderCard(sortedGames[0])}</View>}
+                  {sortedGames[1] && <View style={styles.lobbyCol}>{renderCard(sortedGames[1])}</View>}
                 </View>
 
                 {/* Fila 2 */}
                 <View style={styles.lobbyGridRow}>
-                  <View style={styles.lobbyCol}>{renderCard(gridGames[2])}</View>
-                  <View style={styles.lobbyCol}>{renderCard(gridGames[3])}</View>
+                  {sortedGames[2] && <View style={styles.lobbyCol}>{renderCard(sortedGames[2])}</View>}
+                  {sortedGames[3] && <View style={styles.lobbyCol}>{renderCard(sortedGames[3])}</View>}
                 </View>
 
-                {/* Fila 3: 5to juego como banner compacto balanceado */}
-                {fullWidthGame && (
-                  <View style={styles.lobbyBannerRow}>
-                    {renderBannerCard(fullWidthGame)}
-                  </View>
-                )}
+                {/* Fila 3 */}
+                <View style={styles.lobbyGridRow}>
+                  {sortedGames[4] && <View style={styles.lobbyCol}>{renderCard(sortedGames[4])}</View>}
+                  {sortedGames[5] && <View style={styles.lobbyCol}>{renderCard(sortedGames[5])}</View>}
+                </View>
               </View>
             </View>
           );
@@ -2265,7 +2320,7 @@ export const GamesScreen: React.FC = () => {
           <StatusBar style={isDark ? 'light' : 'dark'} />
 
           {/* Header Unificado Premium del Juego */}
-          {activeGame && (
+          {activeGame && activeGame !== 'drawguess' && (
             <GameHeader
               title={ALL_GAMES.find((g) => g.id === activeGame)?.label || 'Juego'}
               icon={(ALL_GAMES.find((g) => g.id === activeGame)?.icon as any) || 'game-controller'}
@@ -2289,14 +2344,20 @@ export const GamesScreen: React.FC = () => {
           )}
 
           {/* Arena del Juego Montada con Scroll Adaptable que Centra Verticalmente */}
-          <ScrollView
-            style={{ flex: 1 }}
-            scrollEnabled={activeGame !== 'battleship' && !isDraggingShip}
-            contentContainerStyle={styles.gameActiveScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {activeGame && renderActiveGameArena(true)}
-          </ScrollView>
+          {activeGame === 'drawguess' ? (
+            <View style={{ flex: 1, width: '100%' }}>
+              {renderActiveGameArena(true)}
+            </View>
+          ) : (
+            <ScrollView
+              style={{ flex: 1 }}
+              scrollEnabled={activeGame !== 'battleship' && !isDraggingShip}
+              contentContainerStyle={styles.gameActiveScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {activeGame && renderActiveGameArena(true)}
+            </ScrollView>
+          )}
         </SafeAreaView>
       </Modal>
 
