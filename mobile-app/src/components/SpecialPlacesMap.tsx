@@ -191,7 +191,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'interactions' },
         (payload: any) => {
-          if (payload.new?.type === 'sync_places_state' && payload.new?.payload?.places) {
+          if (
+            payload.new?.type === 'sync_places_state' &&
+            payload.new?.payload?.places &&
+            payload.new?.sender !== currentProfile
+          ) {
             setPlaces(payload.new.payload.places);
           }
         }
@@ -314,6 +318,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   }, [centerLat, centerLon, zoom]);
 
   const dragStartWorldRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panRafRef = useRef<number | null>(null);
 
   // Al confirmar un punto del mapa para abrir el formulario de Nuevo Pin
   const openAddPlaceModalAtCoordinates = useCallback(
@@ -374,8 +379,14 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         const nextWorldX = dragStartWorldRef.current.x - gestureState.dx;
         const nextWorldY = dragStartWorldRef.current.y - gestureState.dy;
         const nextCoords = worldPixelToLatLon(nextWorldX, nextWorldY, z);
-        setCenterLat(nextCoords.lat);
-        setCenterLon(nextCoords.lon);
+        if (panRafRef.current !== null) {
+          cancelAnimationFrame(panRafRef.current);
+        }
+        panRafRef.current = requestAnimationFrame(() => {
+          panRafRef.current = null;
+          setCenterLat(nextCoords.lat);
+          setCenterLon(nextCoords.lon);
+        });
       },
       onPanResponderRelease: () => {
         // La posición exacta siempre la define el apuntador central del mapa
@@ -597,6 +608,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             <Image
               key={t.key}
               source={{ uri: t.url }}
+              fadeDuration={0}
               style={{
                 position: 'absolute',
                 left: t.left,

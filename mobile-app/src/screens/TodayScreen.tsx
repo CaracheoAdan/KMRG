@@ -129,6 +129,8 @@ export const TodayScreen: React.FC = () => {
   const [message, setMessage] = useState<Message | null>(null);
   const [homeState, setHomeState] = useState<HomeState>(DEFAULT_HOME_STATE);
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
+  const hasPrunedSessionRef = useRef(false);
   const [sendingInteraction, setSendingInteraction] = useState(false);
   const [interactionFeedback, setInteractionFeedback] = useState<{
     text: string;
@@ -214,7 +216,15 @@ export const TodayScreen: React.FC = () => {
   }, [petBounce]);
 
   const loadData = useCallback(async () => {
-    setLoading(true);
+    // 1. Carga inmediata desde caché si es la primera vez para mostrar la pantalla sin espera
+    if (!hasLoadedOnceRef.current) {
+      const cachedMsg = await getTodayMessage(currentProfile);
+      if (cachedMsg) setMessage(cachedMsg);
+      setLoading(false);
+      hasLoadedOnceRef.current = true;
+    }
+
+    // 2. Sincronización en segundo plano sin bloquear la interfaz
     try {
       await syncSupabaseMessages(currentProfile);
     } catch {
@@ -244,8 +254,11 @@ export const TodayScreen: React.FC = () => {
       }
     });
 
-    // Poda periódica en segundo plano para mantener la BD ligera
-    void pruneOldInteractions();
+    // Poda periódica una sola vez por sesión para mantener la BD ligera sin saturar la red
+    if (!hasPrunedSessionRef.current) {
+      hasPrunedSessionRef.current = true;
+      void pruneOldInteractions();
+    }
 
     if (todayMsg && !todayMsg.is_read) {
       await markMessageAsRead(todayMsg.id);
@@ -298,8 +311,6 @@ export const TodayScreen: React.FC = () => {
   );
 
   useEffect(() => {
-    void loadData();
-
     // 1. Canal de interacciones y estado general
     const channel = supabase
       .channel('kmrg-live-interactions')
@@ -320,7 +331,11 @@ export const TodayScreen: React.FC = () => {
             return;
           }
 
-          if (newInteraction.type === 'sync_home_state' && newInteraction.payload) {
+          if (
+            newInteraction.type === 'sync_home_state' &&
+            newInteraction.payload &&
+            newInteraction.sender !== currentProfile
+          ) {
             const incomingHome = newInteraction.payload as Partial<HomeState>;
             setHomeState((prev) => ({ ...prev, ...incomingHome }));
 

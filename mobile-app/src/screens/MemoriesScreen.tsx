@@ -62,6 +62,112 @@ const GRID_IMAGE_SIZE = (width - 36 - 16) / 3; // 3 columnas para estilo Google 
 
 type ViewMode = 'timeline' | 'album' | 'calendar' | 'map';
 
+interface TimelineLetterItemProps {
+  item: Message;
+  isLast: boolean;
+  primaryColor: string;
+  colors: ThemePalette;
+  styles: any;
+  onSelectSealed: (item: Message) => void;
+  onSelectOpen: (item: Message) => void;
+}
+
+const TimelineLetterItem = React.memo<TimelineLetterItemProps>(
+  ({ item, isLast, primaryColor, colors, styles, onSelectSealed, onSelectOpen }) => {
+    const formattedDate = formatDisplayDate(item.scheduled_date, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
+
+    return (
+      <View style={styles.timelineRow}>
+        <View style={styles.timelineTrack}>
+          <View style={[styles.timelineNode, { borderColor: primaryColor }]}>
+            <View style={[styles.timelineNodeInner, { backgroundColor: primaryColor }]} />
+          </View>
+          {!isLast && <View style={styles.timelineLine} />}
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.82}
+          onPress={() => {
+            if (isSealed) {
+              onSelectSealed(item);
+              return;
+            }
+            onSelectOpen(item);
+          }}
+          style={styles.memoryCardWrapper}
+          accessibilityLabel={`Leer carta del ${formattedDate}`}
+        >
+          <View style={styles.memoryHeader}>
+            <Text
+              style={[
+                styles.dateBadge,
+                { color: primaryColor, backgroundColor: `${primaryColor}15` },
+              ]}
+            >
+              {formattedDate}
+            </Text>
+            {item.is_read && (
+              <View style={styles.readBadge}>
+                <Ionicons name="checkmark-done" size={13} color={colors.textMuted} />
+                <Text style={[styles.readCheck, { color: colors.textMuted }]}>Leída</Text>
+              </View>
+            )}
+          </View>
+
+          <View
+            style={[
+              styles.memoryCard,
+              {
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+                borderLeftColor: item.theme_color || primaryColor,
+                borderLeftWidth: 4,
+              },
+            ]}
+          >
+            {isSealed ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
+                <Ionicons name="lock-closed" size={14} color={colors.primary} />
+                <Text
+                  style={[
+                    styles.memoryContent,
+                    { color: colors.primary, fontWeight: '700', fontStyle: 'italic' },
+                  ]}
+                >
+                  Sellada con candado hasta el {formattedDate}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text
+                  style={[
+                    styles.memoryContent,
+                    { color: colors.text, fontFamily: SERIF_FONT },
+                  ]}
+                  numberOfLines={4}
+                >
+                  “{item.content || 'Sin contenido'}”
+                </Text>
+                <View style={styles.readMoreRow}>
+                  <Ionicons name="mail-open-outline" size={13} color={primaryColor} />
+                  <Text style={[styles.readMoreText, { color: primaryColor }]}>
+                    Toca para leer carta completa
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+);
+
 export const MemoriesScreen: React.FC = () => {
   const { colors, isDark, primaryColor } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -147,25 +253,29 @@ export const MemoriesScreen: React.FC = () => {
 
   const loadMemories = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else setLoading(true);
 
-    const synced = await syncSupabaseMilestones();
-
-    const [past, cachedMilestones] = await Promise.all([
+    // 1. Mostrar inmediatamente las fotos y cartas guardadas en caché local (0ms espera)
+    const [cachedPast, cachedMilestones] = await Promise.all([
       getPastMessages(currentProfile),
       getCachedMilestones(),
     ]);
+    setMemories(cachedPast);
+    if (cachedMilestones.length > 0) {
+      setMilestones(deduplicateMilestones(cachedMilestones));
+    }
+    setLoading(false);
 
-    setMemories(past);
-    const sourceList = synced && synced.length > 0 ? synced : cachedMilestones;
-    setMilestones(deduplicateMilestones(sourceList));
+    // 2. Sincronizar con Supabase en segundo plano y actualizar si hay cambios
+    const synced = await syncSupabaseMilestones();
+    if (synced && synced.length > 0) {
+      setMilestones(deduplicateMilestones(synced));
+    }
+
     if (isRefresh) {
       setFailedImages({});
       void scheduleDailyMessage();
+      setRefreshing(false);
     }
-
-    if (isRefresh) setRefreshing(false);
-    else setLoading(false);
   }, [currentProfile]);
 
   useEffect(() => {
@@ -385,6 +495,8 @@ export const MemoriesScreen: React.FC = () => {
                 source={{ uri: m.image_url }}
                 style={styles.albumGridImage}
                 resizeMode="cover"
+                resizeMethod="resize"
+                fadeDuration={0}
               />
               <View style={styles.albumItemOverlay}>
                 <Text style={styles.albumItemTitle} numberOfLines={1}>
@@ -475,7 +587,12 @@ export const MemoriesScreen: React.FC = () => {
               style={styles.dayPhotoCard}
               activeOpacity={0.88}
             >
-              <Image source={{ uri: firstPhoto.image_url }} style={styles.dayPhotoImage} />
+              <Image
+                source={{ uri: firstPhoto.image_url }}
+                style={styles.dayPhotoImage}
+                resizeMethod="resize"
+                fadeDuration={0}
+              />
               <View style={styles.dayPhotoMeta}>
                 <Text style={styles.dayPhotoTitle} numberOfLines={1}>
                   {firstPhoto.title}
@@ -516,101 +633,28 @@ export const MemoriesScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Cartas Guardadas ({memories.length})</Text>
         </View>
 
-        <ScrollView
+        <FlatList
           style={{ flex: 1, marginTop: 6 }}
+          data={memories}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.timelineScrollContent}
           showsVerticalScrollIndicator={false}
-        >
-          {memories.map((item, idx) => {
-            const isLast = idx === memories.length - 1;
-            const formattedDate = formatDisplayDate(item.scheduled_date, {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            });
-            const isSealed = toLocalDateString(item.scheduled_date) > toLocalDateString(new Date());
-
-            return (
-              <View key={item.id} style={styles.timelineRow}>
-                <View style={styles.timelineTrack}>
-                  <View style={[styles.timelineNode, { borderColor: primaryColor }]}>
-                    <View style={[styles.timelineNodeInner, { backgroundColor: primaryColor }]} />
-                  </View>
-                  {!isLast && <View style={styles.timelineLine} />}
-                </View>
-
-                <PressableScale
-                  onPress={() => {
-                    if (isSealed) {
-                      setSealedLetterPreview(item);
-                      return;
-                    }
-                    setSelectedLetter(item);
-                  }}
-                  style={styles.memoryCardWrapper}
-                  scaleTo={0.98}
-                  accessibilityLabel={`Leer carta del ${formattedDate}`}
-                >
-                  <View style={styles.memoryHeader}>
-                    <Text
-                      style={[
-                        styles.dateBadge,
-                        { color: primaryColor, backgroundColor: `${primaryColor}15` },
-                      ]}
-                    >
-                      {formattedDate}
-                    </Text>
-                    {item.is_read && (
-                      <View style={styles.readBadge}>
-                        <Ionicons name="checkmark-done" size={13} color={colors.textMuted} />
-                        <Text style={[styles.readCheck, { color: colors.textMuted }]}>Leída</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View
-                    style={[
-                      styles.memoryCard,
-                      {
-                        backgroundColor: colors.paper,
-                        borderColor: colors.border,
-                        borderLeftColor: item.theme_color || primaryColor,
-                        borderLeftWidth: 4,
-                      },
-                    ]}
-                  >
-                    {isSealed ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}>
-                        <Ionicons name="lock-closed" size={14} color={colors.primary} />
-                        <Text style={[styles.memoryContent, { color: colors.primary, fontWeight: '700', fontStyle: 'italic' }]}>
-                          Sellada con candado hasta el {formattedDate}
-                        </Text>
-                      </View>
-                    ) : (
-                      <>
-                        <Text
-                          style={[
-                            styles.memoryContent,
-                            { color: colors.text, fontFamily: SERIF_FONT },
-                          ]}
-                          numberOfLines={4}
-                        >
-                          “{item.content || 'Sin contenido'}”
-                        </Text>
-                        <View style={styles.readMoreRow}>
-                          <Ionicons name="mail-open-outline" size={13} color={primaryColor} />
-                          <Text style={[styles.readMoreText, { color: primaryColor }]}>
-                            Toca para leer carta completa
-                          </Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                </PressableScale>
-              </View>
-            );
-          })}
-        </ScrollView>
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={({ item, index }) => (
+            <TimelineLetterItem
+              item={item}
+              isLast={index === memories.length - 1}
+              primaryColor={primaryColor}
+              colors={colors}
+              styles={styles}
+              onSelectSealed={setSealedLetterPreview}
+              onSelectOpen={setSelectedLetter}
+            />
+          )}
+        />
       </View>
     );
   };

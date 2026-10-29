@@ -284,7 +284,11 @@ export const MoviesScreen: React.FC = () => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'interactions' },
         (payload: any) => {
-          if (payload.new?.type === 'sync_movies_state' && payload.new?.payload) {
+          if (
+            payload.new?.type === 'sync_movies_state' &&
+            payload.new?.payload &&
+            payload.new?.sender !== currentProfile
+          ) {
             setState((prev) => mergeMoviesStates(prev, payload.new.payload as MoviesAndPlansState));
           }
         }

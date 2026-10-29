@@ -311,7 +311,11 @@ export const GamesScreen: React.FC = () => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'interactions' },
         (payload: any) => {
-          if (payload.new?.type === 'sync_games_state' && payload.new?.payload) {
+          if (
+            payload.new?.type === 'sync_games_state' &&
+            payload.new?.payload &&
+            payload.new?.sender !== currentProfile
+          ) {
             setGamesState((prev) => mergeGamesStates(prev, payload.new.payload as GamesState));
           }
         }
