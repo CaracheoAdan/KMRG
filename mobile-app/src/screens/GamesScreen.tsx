@@ -2298,7 +2298,10 @@ export const GamesScreen: React.FC = () => {
             cb();
           }
         }}
-        onClose={() => setVictoryCelebration(null)}
+        onClose={() => {
+          setVictoryCelebration(null);
+          setActiveGame(null);
+        }}
       />
 
       {/* Modal Retar a mi Pareja en el Ahorcado */}

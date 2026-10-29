@@ -831,16 +831,20 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
       const incBs = normIncoming.battleship;
 
       // Si se está reiniciando explícitamente a setup/idle
-      const isReset = incBs.phase === 'setup' && (baseBs.phase === 'finished' || baseBs.phase === 'battle');
-      const isNewGame = incBs.phase === 'setup' || incBs.phase === 'invited';
+      const isReset =
+        (incBs.phase === 'setup' || incBs.phase === 'invited' || incBs.phase === 'idle') &&
+        (baseBs.phase === 'finished' || baseBs.phase === 'battle');
+      const isNewGame = incBs.phase === 'setup' || incBs.phase === 'invited' || incBs.phase === 'idle';
 
-      // Ready flags acumulativos (no perder si ya estaba lista)
+      // Ready flags acumulativos (no perder si ya estaba lista, salvo en reinicio)
       const readyK = isReset ? incBs.readyKarla : (baseBs.readyKarla || incBs.readyKarla);
       const readyJ = isReset ? incBs.readyJavier : (baseBs.readyJavier || incBs.readyJavier);
       const bothReady = readyK && readyJ;
 
       // Flota de Karla: preservar la confirmada si ya está lista
-      const fleetK = (incBs.readyKarla && Array.isArray(incBs.fleetKarla) && incBs.fleetKarla.length === 5)
+      const fleetK = isReset
+        ? (incBs.fleetKarla || baseBs.fleetKarla)
+        : (incBs.readyKarla && Array.isArray(incBs.fleetKarla) && incBs.fleetKarla.length === 5)
         ? incBs.fleetKarla
         : (baseBs.readyKarla && Array.isArray(baseBs.fleetKarla) && baseBs.fleetKarla.length === 5)
         ? baseBs.fleetKarla
@@ -849,7 +853,9 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
         : baseBs.fleetKarla;
 
       // Flota de Javier: preservar la confirmada si ya está lista
-      const fleetJ = (incBs.readyJavier && Array.isArray(incBs.fleetJavier) && incBs.fleetJavier.length === 5)
+      const fleetJ = isReset
+        ? (incBs.fleetJavier || baseBs.fleetJavier)
+        : (incBs.readyJavier && Array.isArray(incBs.fleetJavier) && incBs.fleetJavier.length === 5)
         ? incBs.fleetJavier
         : (baseBs.readyJavier && Array.isArray(baseBs.fleetJavier) && baseBs.fleetJavier.length === 5)
         ? baseBs.fleetJavier
@@ -866,7 +872,7 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
         : Array.from(new Set([...(baseBs.shotsByJavier || []), ...(incBs.shotsByJavier || [])]));
 
       let phase = incBs.phase;
-      if (incBs.winner || baseBs.winner) {
+      if (!isNewGame && (incBs.winner || baseBs.winner)) {
         phase = 'finished';
       } else if (!isNewGame && (bothReady || incBs.phase === 'battle' || baseBs.phase === 'battle')) {
         phase = 'battle';
@@ -880,7 +886,7 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
         ? incBs.lastShot || baseBs.lastShot
         : baseBs.lastShot || incBs.lastShot;
 
-      const turn = incTotalShots >= baseTotalShots ? incBs.turn : baseBs.turn;
+      const turn = isNewGame ? incBs.turn : (incTotalShots >= baseTotalShots ? incBs.turn : baseBs.turn);
 
       return {
         ...baseBs,
@@ -894,7 +900,7 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
         shotsByJavier: shotsJ,
         turn,
         lastShot,
-        winner: incBs.winner || baseBs.winner || null,
+        winner: isNewGame ? null : (incBs.winner || baseBs.winner || null),
         winsKarla: Math.max(baseBs.winsKarla || 0, incBs.winsKarla || 0),
         winsJavier: Math.max(baseBs.winsJavier || 0, incBs.winsJavier || 0),
       };

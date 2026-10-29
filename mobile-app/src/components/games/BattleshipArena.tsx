@@ -1575,7 +1575,7 @@ export const BattleshipArena: React.FC<Props> = ({
       )}
 
       {/* ================= FASE 3: COMBATE NAVAL EN VIVO ================= */}
-      {bs.phase === 'battle' && (
+      {(bs.phase === 'battle' || bs.phase === 'finished') && (
         <View style={styles.battleWrap}>
           {/* Toggle de Modos: Radar Ataque vs Mis Barcos */}
           <View style={[styles.radarToggleContainer, { width: exactFrameWidth }]}>
@@ -1852,9 +1852,9 @@ export const BattleshipArena: React.FC<Props> = ({
           {/* Dock Inferior de Combate */}
           <View style={[styles.battleDockContainer, { width: exactFrameWidth }]}>
             <GameButton
-              label="Rendirse / Reiniciar"
-              icon="flag-outline"
-              variant="destructive"
+              label={bs.phase === 'finished' ? 'Jugar de Nuevo' : 'Rendirse / Reiniciar'}
+              icon={bs.phase === 'finished' ? 'refresh' : 'flag-outline'}
+              variant={bs.phase === 'finished' ? 'primary' : 'destructive'}
               onPress={onReset}
             />
           </View>
