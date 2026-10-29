@@ -676,8 +676,6 @@ export const BattleshipArena: React.FC<Props> = ({
     }
   }, [bs.phase]);
 
-  const partnerName = currentProfile === 'Karla' ? 'Javier' : 'Karlita';
-  const lastShot = bs.lastShot;
   const isMyTurn = bs.phase === 'battle' && bs.turn === currentProfile;
   const enemyFleet: BattleshipShip[] =
     currentProfile === 'Karla' ? bs.fleetJavier || [] : bs.fleetKarla || [];
@@ -688,42 +686,6 @@ export const BattleshipArena: React.FC<Props> = ({
 
   const amIReady = currentProfile === 'Karla' ? bs.readyKarla : bs.readyJavier;
   const isPartnerReady = currentProfile === 'Karla' ? bs.readyJavier : bs.readyKarla;
-
-  const formatCoords = (c?: number | null) => {
-    if (c === undefined || c === null || c < 0 || c >= 100) return '';
-    const col = COLS_LETTERS[c % 10];
-    const row = ROWS_NUMBERS[Math.floor(c / 10)];
-    return `${col}${row}`;
-  };
-
-  const battleStatusMessage = useMemo(() => {
-    if (!lastShot) {
-      return isMyTurn
-        ? '🎯 Tu turno: Elige una casilla en el radar para disparar.'
-        : `⏳ Turno de ${partnerName}. Esperando disparo enemigo...`;
-    }
-
-    const coords = formatCoords(lastShot.cell);
-    const didIShoot = lastShot.shooter === currentProfile;
-
-    if (didIShoot) {
-      if (lastShot.hit) {
-        if (lastShot.sunkShipName) {
-          return `🔥 ¡IMPACTO en ${coords}! ¡Hundiste su ${lastShot.sunkShipName}! ¡Tiras de nuevo! 🎯`;
-        }
-        return `🔥 ¡IMPACTO en ${coords}! Le diste a un barco. ¡Tiras de nuevo! 🎯`;
-      }
-      return `🌊 Disparo en ${coords}: ¡Agua! Turno de ${partnerName}.`;
-    } else {
-      if (lastShot.hit) {
-        if (lastShot.sunkShipName) {
-          return `💥 ¡Alerta! ${partnerName} disparó en ${coords} y hundió tu ${lastShot.sunkShipName}. Vuelve a tirar ${partnerName}.`;
-        }
-        return `💥 ¡Alerta! ${partnerName} le dio a tu barco en ${coords}. Vuelve a tirar ${partnerName}.`;
-      }
-      return `🌊 ${partnerName} disparó en ${coords} y cayó al agua. ¡Tu turno de atacar! 🎯`;
-    }
-  }, [lastShot, isMyTurn, currentProfile, partnerName]);
 
   const isShipSunk = (ship: BattleshipShip, shots: number[]) =>
     ship.cells.every((c) => shots.includes(c));
@@ -1665,38 +1627,7 @@ export const BattleshipArena: React.FC<Props> = ({
               >
                 Mis Barcos ({currentProfile === 'Karla' ? remainingShipsKarla : remainingShipsJavier}/5)
               </Text>
-              {lastShot && lastShot.shooter !== currentProfile && lastShot.hit && (
-                <View style={styles.damageBadge}>
-                  <Text style={styles.damageBadgeText}>🔥</Text>
-                </View>
-              )}
             </TouchableOpacity>
-          </View>
-
-          {/* Banner de Estado del Combate en Vivo */}
-          <View
-            style={[
-              styles.battleStatusBanner,
-              { width: exactFrameWidth },
-              lastShot?.hit && styles.battleStatusBannerHit,
-              isMyTurn && !lastShot?.hit && styles.battleStatusBannerMyTurn,
-            ]}
-          >
-            <Ionicons
-              name={lastShot?.hit ? 'flame' : isMyTurn ? 'locate' : 'time-outline'}
-              size={18}
-              color={lastShot?.hit ? '#f59e0b' : isMyTurn ? '#38bdf8' : '#94a3b8'}
-              style={{ marginRight: 6 }}
-            />
-            <Text
-              style={[
-                styles.battleStatusText,
-                lastShot?.hit && { color: '#fef08a' },
-                isMyTurn && !lastShot?.hit && { color: '#e0f2fe' },
-              ]}
-            >
-              {battleStatusMessage}
-            </Text>
           </View>
 
           {/* Tablero de Combate */}
@@ -2235,42 +2166,6 @@ const styles = StyleSheet.create({
   },
   battleDockContainer: {
     marginTop: 12,
-  },
-  battleStatusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.94)',
-    borderRadius: 14,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.25)',
-  },
-  battleStatusBannerHit: {
-    backgroundColor: 'rgba(124, 45, 18, 0.95)',
-    borderColor: '#f97316',
-  },
-  battleStatusBannerMyTurn: {
-    backgroundColor: 'rgba(12, 74, 110, 0.95)',
-    borderColor: '#38bdf8',
-  },
-  battleStatusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#cbd5e1',
-    flex: 1,
-    lineHeight: 16,
-  },
-  damageBadge: {
-    marginLeft: 4,
-    backgroundColor: '#ef4444',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  damageBadgeText: {
-    fontSize: 10,
   },
   hitMarkerOverlay: {
     position: 'absolute',
