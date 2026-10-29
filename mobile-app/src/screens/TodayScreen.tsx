@@ -909,26 +909,26 @@ export const TodayScreen: React.FC = () => {
                     {message && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                         {parsedTodayLetter.photoUrl && (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: `${colors.primary}18`, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 }}>
-                            <Ionicons name="image" size={11} color={colors.primary} />
-                            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}>Foto adjunta</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: `${colors.primary}18`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999 }}>
+                            <Ionicons name="image" size={10} color={colors.primary} />
+                            <Text style={{ fontSize: 9.5, fontWeight: '700', color: colors.primary }}>Foto</Text>
                           </View>
                         )}
                         {currentLetterExtra?.reaction && (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.surface, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.surface, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999 }}>
                             <Text style={{ fontSize: 10.5 }}>{currentLetterExtra.reaction}</Text>
                             {currentLetterExtra.replyText ? (
-                              <Text style={{ fontSize: 10, color: colors.textSecondary, maxWidth: 110 }} numberOfLines={1}>
+                              <Text style={{ fontSize: 9.5, color: colors.textSecondary, maxWidth: 110 }} numberOfLines={1}>
                                 “{currentLetterExtra.replyText}”
                               </Text>
                             ) : null}
                           </View>
                         )}
                         <Text
-                          style={[styles.readMoreHint, { color: colors.primary, marginTop: 0 }]}
+                          style={[styles.readMoreHint, { color: colors.textMuted, marginTop: 0 }]}
                           maxFontSizeMultiplier={1.2}
                         >
-                          {parsedTodayLetter.photoUrl ? 'Ver foto y reaccionar 💌' : 'Toca para abrir y reaccionar 💌'}
+                          Toca para leer completa
                         </Text>
                       </View>
                     )}
