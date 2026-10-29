@@ -1081,6 +1081,26 @@ export const GamesScreen: React.FC = () => {
     }
   }, [bs.phase, currentProfile, bs.fleetKarla, bs.fleetJavier]);
 
+  const prevBsWinnerRef = useRef<'Karla' | 'Javier' | null>(bs.winner || null);
+
+  useEffect(() => {
+    const currentWinner = bs.winner || null;
+    if (currentWinner && prevBsWinnerRef.current === null && activeGame === 'battleship') {
+      const didIWin = currentWinner === currentProfile;
+      triggerVictoryCelebration({
+        winnerName: getDisplayName(currentWinner),
+        gameTitle: didIWin ? '¡Flota Enemiga Hundida!' : '¡Fin de la Batalla Naval!',
+        pointsEarned: didIWin ? UNIFIED_GAME_REWARDS.POINTS_PER_WIN : 0,
+        subtitle: didIWin
+          ? 'Destruiste los 5 buques de guerra en el radar 10x10.'
+          : `${getDisplayName(currentWinner)} hundió toda tu flota. Puedes volver al tablero para ver dónde estaban sus barcos.`,
+        color: currentWinner === 'Karla' ? '#9333ea' : '#0284c7',
+        onPlayAgain: () => void handleResetBattleship(),
+      });
+    }
+    prevBsWinnerRef.current = currentWinner;
+  }, [bs.winner, activeGame, currentProfile, getDisplayName]);
+
   // Helper inteligente sin colisiones ni errores: busca la casilla libre más cercana en el tablero 10x10
   const findNearestValidCellsForShip = (
     fleet: BattleshipShip[],
@@ -1382,16 +1402,7 @@ export const GamesScreen: React.FC = () => {
       },
     });
 
-    if (nextWinner) {
-      triggerVictoryCelebration({
-        winnerName: getDisplayName(nextWinner),
-        gameTitle: '¡Flota Enemiga Hundida!',
-        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-        subtitle: 'Destruiste los 5 buques de guerra en el radar 10x10.',
-        color: nextWinner === 'Karla' ? '#9333ea' : '#0284c7',
-        onPlayAgain: () => void handleResetBattleship(),
-      });
-    }
+
   };
 
   // Renderizador de un segmento conectado de barco (Proa, Cubierta con Torreta, Popa)
@@ -2298,6 +2309,7 @@ export const GamesScreen: React.FC = () => {
             cb();
           }
         }}
+        onViewBoard={() => setVictoryCelebration(null)}
         onClose={() => {
           setVictoryCelebration(null);
           setActiveGame(null);

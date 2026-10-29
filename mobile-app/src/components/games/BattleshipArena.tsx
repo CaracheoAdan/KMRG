@@ -673,6 +673,9 @@ export const BattleshipArena: React.FC<Props> = ({
   useEffect(() => {
     if (bs.phase === 'battle') {
       setLocalSetupFleet(null);
+    } else if (bs.phase === 'finished') {
+      setLocalSetupFleet(null);
+      setRadarMode('attack');
     }
   }, [bs.phase]);
 
@@ -1600,7 +1603,7 @@ export const BattleshipArena: React.FC<Props> = ({
                   radarMode === 'attack' && { color: '#ffffff', fontWeight: '800' },
                 ]}
               >
-                Radar Ataque ({currentProfile === 'Karla' ? remainingShipsJavier : remainingShipsKarla}/5)
+                {bs.phase === 'finished' ? 'Tablero del Otro' : `Radar Ataque (${currentProfile === 'Karla' ? remainingShipsJavier : remainingShipsKarla}/5)`}
               </Text>
             </TouchableOpacity>
 
@@ -1766,9 +1769,10 @@ export const BattleshipArena: React.FC<Props> = ({
                 </View>
               ))}
 
-              {/* Si estamos en vista 'Mis Barcos', renderizar siluetas con impactos */}
-              {radarMode === 'fleet' &&
-                myFleet.map((ship) => {
+              {/* Renderizar barcos: en 'Mis Barcos' siempre, y en 'Tablero del Otro' al terminar para ver dónde estaban sus barcos */}
+              {(radarMode === 'fleet' ? myFleet : bs.phase === 'finished' ? enemyFleet : []).map(
+                (ship) => {
+                  const relevantShots = radarMode === 'fleet' ? enemyShots : myShots;
                   const isHoriz =
                     (ship.orientation ||
                       (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1
@@ -1783,7 +1787,7 @@ export const BattleshipArena: React.FC<Props> = ({
                   const visualLeft = minC * cellSize + coordsHeaderPx;
                   const visualTop = minR * cellSize;
 
-                  const isSunk = isShipSunk(ship, enemyShots);
+                  const isSunk = isShipSunk(ship, relevantShots);
 
                   return (
                     <View
@@ -1809,7 +1813,7 @@ export const BattleshipArena: React.FC<Props> = ({
 
                       {/* Marcadores de impacto en combate */}
                       {ship.cells.map((cellIdx) => {
-                        const hasShot = enemyShots.includes(cellIdx);
+                        const hasShot = relevantShots.includes(cellIdx);
                         if (!hasShot) return null;
                         const rOffset = Math.floor(cellIdx / 10) - minR;
                         const cOffset = (cellIdx % 10) - minC;

@@ -19,6 +19,7 @@ interface CelebrationProps {
   pointsEarned: number;
   subtitle: string;
   onPlayAgain: () => void;
+  onViewBoard?: () => void;
   onClose: () => void;
 }
 
@@ -42,6 +43,7 @@ export const CelebrationOverlay: React.FC<CelebrationProps> = ({
   pointsEarned,
   subtitle,
   onPlayAgain,
+  onViewBoard,
   onClose,
 }) => {
   const cardScale = useRef(new Animated.Value(0.75)).current;
@@ -190,6 +192,20 @@ export const CelebrationOverlay: React.FC<CelebrationProps> = ({
               </LinearGradient>
             </TouchableOpacity>
 
+            {onViewBoard && (
+              <TouchableOpacity
+                onPress={() => {
+                  void triggerGameHaptic('selection');
+                  onViewBoard();
+                }}
+                style={styles.viewBoardBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="eye-outline" size={16} color="#0284c7" />
+                <Text style={styles.viewBoardText}>Volver al Tablero</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               onPress={() => {
                 void triggerGameHaptic('light');
@@ -325,6 +341,22 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14.5,
     fontWeight: '800',
+  },
+  viewBoardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  viewBoardText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#0284c7',
   },
   closeBtn: {
     paddingVertical: 10,
