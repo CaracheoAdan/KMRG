@@ -561,7 +561,7 @@ export const LoveBookModal: React.FC<Props> = ({
                   <View style={styles.chapterDivider} />
                 </View>
 
-                {messages.slice(0, 3).map((m) => (
+                {messages.map((m) => (
                   <View key={m.id} style={styles.letterExcerptCard}>
                     <Ionicons name="quote" size={16} color="#f59e0b" style={{ marginBottom: 4 }} />
                     <Text style={styles.letterExcerptContent} numberOfLines={4}>
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   centerTimeLabelFull: {
-    fontSize: 19,
+    fontSize: 23,
     fontWeight: '900',
     letterSpacing: 1.2,
     textAlign: 'center',
@@ -830,12 +830,12 @@ const styles = StyleSheet.create({
   },
   centerDaysPillFull: {
     borderWidth: 1.5,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 22,
   },
   centerDaysPillTextFull: {
-    fontSize: 13,
+    fontSize: 18,
     fontWeight: '800',
     letterSpacing: 0.8,
   },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,11 +10,13 @@ import {
   Platform,
   Vibration,
   KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from './ui/Icon';
 import { TodaySongData, UserProfile } from '../types';
 import { FONTS } from '../theme/designSystem';
 import { useTheme } from '../contexts/ThemeContext';
+import { SongLinkPreview } from './features/SongLinkPreview';
 
 interface Props {
   song?: TodaySongData;
@@ -38,6 +40,7 @@ export const TodaySongWidget: React.FC<Props> = ({
   const [artist, setArtist] = useState('');
   const [dedication, setDedication] = useState('');
   const [url, setUrl] = useState('');
+  const songScrollRef = useRef<any>(null);
 
   const handleOpenModal = () => {
     if (song) {
@@ -154,15 +157,23 @@ export const TodaySongWidget: React.FC<Props> = ({
             </View>
           )}
 
-          <TouchableOpacity
-            onPress={handlePlaySong}
-            style={[styles.listenBtn, { backgroundColor: `${primaryColor}12` }]}
-          >
-            <Ionicons name="logo-youtube" size={16} color={primaryColor} />
-            <Text style={[styles.listenBtnText, { color: primaryColor }]}>
-              Escuchar en YouTube / Spotify
-            </Text>
-          </TouchableOpacity>
+          {song.url && isSafeHttpUrl(song.url) ? (
+            <SongLinkPreview
+              url={song.url}
+              fallbackTitle={song.title}
+              fallbackArtist={song.artist}
+            />
+          ) : (
+            <TouchableOpacity
+              onPress={handlePlaySong}
+              style={[styles.listenBtn, { backgroundColor: `${primaryColor}12` }]}
+            >
+              <Ionicons name="logo-youtube" size={16} color={primaryColor} />
+              <Text style={[styles.listenBtnText, { color: primaryColor }]}>
+                Escuchar en YouTube / Spotify
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -174,10 +185,10 @@ export const TodaySongWidget: React.FC<Props> = ({
         onRequestClose={() => setIsModalOpen(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Dedicar Canción de Hoy</Text>
               <TouchableOpacity
@@ -187,6 +198,12 @@ export const TodaySongWidget: React.FC<Props> = ({
                 <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
+
+            <ScrollView
+              ref={songScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
 
             <Text style={styles.inputLabel}>Título de la canción *</Text>
             <TextInput
@@ -210,6 +227,7 @@ export const TodaySongWidget: React.FC<Props> = ({
             <TextInput
               value={dedication}
               onChangeText={setDedication}
+              onFocus={() => setTimeout(() => songScrollRef.current?.scrollToEnd({ animated: true }), 180)}
               placeholder="¿Por qué pensaste en tu amor al escucharla?..."
               placeholderTextColor="#94a3b8"
               style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
@@ -220,11 +238,23 @@ export const TodaySongWidget: React.FC<Props> = ({
             <TextInput
               value={url}
               onChangeText={setUrl}
+              onFocus={() => setTimeout(() => songScrollRef.current?.scrollToEnd({ animated: true }), 180)}
               placeholder="https://open.spotify.com/... o https://youtu.be/..."
               placeholderTextColor="#94a3b8"
               autoCapitalize="none"
               style={styles.input}
             />
+
+            {isSafeHttpUrl(url) ? (
+              <View style={{ marginBottom: 12 }}>
+                <SongLinkPreview
+                  url={url}
+                  fallbackTitle={title.trim() || undefined}
+                  fallbackArtist={artist.trim() || undefined}
+                  compact
+                />
+              </View>
+            ) : null}
 
             <TouchableOpacity
               onPress={handleSave}
@@ -240,6 +270,7 @@ export const TodaySongWidget: React.FC<Props> = ({
               <Ionicons name="heart" size={16} color="#ffffff" />
               <Text style={styles.saveBtnText}>Dedicar a mi Amor</Text>
             </TouchableOpacity>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>

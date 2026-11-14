@@ -29,9 +29,6 @@ jobs:
       - name: Typecheck Backend
         run: npx tsc --noEmit -p backend
 
-      - name: Typecheck Admin Web
-        run: npx tsc --noEmit -p admin-web
-
       - name: Typecheck Mobile App
         run: cd mobile-app && npx tsc --noEmit
 

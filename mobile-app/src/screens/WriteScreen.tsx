@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  Keyboard,
   Animated,
   Modal,
   Image,
@@ -19,17 +20,24 @@ import * as ImagePicker from 'expo-image-picker';
 import { SupabaseMediaService } from '../services/SupabaseMediaService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../components/ui/Icon';
 import { PressableScale, EmptyState } from '../components/ui/Kit';
 import { UserProfile, Message } from '../types';
-import { createSupabaseMessage, updateSupabaseMessage } from '../services/SupabaseService';
+import {
+  createSupabaseMessage,
+  updateSupabaseMessage,
+  deleteSupabaseMessage,
+} from '../services/SupabaseService';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { AppHeader } from '../components/AppHeader';
 import { useTheme } from '../contexts/ThemeContext';
+import { useProfile } from '../contexts/ProfileContext';
 import {
   getCurrentProfile,
   toLocalDateString,
   getSentMessages,
+  getRawMessageById,
   formatDisplayDate,
   encodeLetterWithPhoto,
   parseLetterContentAndPhoto,
@@ -53,10 +61,44 @@ const PRESET_COLORS = [
   { hex: '#f4a261', label: 'Cálido' },
 ];
 
+const MiniPartnerAvatar: React.FC<{
+  uri?: string | null;
+  name: string;
+  size?: number;
+  bgColor: string;
+  textColor: string;
+}> = ({ uri, name, size = 34, bgColor, textColor }) => {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: bgColor,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ fontSize: Math.max(10, Math.round(size * 0.45)), fontWeight: '800', color: textColor }}>
+        {name.charAt(0).toUpperCase()}
+      </Text>
+    </View>
+  );
+};
+
 export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { colors, isDark, primaryColor } = useTheme();
+  const { profile: ctxProfile, getDisplayName, getAvatarUri } = useProfile();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
-  const [profile, setProfile] = useState<UserProfile>('Javier');
+  const [profile, setProfile] = useState<UserProfile>(ctxProfile || 'Javier');
   const [activeTab, setActiveTab] = useState<'write' | 'sent'>('write');
   const [content, setContent] = useState('');
 
@@ -78,8 +120,20 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   const sealAnim = useRef(new Animated.Value(0)).current;
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const [sentLetters, setSentLetters] = useState<Message[]>([]);
-  const [sentPage, setSentPage] = useState(0);
+  const [previewSentLetter, setPreviewSentLetter] = useState<Message | null>(null);
 
   const loadSentLetters = async (userProfile: UserProfile) => {
     try {
@@ -92,16 +146,26 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   };
 
   useEffect(() => {
+    if (ctxProfile) {
+      setProfile(ctxProfile);
+      void loadSentLetters(ctxProfile);
+      return;
+    }
     getCurrentProfile().then((p) => {
       if (p) {
         setProfile(p);
         void loadSentLetters(p);
       }
     });
-  }, []);
+  }, [ctxProfile]);
 
   const recipient: UserProfile = profile === 'Javier' ? 'Karla' : 'Javier';
-  const recipientDisplay = profile === 'Javier' ? 'Karlita' : 'Javier';
+  const recipientDisplay = getDisplayName(recipient);
+  const recipientAvatarUri = getAvatarUri(recipient);
+  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const todayStrNow = getTodayString();
+  const sealedCount = sentLetters.filter((l) => toLocalDateString(l.scheduled_date) > todayStrNow).length;
+  const deliveredCount = sentLetters.length - sealedCount;
 
   const isTodaySelected = scheduledDate === getTodayString();
   const todayLetter = sentLetters.find(
@@ -134,9 +198,16 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   };
 
-  const handleStartEditLetter = (letter: Message) => {
+  const handleStartEditLetter = async (letter: Message) => {
     const extraPhoto = homeState.letterExtras?.[letter.id]?.photoUrl;
-    const parsed = parseLetterContentAndPhoto(letter.content, extraPhoto);
+    const rawLetter = await getRawMessageById(letter.id);
+    const sourceContent =
+      rawLetter && rawLetter.content && rawLetter.content !== '🔒 Sorpresa sellada 💌'
+        ? rawLetter.content
+        : letter.content === '🔒 Sorpresa sellada 💌'
+        ? ''
+        : letter.content;
+    const parsed = parseLetterContentAndPhoto(sourceContent, extraPhoto);
     setEditingMessageId(letter.id);
     setContent(parsed.text);
     setSelectedPhotoUri(parsed.photoUrl);
@@ -153,9 +224,47 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     setActiveTab('sent');
   };
 
+  const handleDeleteLetter = (letter: Message) => {
+    const isTodayLetter = toLocalDateString(letter.scheduled_date) === getTodayString();
+    Alert.alert(
+      '¿Eliminar carta?',
+      isTodayLetter
+        ? '¿Seguro que deseas eliminar tu carta de hoy? Esta acción no se puede deshacer.'
+        : `¿Seguro que deseas eliminar la carta programada para el ${formatDisplayDate(letter.scheduled_date)}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await deleteSupabaseMessage(letter.id);
+            if (ok) {
+              if (previewSentLetter?.id === letter.id) {
+                setPreviewSentLetter(null);
+              }
+              if (editingMessageId === letter.id) {
+                setEditingMessageId(null);
+                setContent('');
+                setSelectedPhotoUri(null);
+                setScheduledDate(getTodayString());
+              }
+              await loadSentLetters(profile);
+            } else {
+              Alert.alert('Error', 'No se pudo eliminar la carta.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSubmit = async () => {
     if (!content.trim()) {
       Alert.alert('Mensaje vacío', 'Por favor escribe lo que sientes antes de enviar.');
+      return;
+    }
+    if (content.trim() === '🔒 Sorpresa sellada 💌') {
+      Alert.alert('Aviso', 'Escribe el nuevo contenido de tu carta antes de guardar.');
       return;
     }
 
@@ -179,6 +288,8 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         });
 
         if (result.success) {
+          const safePhoto =
+            finalPhotoUrl && !finalPhotoUrl.startsWith('data:') ? finalPhotoUrl : undefined;
           void getHomeState().then((home) => {
             const prevExtra = home.letterExtras?.[editingMessageId];
             const nextExtras = {
@@ -186,7 +297,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               [editingMessageId]: {
                 ...(prevExtra || { messageId: editingMessageId }),
                 messageId: editingMessageId,
-                photoUrl: finalPhotoUrl || undefined,
+                photoUrl: safePhoto,
                 updatedAt: new Date().toISOString(),
               },
             };
@@ -232,12 +343,14 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
         if (result.success) {
           const savedId = result.data?.id;
+          const safePhoto =
+            finalPhotoUrl && !finalPhotoUrl.startsWith('data:') ? finalPhotoUrl : undefined;
           void getHomeState().then((home) => {
             const nextExtras = { ...(home.letterExtras || {}) };
-            if (savedId && finalPhotoUrl) {
+            if (savedId && safePhoto) {
               nextExtras[savedId] = {
                 messageId: savedId,
-                photoUrl: finalPhotoUrl,
+                photoUrl: safePhoto,
                 updatedAt: new Date().toISOString(),
               };
             }
@@ -258,19 +371,14 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             void saveHomeState(profile, nextHome);
           });
 
-          void getHomeState().then((home) => {
-            const token = home?.pushTokens?.[recipient];
-            if (token) {
-              void sendPartnerPushNotification(
-                token,
-                `KMRG 💌 Carta de ${profile === 'Karla' ? 'Karlita' : 'Javier'}`,
-                isToday
-                  ? `¡Te ha dejado una carta especial para hoy!`
-                  : `Te ha escrito una carta especial para el ${scheduledDate}.`,
-                { type: 'SEALED_LETTER', sender: profile }
-              );
-            }
-          });
+          void sendPartnerPushNotification(
+            recipient,
+            `KMRG 💌 Carta de ${profile === 'Karla' ? 'Karlita' : 'Javier'}`,
+            isToday
+              ? `¡Te ha dejado una carta especial para hoy!`
+              : `Te ha escrito una carta especial para el ${scheduledDate}.`,
+            { type: 'SEALED_LETTER', sender: profile }
+          );
 
           setIsSealingEnvelope(true);
           Animated.sequence([
@@ -301,29 +409,55 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   };
 
-  const PAGE_SIZE = 3;
-  const totalPages = Math.max(1, Math.ceil(sentLetters.length / PAGE_SIZE));
-  const visibleSent = sentLetters.slice(sentPage * PAGE_SIZE, (sentPage + 1) * PAGE_SIZE);
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         style={styles.fixedViewport}
       >
-        {/* Cabecera Compacta + Selector de Vista */}
-        <View style={styles.topRow}>
-          <View style={{ flex: 1, marginRight: 8 }}>
-            <Text style={styles.title}>Para {recipientDisplay}</Text>
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {editingMessageId ? 'Editando tu carta de hoy' : 'Cartas del día y sorpresas programadas'}
-            </Text>
+        {/* Hero Editorial + Selector Segmentado */}
+        <LinearGradient
+          colors={
+            isDark
+              ? ['rgba(255,255,255,0.06)', colors.surface]
+              : [colors.primaryLight, colors.surface]
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.writeHeroBanner, { borderColor: colors.border }]}
+        >
+          <View style={styles.writeHeroTop}>
+            <View style={[styles.recipientAvatarRing, { borderColor: `${themeColor}55` }]}>
+              <MiniPartnerAvatar
+                uri={recipientAvatarUri}
+                name={recipientDisplay}
+                size={40}
+                bgColor={colors.primaryLight}
+                textColor={colors.primary}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.writeHeroEyebrow, { color: colors.primary }]}>
+                {editingMessageId ? 'EDITANDO CARTA' : 'BUZÓN DE AMOR'}
+              </Text>
+              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                Para {recipientDisplay}
+              </Text>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                {editingMessageId
+                  ? isTodaySelected
+                    ? 'Modificando tu carta de hoy'
+                    : `Carta programada (${formatDisplayDate(scheduledDate)})`
+                  : 'Cartas del día y sorpresas con candado'}
+              </Text>
+            </View>
           </View>
 
-          <View style={[styles.tabSwitch, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderWidth: 1 }]}>
+          <View style={[styles.tabSwitch, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <PressableScale
               onPress={() => {
                 if (editingMessageId) setEditingMessageId(null);
@@ -331,14 +465,23 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               }}
               style={[
                 styles.tabBtn,
-                activeTab === 'write' && { backgroundColor: primaryColor },
+                activeTab === 'write'
+                  ? { backgroundColor: primaryColor }
+                  : { backgroundColor: colors.surfaceAlt },
               ]}
               scaleTo={0.96}
             >
+              <Ionicons
+                name={activeTab === 'write' ? 'create-outline' : 'pencil'}
+                size={16}
+                color={activeTab === 'write' ? colors.primaryOn : colors.textMuted}
+              />
               <Text
                 style={[
                   styles.tabBtnText,
-                  activeTab === 'write' ? { color: colors.primaryOn, fontWeight: '800' } : { color: colors.textSecondary },
+                  activeTab === 'write'
+                    ? { color: colors.primaryOn, fontWeight: '800' }
+                    : { color: colors.textSecondary },
                 ]}
               >
                 Escribir
@@ -346,36 +489,55 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             </PressableScale>
             <PressableScale
               onPress={() => {
-                setSentPage(0);
                 setActiveTab('sent');
               }}
               style={[
                 styles.tabBtn,
-                activeTab === 'sent' && { backgroundColor: primaryColor },
+                activeTab === 'sent'
+                  ? { backgroundColor: primaryColor }
+                  : { backgroundColor: colors.surfaceAlt },
               ]}
               scaleTo={0.96}
             >
+              <Ionicons
+                name={activeTab === 'sent' ? 'mail-open' : 'mail-outline'}
+                size={16}
+                color={activeTab === 'sent' ? colors.primaryOn : colors.textMuted}
+              />
               <Text
                 style={[
                   styles.tabBtnText,
-                  activeTab === 'sent' ? { color: colors.primaryOn, fontWeight: '800' } : { color: colors.textSecondary },
+                  activeTab === 'sent'
+                    ? { color: colors.primaryOn, fontWeight: '800' }
+                    : { color: colors.textSecondary },
                 ]}
               >
                 Enviadas ({sentLetters.length})
               </Text>
             </PressableScale>
           </View>
-        </View>
+        </LinearGradient>
 
         {activeTab === 'write' ? (
-          <View style={styles.writeViewport}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[
+              styles.writeViewport,
+              { flexGrow: 1 },
+              isKeyboardVisible && { paddingBottom: 24 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Banner cuando se está editando la carta desde Enviadas */}
             {editingMessageId && (
               <View style={[styles.editingBanner, { backgroundColor: `${primaryColor}18`, borderColor: `${primaryColor}40` }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                  <Ionicons name="create" size={16} color={primaryColor} />
+                  <Ionicons name="create-outline" size={16} color={primaryColor} />
                   <Text style={[styles.editingBannerText, { color: primaryColor }]} numberOfLines={1}>
-                    Editando carta de hoy ({formatDisplayDate(scheduledDate)})
+                    {isTodaySelected
+                      ? `Editando carta de hoy (${formatDisplayDate(scheduledDate)})`
+                      : `Editando carta programada (${formatDisplayDate(scheduledDate)})`}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelEditBtn}>
@@ -384,36 +546,47 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               </View>
             )}
 
-            {/* Hoja de Carta / Papel con Previsualización del Sobre */}
+            {/* Hoja de Carta Editorial */}
             <View
               style={[
                 styles.paperSheet,
                 {
                   backgroundColor: colors.paper,
-                  borderColor: themeColor,
+                  borderColor: colors.border,
+                  borderTopColor: themeColor,
                   borderTopWidth: 4,
                 },
               ]}
             >
-              {/* Banda decorativa que previsualiza el color del sobre seleccionado */}
-              <View style={[styles.envelopeFlapAccent, { backgroundColor: themeColor }]}>
-                <Ionicons name="mail" size={12} color="#ffffff" />
-                <Text style={styles.envelopeFlapText}>
-                  Sobre {PRESET_COLORS.find((c) => c.hex === themeColor)?.label || ''}
-                </Text>
+              {/* Banda superior tipo sello postal */}
+              <View style={styles.paperTopStampRow}>
+                <View style={[styles.envelopeFlapAccent, { backgroundColor: themeColor }]}>
+                  <Ionicons name="mail" size={12} color="#ffffff" />
+                  <Text style={styles.envelopeFlapText}>
+                    Sobre {PRESET_COLORS.find((c) => c.hex === themeColor)?.label || 'Especial'}
+                  </Text>
+                </View>
+
+                <View style={[styles.paperStampBadge, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                  <Ionicons
+                    name={isTodaySelected ? 'sparkles' : 'lock-closed'}
+                    size={11}
+                    color={themeColor}
+                  />
+                  <Text style={[styles.paperDateStamp, { color: colors.textSecondary }]}>
+                    {formatDisplayDate(scheduledDate, { day: 'numeric', month: 'short' })}
+                  </Text>
+                </View>
               </View>
 
               {/* Encabezado decorativo de la carta */}
               <View style={styles.paperHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Ionicons name="heart" size={14} color={themeColor} />
-                  <Text style={[styles.paperRecipient, { color: colors.textSecondary }]}>
-                    Para {recipientDisplay}
+                  <Text style={[styles.paperRecipient, { color: colors.text }]}>
+                    Querid{recipient === 'Karla' ? 'a' : 'o'} {recipientDisplay}:
                   </Text>
                 </View>
-                <Text style={[styles.paperDateStamp, { color: colors.textMuted }]}>
-                  {formatDisplayDate(scheduledDate, { day: 'numeric', month: 'short' })}
-                </Text>
               </View>
 
               {/* Área de texto en la hoja */}
@@ -429,15 +602,20 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
               {/* Vista previa de foto adjunta si existe */}
               {selectedPhotoUri && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 4, padding: 6, borderRadius: 12, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border }}>
+                <View
+                  style={[
+                    styles.attachedPhotoCard,
+                    { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+                  ]}
+                >
                   <Image
                     source={{ uri: selectedPhotoUri }}
-                    style={{ width: 46, height: 46, borderRadius: 8 }}
+                    style={{ width: 48, height: 48, borderRadius: 10 }}
                     resizeMode="cover"
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
-                      📸 Fotografía adjunta a la carta
+                    <Text style={{ fontSize: 12.5, fontWeight: '700', color: colors.text }}>
+                      Fotografía adjunta
                     </Text>
                     <Text style={{ fontSize: 11, color: colors.textMuted }}>
                       Se revelará al abrir el sobre
@@ -457,17 +635,13 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <View style={[styles.paperFooter, { justifyContent: 'space-between', alignItems: 'center' }]}>
                 <TouchableOpacity
                   onPress={() => void handlePickLetterPhoto()}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 5,
-                    paddingHorizontal: 10,
-                    paddingVertical: 5,
-                    borderRadius: 999,
-                    backgroundColor: `${themeColor}18`,
-                    borderWidth: 1,
-                    borderColor: `${themeColor}45`,
-                  }}
+                  style={[
+                    styles.attachPhotoPill,
+                    {
+                      backgroundColor: `${themeColor}18`,
+                      borderColor: `${themeColor}45`,
+                    },
+                  ]}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="camera" size={14} color={themeColor} />
@@ -476,7 +650,9 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   </Text>
                 </TouchableOpacity>
                 <Text style={[styles.paperCharCounter, { color: colors.textMuted }]}>
-                  {content.length > 0 ? `${content.length} caracteres` : 'Escribe con el corazón'}
+                  {content.length > 0
+                    ? `${wordCount} ${wordCount === 1 ? 'palabra' : 'palabras'} • ${content.length}`
+                    : 'Escribe con el corazón'}
                 </Text>
               </View>
             </View>
@@ -486,18 +662,26 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               {/* Selector de Fecha Prominente */}
               <PressableScale
                 onPress={() => setShowDatePicker(true)}
-                style={[styles.datePickerProminent, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                style={[
+                  styles.datePickerProminent,
+                  {
+                    backgroundColor: isTodaySelected ? colors.surfaceAlt : `${themeColor}10`,
+                    borderColor: isTodaySelected ? colors.border : `${themeColor}45`,
+                  },
+                ]}
                 scaleTo={0.97}
                 accessibilityLabel="Seleccionar fecha de apertura"
               >
-                <View style={[styles.dateIconCircle, { backgroundColor: `${colors.primary}18` }]}>
-                  <Ionicons name="calendar" size={18} color={colors.primary} />
+                <View style={[styles.dateIconCircle, { backgroundColor: `${themeColor}1C` }]}>
+                  <Ionicons name={isTodaySelected ? 'calendar' : 'lock-closed'} size={17} color={themeColor} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.dateLabelMini, { color: colors.textMuted }]}>FECHA DE ENTREGA / DESBLOQUEO</Text>
+                  <Text style={[styles.dateLabelMini, { color: colors.textMuted }]}>
+                    FECHA DE ENTREGA / DESBLOQUEO
+                  </Text>
                   <Text style={[styles.datePickerProminentText, { color: colors.text }]} numberOfLines={1}>
                     {isTodaySelected
-                      ? '✨ Hoy mismo (Entrega inmediata)'
+                      ? 'Hoy mismo (Entrega inmediata)'
                       : `Se abrirá el ${formatDisplayDate(scheduledDate, { day: 'numeric', month: 'short', year: 'numeric' })}`}
                   </Text>
                 </View>
@@ -506,9 +690,14 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
               {/* Color del sobre con etiqueta */}
               <View style={styles.colorPickerContainer}>
-                <Text style={[styles.colorPickerLabel, { color: colors.textSecondary }]}>
-                  Color del sobre
-                </Text>
+                <View style={styles.colorHeaderRow}>
+                  <Text style={[styles.colorPickerLabel, { color: colors.textSecondary }]}>
+                    Color del sobre
+                  </Text>
+                  <Text style={[styles.colorSelectedLabel, { color: themeColor }]}>
+                    {PRESET_COLORS.find((c) => c.hex === themeColor)?.label || 'Personalizado'}
+                  </Text>
+                </View>
                 <View style={styles.colorRow}>
                   {PRESET_COLORS.map((color) => {
                     const isSelected = themeColor === color.hex;
@@ -517,14 +706,15 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                         key={color.hex}
                         onPress={() => setThemeColor(color.hex)}
                         style={[
-                          styles.colorDot,
-                          { backgroundColor: color.hex },
-                          isSelected && styles.colorDotSelected,
+                          styles.colorDotOuter,
+                          isSelected && { borderColor: color.hex, borderWidth: 2 },
                         ]}
                         scaleTo={0.9}
                         accessibilityLabel={`Color ${color.label}`}
                       >
-                        {isSelected && <Ionicons name="checkmark" size={13} color="#ffffff" />}
+                        <View style={[styles.colorDot, { backgroundColor: color.hex }]}>
+                          {isSelected && <Ionicons name="checkmark" size={13} color="#ffffff" />}
+                        </View>
                       </PressableScale>
                     );
                   })}
@@ -541,12 +731,6 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               title="Fecha de Entrega o Apertura"
             />
 
-            {/* CONTROL DEL BOTÓN DE ACCIÓN:
-                1. Si estamos editando desde Enviadas: muestra 'Guardar Cambios de la Carta'.
-                2. Si es para hoy y YA fue enviada: NO muestra el botón de enviar directamente en Escribir;
-                   muestra la tarjeta informativa invitando a ir a Enviadas para editar en la tarjeta del día.
-                3. Si aún no se envía hoy o es una fecha futura: muestra el botón para enviar/sellar.
-            */}
             {editingMessageId ? (
               <PressableScale
                 onPress={() => void handleSubmit()}
@@ -563,13 +747,20 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={17} color={colors.primaryOn} />
-                    <Text style={styles.submitButtonText}>Guardar Cambios de la Carta</Text>
+                    <Text style={styles.submitButtonText}>
+                      {isTodaySelected ? 'Guardar Cambios de la Carta' : 'Guardar Cambios de Carta Programada'}
+                    </Text>
                   </>
                 )}
               </PressableScale>
             ) : isTodaySelected && hasSentToday ? (
-              <View style={[styles.alreadySentTodayCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-                <View style={[styles.alreadySentTodayIcon, { backgroundColor: '#2a9d8f18' }]}>
+              <View style={[styles.alreadySentTodayCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.alreadySentTodayIcon,
+                    { backgroundColor: isDark ? 'rgba(42, 157, 143, 0.2)' : '#e6f4ea' },
+                  ]}
+                >
                   <Ionicons name="checkmark-done-circle" size={22} color="#2a9d8f" />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -577,7 +768,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                     Carta de hoy ya enviada
                   </Text>
                   <Text style={[styles.alreadySentTodaySub, { color: colors.textMuted }]}>
-                    Para editarla, ve a la pestaña "Enviadas" y toca el botón de la tarjeta del día.
+                    Para editarla, entra a "Enviadas" y toca la tarjeta de hoy.
                   </Text>
                 </View>
                 <PressableScale
@@ -585,7 +776,7 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   style={[styles.goToSentBtn, { backgroundColor: primaryColor }]}
                   scaleTo={0.96}
                 >
-                  <Text style={[styles.goToSentBtnText, { color: colors.primaryOn }]}>Ver en Enviadas</Text>
+                  <Text style={[styles.goToSentBtnText, { color: colors.primaryOn }]}>Ver Enviadas</Text>
                 </PressableScale>
               </View>
             ) : (
@@ -594,103 +785,148 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 disabled={isSubmitting}
                 style={[
                   styles.submitButton,
-                  { backgroundColor: colors.primary },
+                  { backgroundColor: themeColor || colors.primary },
                   isSubmitting && { opacity: 0.7 },
                 ]}
                 scaleTo={0.97}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator size="small" color={colors.primaryOn} />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <>
                     <Ionicons
                       name={isTodaySelected ? 'paper-plane' : 'lock-closed'}
                       size={17}
-                      color={colors.primaryOn}
+                      color="#ffffff"
                     />
-                    <Text style={styles.submitButtonText}>
+                    <Text style={[styles.submitButtonText, { color: '#ffffff' }]}>
                       {isTodaySelected ? 'Enviar Carta para Hoy' : 'Sellar Carta con Candado'}
                     </Text>
                   </>
                 )}
               </PressableScale>
             )}
-          </View>
+          </ScrollView>
         ) : (
           <View style={styles.sentContainer}>
-            <View style={{ flex: 1, justifyContent: 'flex-start', gap: 10 }}>
-              {visibleSent.length === 0 ? (
-                <EmptyState
-                  icon="mail-outline"
-                  title="Sin cartas enviadas"
-                  message="Aún no has escrito cartas. Escribe una para hoy o prográmala para una fecha especial."
-                />
-              ) : (
-                visibleSent.map((letter) => {
+            {/* Resumen rápido bento de cartas enviadas */}
+            {sentLetters.length > 0 && (
+              <View style={styles.sentSummaryRow}>
+                <View style={[styles.sentStatPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Ionicons name="mail-open-outline" size={13} color={colors.primary} />
+                  <Text style={[styles.sentStatText, { color: colors.text }]}>
+                    {deliveredCount} entregadas
+                  </Text>
+                </View>
+                <View style={[styles.sentStatPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Ionicons name="lock-closed" size={13} color="#f59e0b" />
+                  <Text style={[styles.sentStatText, { color: colors.text }]}>
+                    {sealedCount} selladas
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {sentLetters.length === 0 ? (
+              <EmptyState
+                icon="mail-outline"
+                title="Sin cartas enviadas"
+                message="Aún no has escrito cartas. Escribe una para hoy o prográmala para una fecha especial."
+              />
+            ) : (
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 28, gap: 10 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {sentLetters.map((letter) => {
                   const letterDateStr = toLocalDateString(letter.scheduled_date);
                   const isTodayLetter = letterDateStr === getTodayString();
                   const isFuture = letterDateStr > getTodayString();
+                  const accent = letter.theme_color || colors.primary;
 
                   return (
-                    <View
+                    <TouchableOpacity
                       key={letter.id}
+                      activeOpacity={0.86}
+                      onPress={() => setPreviewSentLetter(letter)}
                       style={[
                         styles.sentCard,
                         {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
                           borderLeftWidth: 4,
-                          borderLeftColor: letter.theme_color || colors.primary,
+                          borderLeftColor: accent,
                         },
                       ]}
                     >
                       <View style={styles.sentTopRow}>
-                        <View style={styles.badgeWithDot}>
-                          <View
-                            style={[
-                              styles.colorIndicator,
-                              { backgroundColor: letter.theme_color || colors.primary },
-                            ]}
-                          />
-                          <Text style={styles.sentDateText}>
+                        <View style={[styles.badgeWithDot, { flex: 1, marginRight: 6 }]}>
+                          <View style={[styles.colorIndicator, { backgroundColor: accent }]} />
+                          <Text style={[styles.sentDateText, { color: colors.text }]} numberOfLines={1}>
                             {isTodayLetter
                               ? 'Carta de Hoy'
                               : isFuture
-                              ? `Se abrirá el ${formatDisplayDate(letter.scheduled_date)}`
+                              ? `Para el ${formatDisplayDate(letter.scheduled_date)}`
                               : `Entregada el ${formatDisplayDate(letter.scheduled_date)}`}
                           </Text>
                         </View>
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          {/* EL BOTÓN DE EDITAR SOLO APARECE EN LA TARJETA DEL DÍA (NO EN LAS PASADAS NI FUTURAS) */}
-                          {isTodayLetter && (
-                            <TouchableOpacity
-                              onPress={() => handleStartEditLetter(letter)}
-                              style={[styles.editTodayBtn, { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` }]}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Ionicons name="pencil" size={12} color={colors.primary} />
-                              <Text style={[styles.editTodayBtnText, { color: colors.primary }]}>
-                                Editar
-                              </Text>
-                            </TouchableOpacity>
+                          {(isTodayLetter || isFuture) && (
+                            <>
+                              <TouchableOpacity
+                                onPress={() => handleStartEditLetter(letter)}
+                                style={[
+                                  styles.editTodayBtn,
+                                  { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` },
+                                ]}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <Ionicons name="pencil" size={12} color={colors.primary} />
+                                <Text style={[styles.editTodayBtnText, { color: colors.primary }]}>
+                                  Editar
+                                </Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                onPress={() => handleDeleteLetter(letter)}
+                                style={[
+                                  styles.editTodayBtn,
+                                  {
+                                    backgroundColor: isDark ? 'rgba(225, 29, 72, 0.16)' : '#fef2f2',
+                                    borderColor: isDark ? 'rgba(225, 29, 72, 0.35)' : '#fecdd3',
+                                  },
+                                ]}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                accessibilityLabel="Eliminar carta"
+                              >
+                                <Ionicons name="trash-outline" size={12} color="#e11d48" />
+                              </TouchableOpacity>
+                            </>
                           )}
 
                           <View
                             style={[
                               styles.lockStatusBadge,
                               {
-                                backgroundColor: isFuture ? `${colors.primary}15` : '#e6f4ea',
+                                backgroundColor: isFuture
+                                  ? `${accent}18`
+                                  : isDark
+                                    ? 'rgba(42, 157, 143, 0.2)'
+                                    : '#e6f4ea',
                               },
                             ]}
                           >
                             <Ionicons
                               name={isFuture ? 'lock-closed' : 'checkmark-circle'}
                               size={12}
-                              color={isFuture ? colors.primary : '#2a9d8f'}
+                              color={isFuture ? accent : '#2a9d8f'}
                             />
                             <Text
                               style={[
                                 styles.lockStatusText,
-                                { color: isFuture ? colors.primary : '#2a9d8f' },
+                                { color: isFuture ? accent : '#2a9d8f' },
                               ]}
                             >
                               {isFuture ? 'Sellada' : 'Entregada'}
@@ -713,23 +949,35 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                             >
                               “{parsed.text}”
                             </Text>
-                            {(parsed.photoUrl || extra?.reaction || extra?.replyText) && !isFuture && (
-                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                            {(parsed.photoUrl || extra?.reaction || extra?.replyText) && (
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 }}>
                                 {parsed.photoUrl && (
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${colors.primary}15`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 }}>
                                     <Ionicons name="image" size={11} color={colors.primary} />
                                     <Text style={{ fontSize: 10.5, fontWeight: '700', color: colors.primary }}>Con foto</Text>
                                   </View>
                                 )}
-                                {extra?.reaction && (
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fdf2f8', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: '#fbcfe8' }}>
+                                {!isFuture && extra?.reaction && (
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      backgroundColor: isDark ? 'rgba(219, 39, 119, 0.16)' : '#fdf2f8',
+                                      paddingHorizontal: 8,
+                                      paddingVertical: 3,
+                                      borderRadius: 999,
+                                      borderWidth: 1,
+                                      borderColor: isDark ? 'rgba(244, 114, 182, 0.3)' : '#fbcfe8',
+                                    }}
+                                  >
                                     <Text style={{ fontSize: 11 }}>{extra.reaction}</Text>
-                                    <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#db2777' }}>
+                                    <Text style={{ fontSize: 10.5, fontWeight: '700', color: isDark ? '#f472b6' : '#db2777' }}>
                                       Reacción de {recipientDisplay}
                                     </Text>
                                   </View>
                                 )}
-                                {extra?.replyText ? (
+                                {!isFuture && extra?.replyText ? (
                                   <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.text, flex: 1 }} numberOfLines={1}>
                                     💬 “{extra.replyText}”
                                   </Text>
@@ -739,34 +987,10 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                           </>
                         );
                       })()}
-                    </View>
+                    </TouchableOpacity>
                   );
-                })
-              )}
-            </View>
-
-            {totalPages > 1 && (
-              <View style={styles.paginationRow}>
-                <TouchableOpacity
-                  disabled={sentPage === 0}
-                  onPress={() => setSentPage((p) => Math.max(0, p - 1))}
-                  style={[styles.pageBtn, sentPage === 0 && { opacity: 0.4 }]}
-                >
-                  <Ionicons name="chevron-back" size={16} color={colors.text} />
-                  <Text style={[styles.pageBtnText, { color: colors.text }]}>Anterior</Text>
-                </TouchableOpacity>
-                <Text style={styles.pageIndicator}>
-                  Página {sentPage + 1} de {totalPages}
-                </Text>
-                <TouchableOpacity
-                  disabled={sentPage >= totalPages - 1}
-                  onPress={() => setSentPage((p) => Math.min(totalPages - 1, p + 1))}
-                  style={[styles.pageBtn, sentPage >= totalPages - 1 && { opacity: 0.4 }]}
-                >
-                  <Text style={[styles.pageBtnText, { color: colors.text }]}>Siguiente</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.text} />
-                </TouchableOpacity>
-              </View>
+                })}
+              </ScrollView>
             )}
           </View>
         )}
@@ -935,6 +1159,190 @@ export const WriteScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Vista Previa Completa de Carta Enviada */}
+      <Modal
+        visible={Boolean(previewSentLetter)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewSentLetter(null)}
+      >
+        <View style={styles.sealingOverlay}>
+          {previewSentLetter && (() => {
+            const letterDateStr = toLocalDateString(previewSentLetter.scheduled_date);
+            const isTodayLetter = letterDateStr === getTodayString();
+            const isFuture = letterDateStr > getTodayString();
+            const extra = homeState.letterExtras?.[previewSentLetter.id];
+            const parsed = parseLetterContentAndPhoto(previewSentLetter.content, extra?.photoUrl);
+            const accent = previewSentLetter.theme_color || primaryColor;
+
+            return (
+              <View
+                style={[
+                  styles.sealedSuccessCard,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: accent,
+                    borderTopWidth: 5,
+                    maxWidth: 370,
+                    maxHeight: '84%',
+                    alignItems: 'stretch',
+                  },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <Ionicons name={isFuture ? 'lock-closed' : 'mail-open'} size={16} color={accent} />
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text, fontFamily: SERIF_FONT }} numberOfLines={1}>
+                      Para {recipientDisplay}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.lockStatusBadge,
+                      {
+                        backgroundColor: isFuture
+                          ? `${accent}18`
+                          : isDark
+                            ? 'rgba(42, 157, 143, 0.2)'
+                            : '#e6f4ea',
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={isFuture ? 'lock-closed' : 'checkmark-circle'}
+                      size={12}
+                      color={isFuture ? accent : '#2a9d8f'}
+                    />
+                    <Text
+                      style={[
+                        styles.lockStatusText,
+                        { color: isFuture ? accent : '#2a9d8f' },
+                      ]}
+                    >
+                      {isFuture ? 'Sellada' : 'Entregada'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={{ fontSize: 11.5, color: colors.textMuted, marginBottom: 10, fontWeight: '600' }}>
+                  {isFuture
+                    ? `Programada para abrirse el ${formatDisplayDate(previewSentLetter.scheduled_date, { day: 'numeric', month: 'long', year: 'numeric' })}`
+                    : `Fecha de entrega: ${formatDisplayDate(previewSentLetter.scheduled_date, { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                </Text>
+
+                <ScrollView
+                  style={{ maxHeight: 320 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      lineHeight: 24,
+                      color: colors.text,
+                      fontFamily: SERIF_FONT,
+                    }}
+                  >
+                    {parsed.text}
+                  </Text>
+
+                  {parsed.photoUrl && (
+                    <View style={{ marginTop: 12, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
+                      <Image
+                        source={{ uri: parsed.photoUrl }}
+                        style={{ width: '100%', height: 190 }}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  )}
+
+                  {(extra?.reaction || extra?.replyText) && (
+                    <View
+                      style={{
+                        marginTop: 12,
+                        padding: 10,
+                        borderRadius: 12,
+                        backgroundColor: colors.surfaceAlt,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        gap: 4,
+                      }}
+                    >
+                      {extra?.reaction && (
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+                          Reacción de {recipientDisplay}: {extra.reaction}
+                        </Text>
+                      )}
+                      {extra?.replyText ? (
+                        <Text style={{ fontSize: 12, fontStyle: 'italic', color: colors.textSecondary }}>
+                          💬 “{extra.replyText}”
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
+                </ScrollView>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 16 }}>
+                  {(isTodayLetter || isFuture) && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          const target = previewSentLetter;
+                          setPreviewSentLetter(null);
+                          handleStartEditLetter(target);
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          paddingHorizontal: 12,
+                          paddingVertical: 9,
+                          borderRadius: 12,
+                          backgroundColor: `${accent}18`,
+                          borderWidth: 1,
+                          borderColor: `${accent}40`,
+                        }}
+                      >
+                        <Ionicons name="pencil" size={14} color={accent} />
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: accent }}>Editar</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => handleDeleteLetter(previewSentLetter)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 5,
+                          paddingHorizontal: 10,
+                          paddingVertical: 9,
+                          borderRadius: 12,
+                          backgroundColor: isDark ? 'rgba(225, 29, 72, 0.16)' : '#fef2f2',
+                          borderWidth: 1,
+                          borderColor: isDark ? 'rgba(225, 29, 72, 0.35)' : '#fecdd3',
+                        }}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#e11d48" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <PressableScale
+                    onPress={() => setPreviewSentLetter(null)}
+                    style={[
+                      styles.sealedDoneBtn,
+                      { backgroundColor: accent, flex: 1, paddingVertical: 10 },
+                    ]}
+                    scaleTo={0.96}
+                  >
+                    <Text style={styles.sealedDoneBtnText}>Cerrar</Text>
+                  </PressableScale>
+                </View>
+              </View>
+            );
+          })()}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -947,14 +1355,31 @@ const makeStyles = (c: ThemePalette) =>
     fixedViewport: {
       flex: 1,
       paddingHorizontal: 16,
-      paddingTop: 4,
+      paddingTop: 6,
       justifyContent: 'space-between',
     },
-    topRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+    writeHeroBanner: {
+      borderRadius: 20,
+      padding: 12,
+      borderWidth: 1,
       marginBottom: 10,
+      gap: 10,
+    },
+    writeHeroTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    recipientAvatarRing: {
+      padding: 2,
+      borderRadius: 999,
+      borderWidth: 2,
+    },
+    writeHeroEyebrow: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      letterSpacing: 1.1,
+      marginBottom: 1,
     },
     title: {
       fontSize: 18,
@@ -963,23 +1388,31 @@ const makeStyles = (c: ThemePalette) =>
       fontFamily: SERIF_FONT,
     },
     subtitle: {
-      fontSize: 11,
+      fontSize: 11.5,
       color: c.textMuted,
       marginTop: 1,
     },
     tabSwitch: {
       flexDirection: 'row',
-      borderRadius: 12,
-      padding: 3,
+      borderRadius: 15,
+      padding: 4,
+      borderWidth: 1,
+      gap: 6,
     },
     tabBtn: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 10,
+      flex: 1,
+      minHeight: 42,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 11,
     },
     tabBtnText: {
-      fontSize: 11,
-      fontWeight: '800',
+      fontSize: 13.5,
+      fontWeight: '700',
       color: c.textSecondary,
     },
     editingBanner: {
@@ -1058,19 +1491,23 @@ const makeStyles = (c: ThemePalette) =>
       shadowOpacity: 0.08,
       shadowRadius: 14,
       elevation: 3,
-      minHeight: 200,
+      minHeight: 210,
       flex: 1,
       justifyContent: 'space-between',
+    },
+    paperTopStampRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
     },
     envelopeFlapAccent: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      alignSelf: 'flex-start',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 8,
-      marginBottom: 6,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 9,
     },
     envelopeFlapText: {
       fontSize: 10,
@@ -1078,6 +1515,15 @@ const makeStyles = (c: ThemePalette) =>
       color: '#ffffff',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
+    },
+    paperStampBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 9,
+      borderWidth: 1,
     },
     paperHeader: {
       flexDirection: 'row',
@@ -1089,13 +1535,14 @@ const makeStyles = (c: ThemePalette) =>
       marginBottom: 6,
     },
     paperRecipient: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '700',
       fontFamily: SERIF_FONT,
     },
     paperDateStamp: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 10.5,
+      fontWeight: '700',
+      textTransform: 'capitalize',
     },
     paperTextInput: {
       flex: 1,
@@ -1104,12 +1551,31 @@ const makeStyles = (c: ThemePalette) =>
       color: c.text,
       fontFamily: SERIF_FONT,
       textAlignVertical: 'top',
-      paddingVertical: 4,
+      paddingVertical: 6,
+    },
+    attachedPhotoCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 6,
+      marginBottom: 4,
+      padding: 8,
+      borderRadius: 14,
+      borderWidth: 1,
+    },
+    attachPhotoPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 11,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
     },
     paperFooter: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      paddingTop: 6,
+      paddingTop: 8,
       borderTopWidth: 1,
       borderTopColor: c.border,
       marginTop: 6,
@@ -1120,7 +1586,7 @@ const makeStyles = (c: ThemePalette) =>
     },
     envelopeConfigCard: {
       backgroundColor: c.surface,
-      borderRadius: 16,
+      borderRadius: 18,
       padding: 12,
       borderWidth: 1,
       borderColor: c.border,
@@ -1158,20 +1624,36 @@ const makeStyles = (c: ThemePalette) =>
     },
     colorPickerContainer: {
       alignItems: 'flex-start',
-      width: '100%',
+      width: '100%' as const,
+    },
+    colorHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%' as const,
+      marginBottom: 6,
     },
     colorPickerLabel: {
-      fontSize: 10,
+      fontSize: 10.5,
       fontWeight: '700',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
-      marginBottom: 4,
+    },
+    colorSelectedLabel: {
+      fontSize: 11,
+      fontWeight: '800',
     },
     colorRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
       flexWrap: 'wrap',
+    },
+    colorDotOuter: {
+      padding: 2,
+      borderRadius: 999,
+      borderWidth: 2,
+      borderColor: 'transparent',
     },
     colorDot: {
       width: 28,
@@ -1180,11 +1662,6 @@ const makeStyles = (c: ThemePalette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    colorDotSelected: {
-      transform: [{ scale: 1.12 }],
-      borderWidth: 2,
-      borderColor: '#ffffff',
-    },
     submitButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1192,7 +1669,7 @@ const makeStyles = (c: ThemePalette) =>
       gap: 8,
       paddingVertical: 14,
       borderRadius: 16,
-      marginTop: 10,
+      marginTop: 8,
       marginBottom: 6,
     },
     submitButtonText: {
@@ -1202,7 +1679,26 @@ const makeStyles = (c: ThemePalette) =>
     },
     sentContainer: {
       flex: 1,
-      justifyContent: 'space-between',
+    },
+    sentSummaryRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 10,
+    },
+    sentStatPill: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: 13,
+      borderWidth: 1,
+    },
+    sentStatText: {
+      fontSize: 12,
+      fontWeight: '700',
     },
     sentCard: {
       backgroundColor: c.surface,
@@ -1228,9 +1724,9 @@ const makeStyles = (c: ThemePalette) =>
       borderRadius: 4,
     },
     sentDateText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: c.textSecondary,
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: c.text,
       textTransform: 'capitalize',
     },
     editTodayBtn: {
@@ -1238,7 +1734,7 @@ const makeStyles = (c: ThemePalette) =>
       alignItems: 'center',
       gap: 3,
       paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingVertical: 4,
       borderRadius: 8,
       borderWidth: 1,
     },
@@ -1251,7 +1747,7 @@ const makeStyles = (c: ThemePalette) =>
       alignItems: 'center',
       gap: 4,
       paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingVertical: 4,
       borderRadius: 10,
     },
     lockStatusText: {
@@ -1259,35 +1755,9 @@ const makeStyles = (c: ThemePalette) =>
       fontWeight: '700',
     },
     sentSnippet: {
-      fontSize: 13,
+      fontSize: 13.5,
       fontFamily: SERIF_FONT,
-      lineHeight: 18,
-    },
-    paginationRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingTop: 8,
-    },
-    pageBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: c.surface,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: c.border,
-    },
-    pageBtnText: {
-      fontSize: 12,
-      fontWeight: '700',
-    },
-    pageIndicator: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: c.textSecondary,
+      lineHeight: 19,
     },
     sealingOverlay: {
       flex: 1,
@@ -1297,7 +1767,7 @@ const makeStyles = (c: ThemePalette) =>
       padding: 24,
     },
     sealingCard: {
-      width: '100%',
+      width: '100%' as const,
       maxWidth: 320,
       borderRadius: 24,
       padding: 24,
@@ -1342,7 +1812,7 @@ const makeStyles = (c: ThemePalette) =>
       lineHeight: 18,
     },
     sealedSuccessCard: {
-      width: '100%',
+      width: '100%' as const,
       maxWidth: 340,
       borderRadius: 26,
       paddingHorizontal: 22,
@@ -1405,7 +1875,7 @@ const makeStyles = (c: ThemePalette) =>
       paddingHorizontal: 6,
     },
     sealedInfoBox: {
-      width: '100%',
+      width: '100%' as const,
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 8,
@@ -1420,7 +1890,7 @@ const makeStyles = (c: ThemePalette) =>
       lineHeight: 16.5,
     },
     sealedDoneBtn: {
-      width: '100%',
+      width: '100%' as const,
       paddingVertical: 13,
       borderRadius: 16,
       alignItems: 'center',

@@ -1,0 +1,70 @@
+name: Mobile App EAS Build & OTA Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Acción a ejecutar en Expo EAS'
+        required: true
+        default: 'update'
+        type: choice
+        options:
+          - update
+          - build-apk
+          - build-production
+
+jobs:
+  eas:
+    name: Expo EAS (${{ inputs.action || 'update' }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Expo and EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install Mobile Dependencies
+        run: npm ci
+
+      - name: Typecheck Mobile App
+        run: npx tsc --noEmit
+
+      - name: Publish OTA Update
+        if: ${{ inputs.action == 'update' }}
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_MOBILE_API_KEY: ${{ secrets.EXPO_PUBLIC_MOBILE_API_KEY }}
+        run: eas update --auto --non-interactive
+
+      - name: Trigger EAS Android APK Build (Preview)
+        if: ${{ inputs.action == 'build-apk' }}
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_MOBILE_API_KEY: ${{ secrets.EXPO_PUBLIC_MOBILE_API_KEY }}
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+
+      - name: Trigger EAS Production Build
+        if: ${{ inputs.action == 'build-production' }}
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_MOBILE_API_KEY: ${{ secrets.EXPO_PUBLIC_MOBILE_API_KEY }}
+        run: eas build --platform all --profile production --non-interactive --no-wait

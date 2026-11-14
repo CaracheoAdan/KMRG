@@ -35,6 +35,20 @@ export interface PartnerProfileInfo {
   updatedAt?: string;
 }
 
+export type PetAccessoryType =
+  | 'none'
+  | 'crown'
+  | 'bow'
+  | 'flower'
+  | 'sunglasses'
+  | 'party_hat'
+  | 'beret'
+  | 'headphones'
+  | 'scarf'
+  | 'halo'
+  | 'wizard'
+  | 'loincloth';
+
 export interface CouplePetState {
   name: string;
   happiness: number; // 0..100
@@ -45,7 +59,7 @@ export interface CouplePetState {
   heartsFedJavier?: number;
   lastFedAt: string; // ISO string
   lastFedBy?: UserProfile;
-  accessory?: 'none' | 'crown' | 'party_hat' | 'flower' | 'sunglasses';
+  accessory?: PetAccessoryType;
   unlockedAccessories?: string[];
 }
 
@@ -93,6 +107,7 @@ export interface TimeCapsuleItem {
   themeColor: string;
   createdAt: string;
   openedAt?: string;
+  isOpened?: boolean;
   photoUrl?: string;
   audioUri?: string;
 }
@@ -156,6 +171,7 @@ export interface HomeState {
   nextEventTitle: string;
   nextEventDate: string; // YYYY-MM-DD
   nextEventTime?: string; // HH:mm opcional
+  nextEventUpdatedAt?: string;
   streakCount: number;
   lastInteractionDate: string;
   moods: {
@@ -274,6 +290,7 @@ export interface DrawGuessState {
   wordLength?: number;
   wordMask?: string;
   selectedWordHash?: string | null;
+  wordSalt?: string | null;
   almostHashes?: string[];
   drawerWord?: string | null;
   roundDeadline?: number | null; // UNIX timestamp (ms)
@@ -299,5 +316,81 @@ export interface DrawGuessState {
   winsKarla: number;
   winsJavier: number;
   updatedAt?: number | string;
+  strokesUpdatedAt?: number;
+  version?: number;
   isDrawingLive?: boolean;
+}
+
+// =========================================================================
+// DOMINÓ (DUELO CLÁSICO EN PAREJA - 28 FICHAS)
+// =========================================================================
+
+export interface DominoTile {
+  id: string;
+  left: number;
+  right: number;
+}
+
+export interface DominoPlacedTile {
+  tile: DominoTile;
+  placedLeft: number;
+  placedRight: number;
+}
+
+export interface DominoState {
+  phase: 'idle' | 'playing' | 'round_over';
+  board: DominoPlacedTile[];
+  openLeft: number | null;
+  openRight: number | null;
+  handKarla: DominoTile[];
+  handJavier: DominoTile[];
+  boneyard: DominoTile[];
+  turn: UserProfile;
+  winner: UserProfile | 'Empate' | null;
+  winsKarla: number;
+  winsJavier: number;
+  scoreKarla?: number;
+  scoreJavier?: number;
+  openingTileId?: string | null;
+  consecutivePasses: number;
+  lastAction?: string | null;
+  updatedAt?: number | string;
+  version?: number;
+}
+
+// =========================================================================
+// UNO (JUEGO DE CARTAS EN PAREJA)
+// =========================================================================
+
+export type UnoColor = 'red' | 'yellow' | 'green' | 'blue' | 'wild';
+export type UnoValue =
+  | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+  | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild_draw4';
+
+export interface UnoCard {
+  id: string;
+  color: UnoColor;
+  value: UnoValue;
+}
+
+export interface UnoState {
+  phase: 'idle' | 'playing' | 'round_over';
+  deck: UnoCard[];
+  discardPile: UnoCard[];
+  currentCard: UnoCard;
+  currentColor: 'red' | 'yellow' | 'green' | 'blue';
+  handKarla: UnoCard[];
+  handJavier: UnoCard[];
+  turn: UserProfile;
+  hasDrawnThisTurn?: boolean;
+  calledUnoKarla: boolean;
+  calledUnoJavier: boolean;
+  winner: UserProfile | null;
+  winsKarla: number;
+  winsJavier: number;
+  scoreKarla?: number;
+  scoreJavier?: number;
+  lastAction?: string | null;
+  updatedAt?: number | string;
+  version?: number;
 }

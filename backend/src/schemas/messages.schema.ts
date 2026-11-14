@@ -17,17 +17,24 @@ export const hexColorSchema = z
 export const createMessageSchema = z.object({
   sender: z.string().trim().min(1).max(50).optional().default('Javier'),
   recipient: z.string().trim().min(1).max(50).optional().default('Karla'),
-  content: z.string().trim().min(1, 'El contenido del mensaje no puede estar vacío').max(5000),
+  content: z.string().trim().min(1, 'El contenido del mensaje no puede estar vacío').max(500000),
   scheduled_date: dateOnlySchema,
   theme_color: hexColorSchema,
   is_read: z.boolean().optional().default(false),
+});
+
+export const bulkCreateMessagesSchema = z.object({
+  messages: z
+    .array(createMessageSchema)
+    .min(1, 'Debe enviar al menos un mensaje')
+    .max(366, 'No se pueden programar más de 366 mensajes por lote'),
 });
 
 export const updateMessageSchema = z
   .object({
     sender: z.string().trim().min(1).max(50).optional(),
     recipient: z.string().trim().min(1).max(50).optional(),
-    content: z.string().trim().min(1).max(5000).optional(),
+    content: z.string().trim().min(1).max(500000).optional(),
     scheduled_date: dateOnlySchema.optional(),
     theme_color: hexColorSchema.optional(),
     is_read: z.boolean().optional(),

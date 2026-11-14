@@ -10,11 +10,16 @@ import {
   Platform,
   Alert,
   KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 let AudioModule: any = null;
 let FileSystemModule: any = null;
 
-AudioModule = null;
+try {
+  AudioModule = require('expo-av')?.Audio ?? null;
+} catch {
+  AudioModule = null;
+}
 
 try {
   FileSystemModule = require('expo-file-system/legacy');
@@ -56,14 +61,40 @@ export const VoiceNoteWidget: React.FC<Props> = ({
 
   const recordingRef = useRef<any>(null);
   const soundRef = useRef<any>(null);
+  const webAudioRef = useRef<any>(null);
+  const webRecorderRef = useRef<any>(null);
+  const webStreamRef = useRef<any>(null);
+  const webChunksRef = useRef<Blob[]>([]);
   const recordedUriRef = useRef<string | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceScrollRef = useRef<any>(null);
 
   useEffect(() => {
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       if (playTimerRef.current) clearInterval(playTimerRef.current);
+      if (webAudioRef.current) {
+        try {
+          webAudioRef.current.pause();
+          webAudioRef.current.src = '';
+        } catch {}
+        webAudioRef.current = null;
+      }
+      if (webRecorderRef.current) {
+        try {
+          if (webRecorderRef.current.state !== 'inactive') {
+            webRecorderRef.current.stop();
+          }
+        } catch {}
+        webRecorderRef.current = null;
+      }
+      if (webStreamRef.current) {
+        try {
+          webStreamRef.current.getTracks().forEach((t: any) => t.stop());
+        } catch {}
+        webStreamRef.current = null;
+      }
       if (soundRef.current) {
         void soundRef.current.unloadAsync();
       }
@@ -96,6 +127,14 @@ export const VoiceNoteWidget: React.FC<Props> = ({
       playTimerRef.current = null;
     }
 
+    if (webAudioRef.current) {
+      try {
+        webAudioRef.current.pause();
+        webAudioRef.current.src = '';
+      } catch {}
+      webAudioRef.current = null;
+    }
+
     if (soundRef.current) {
       try {
         await soundRef.current.stopAsync();
@@ -117,18 +156,60 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     setPlayingId(note.id);
     setPlayProgress(0);
 
-    if (!note.audioUri || !AudioModule || !FileSystemModule) {
+    // 1. Reproducción real en Web / HTML5 Audio
+    const canUseWebAudio =
+      Boolean(note.audioUri) &&
+      (Platform.OS === 'web' ||
+        (typeof window !== 'undefined' && typeof (window as any).Audio !== 'undefined'));
+
+    if (canUseWebAudio && note.audioUri) {
+      try {
+        const HtmlAudio = (window as any).Audio;
+        const audio = new HtmlAudio(note.audioUri);
+        webAudioRef.current = audio;
+
+        audio.ontimeupdate = () => {
+          const fallbackDur = Math.max(3, note.durationSeconds || 5);
+          const dur =
+            audio.duration && Number.isFinite(audio.duration) && audio.duration > 0
+              ? audio.duration
+              : fallbackDur;
+          setPlayProgress(Math.min(1, audio.currentTime / dur));
+        };
+
+        audio.onended = () => {
+          setPlayingId(null);
+          setPlayProgress(0);
+          webAudioRef.current = null;
+        };
+
+        audio.onerror = () => {
+          webAudioRef.current = null;
+          simulatePlayback(note);
+        };
+
+        await audio.play();
+        return;
+      } catch (webErr) {
+        console.warn('Fallo al reproducir con HTML5 Audio, intentando fallback:', webErr);
+        webAudioRef.current = null;
+      }
+    }
+
+    // 2. Reproducción nativa con expo-av (si está disponible)
+    if (!note.audioUri || !AudioModule) {
       simulatePlayback(note);
       return;
     }
 
     try {
       let playUri = note.audioUri;
-      if (playUri.startsWith('data:audio/')) {
-        const cachePath = `${FileSystemModule.cacheDirectory}vn_${note.id}.m4a`;
+      if (playUri.startsWith('data:audio/') && FileSystemModule) {
+        const ext = playUri.startsWith('data:audio/webm') ? 'webm' : 'm4a';
+        const cachePath = `${FileSystemModule.cacheDirectory}vn_${note.id}.${ext}`;
         const base64Content = playUri.replace(/^data:audio\/[^;]+;base64,/, '');
         await FileSystemModule.writeAsStringAsync(cachePath, base64Content, {
-          encoding: FileSystemModule.EncodingType.Base64,
+          encoding: FileSystemModule.EncodingType?.Base64 || 'base64',
         });
         playUri = cachePath;
       }
@@ -160,26 +241,86 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     }
   };
 
+  const startVisualFallbackTimer = () => {
+    setIsRecording(true);
+    setRecordSeconds(0);
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate(40);
+    }
+    recordTimerRef.current = setInterval(() => {
+      setRecordSeconds((prev) => {
+        if (prev >= 30) {
+          void stopRecording();
+          return 30;
+        }
+        return prev + 1;
+      });
+      setLiveWaveform(
+        Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
+      );
+    }, 1000);
+  };
+
   const startRecording = async () => {
+    // 1. Grabación real en Web mediante MediaRecorder
+    const canUseWebRecorder =
+      typeof window !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      Boolean(navigator.mediaDevices?.getUserMedia) &&
+      typeof (window as any).MediaRecorder !== 'undefined';
+
+    if (Platform.OS === 'web' || (canUseWebRecorder && !AudioModule)) {
+      if (canUseWebRecorder) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          webStreamRef.current = stream;
+          webChunksRef.current = [];
+
+          const MediaRecorderClass = (window as any).MediaRecorder;
+          const mimeType =
+            typeof MediaRecorderClass.isTypeSupported === 'function' &&
+            MediaRecorderClass.isTypeSupported('audio/webm')
+              ? 'audio/webm'
+              : undefined;
+
+          const recorder = mimeType
+            ? new MediaRecorderClass(stream, { mimeType })
+            : new MediaRecorderClass(stream);
+
+          recorder.ondataavailable = (e: any) => {
+            if (e.data && e.data.size > 0) {
+              webChunksRef.current.push(e.data);
+            }
+          };
+
+          webRecorderRef.current = recorder;
+          recordedUriRef.current = null;
+          recorder.start(200);
+
+          setIsRecording(true);
+          setRecordSeconds(0);
+          recordTimerRef.current = setInterval(() => {
+            setRecordSeconds((prev) => {
+              if (prev >= 30) {
+                void stopRecording();
+                return 30;
+              }
+              return prev + 1;
+            });
+            setLiveWaveform(
+              Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
+            );
+          }, 1000);
+          return;
+        } catch (webRecErr) {
+          console.warn('No se pudo iniciar MediaRecorder web, usando fallback:', webRecErr);
+        }
+      }
+    }
+
     if (!AudioModule) {
       // Fallback visual fluido si el binario del teléfono no tiene el módulo nativo compilado
-      setIsRecording(true);
-      setRecordSeconds(0);
-      if (Platform.OS !== 'web') {
-        Vibration.vibrate(40);
-      }
-      recordTimerRef.current = setInterval(() => {
-        setRecordSeconds((prev) => {
-          if (prev >= 30) {
-            void stopRecording();
-            return 30;
-          }
-          return prev + 1;
-        });
-        setLiveWaveform(
-          Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
-        );
-      }, 1000);
+      startVisualFallbackTimer();
       return;
     }
 
@@ -238,20 +379,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
     } catch (err) {
       console.warn('Error iniciando grabación:', err);
       // Fallback a simulación si el dispositivo no soporta grabación
-      setIsRecording(true);
-      setRecordSeconds(0);
-      recordTimerRef.current = setInterval(() => {
-        setRecordSeconds((prev) => {
-          if (prev >= 30) {
-            stopRecording();
-            return 30;
-          }
-          return prev + 1;
-        });
-        setLiveWaveform(
-          Array.from({ length: 14 }, () => +(0.25 + Math.random() * 0.72).toFixed(2))
-        );
-      }, 1000);
+      startVisualFallbackTimer();
     }
   };
 
@@ -261,6 +389,59 @@ export const VoiceNoteWidget: React.FC<Props> = ({
       recordTimerRef.current = null;
     }
     setIsRecording(false);
+
+    if (webRecorderRef.current) {
+      const recorder = webRecorderRef.current;
+      webRecorderRef.current = null;
+      try {
+        await new Promise<void>((resolve) => {
+          const finalizeBlob = () => {
+            try {
+              const mime = recorder.mimeType || 'audio/webm';
+              const blob = new Blob(webChunksRef.current, { type: mime });
+              if (blob.size > 0 && typeof FileReader !== 'undefined') {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  if (typeof reader.result === 'string') {
+                    recordedUriRef.current = reader.result;
+                  }
+                  resolve();
+                };
+                reader.onerror = () => {
+                  if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                    recordedUriRef.current = URL.createObjectURL(blob);
+                  }
+                  resolve();
+                };
+                reader.readAsDataURL(blob);
+              } else if (blob.size > 0 && typeof URL !== 'undefined' && URL.createObjectURL) {
+                recordedUriRef.current = URL.createObjectURL(blob);
+                resolve();
+              } else {
+                resolve();
+              }
+            } catch {
+              resolve();
+            }
+          };
+
+          if (recorder.state !== 'inactive') {
+            recorder.onstop = finalizeBlob;
+            recorder.stop();
+          } else {
+            finalizeBlob();
+          }
+        });
+      } catch (e) {
+        console.warn('Error deteniendo MediaRecorder web:', e);
+      }
+      if (webStreamRef.current) {
+        try {
+          webStreamRef.current.getTracks().forEach((t: any) => t.stop());
+        } catch {}
+        webStreamRef.current = null;
+      }
+    }
 
     if (recordingRef.current) {
       try {
@@ -346,7 +527,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
           </Text>
         </View>
       ) : (
-        voiceNotes.slice(0, 3).map((note) => {
+        voiceNotes.map((note) => {
           const isPlaying = playingId === note.id;
           return (
             <View key={note.id} style={styles.voiceCard}>
@@ -418,10 +599,10 @@ export const VoiceNoteWidget: React.FC<Props> = ({
         }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Nueva Nota de Voz</Text>
               <TouchableOpacity
@@ -434,6 +615,12 @@ export const VoiceNoteWidget: React.FC<Props> = ({
                 <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
+
+            <ScrollView
+              ref={voiceScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
 
             <View style={[styles.recorderBox, { backgroundColor: `${primaryColor}0d` }]}>
               <Text style={[styles.timerText, { color: primaryColor }]}>
@@ -485,6 +672,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
             <TextInput
               value={noteTitle}
               onChangeText={setNoteTitle}
+              onFocus={() => setTimeout(() => voiceScrollRef.current?.scrollToEnd({ animated: true }), 180)}
               placeholder="Ej. Buenos días mi amor"
               placeholderTextColor="#94a3b8"
               style={styles.input}
@@ -494,6 +682,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
             <TextInput
               value={noteTranscript}
               onChangeText={setNoteTranscript}
+              onFocus={() => setTimeout(() => voiceScrollRef.current?.scrollToEnd({ animated: true }), 180)}
               placeholder="Escribe la frase que acompaña tu audio..."
               placeholderTextColor="#94a3b8"
               style={styles.input}
@@ -506,6 +695,7 @@ export const VoiceNoteWidget: React.FC<Props> = ({
               <Ionicons name="send" size={16} color="#ffffff" />
               <Text style={styles.saveBtnText}>Enviar Nota de Voz</Text>
             </TouchableOpacity>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>

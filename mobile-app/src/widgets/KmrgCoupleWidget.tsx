@@ -9,6 +9,7 @@ import {
   isMilestone,
   ENVELOPE_WHITE_SVG,
   HEART_WHITE_SVG,
+  BRUSH_WHITE_SVG,
 } from './types';
 
 export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
@@ -20,6 +21,8 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
   streakActive,
   hasNewHeart,
   heartSender,
+  isDoodleNote,
+  petAccessory,
 }) => {
   const { totalDays } = computeTimeTogether(anniversaryDate, daysTogether);
   const palette = getWidgetPalette(accentColor);
@@ -30,8 +33,8 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
   const cleanNote = noteText?.trim() || '';
   const displaySender = noteSender?.trim() || 'Tu amor';
   const hasNote = cleanNote.length > 0;
-  // Pochito asomándose discretamente en la esquina inferior izquierda
-  const pochitoSvg = getPochitoPeekingSvg(palette.accentHex, milestone, 80, 28);
+  // Pochito asomándose discretamente en la esquina inferior izquierda con su accesorio puesto
+  const pochitoSvg = getPochitoPeekingSvg(palette.accentHex, milestone, 84, 34, petAccessory || 'none');
 
   return (
     <FlexWidget
@@ -51,6 +54,7 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
         justifyContent: 'space-between',
       }}
       clickAction="OPEN_APP"
+      clickActionData={{ feature: isDoodleNote ? 'napkin_doodle' : 'home' }}
     >
       {/* 1. Fila superior: Llama + días a la izquierda, KMRG sutil a la derecha */}
       <FlexWidget
@@ -72,7 +76,7 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
           <TextWidget
             text={`${totalDays}`}
             style={{
-              fontSize: 15,
+              fontSize: 19,
               fontWeight: '900',
               color: flameTextColor,
             }}
@@ -80,7 +84,7 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
           <TextWidget
             text=" días juntos"
             style={{
-              fontSize: 11,
+              fontSize: 12.5,
               fontWeight: '600',
               color: palette.textSecondary,
             }}
@@ -146,9 +150,9 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
             marginBottom: 2,
           }}
         >
-          <SvgWidget svg={ENVELOPE_WHITE_SVG} style={{ width: 12, height: 12, marginRight: 4 }} />
+          <SvgWidget svg={isDoodleNote ? BRUSH_WHITE_SVG : ENVELOPE_WHITE_SVG} style={{ width: 12, height: 12, marginRight: 4 }} />
           <TextWidget
-            text="Notita de hoy"
+            text={isDoodleNote ? 'Notita dibujada 🎨' : 'Notita de hoy'}
             style={{
               fontSize: 10,
               fontWeight: '700',
@@ -160,7 +164,13 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
 
         {/* Frase en serif itálica destacada */}
         <TextWidget
-          text={hasNote ? `“${cleanNote}”` : '“Aún no hay notita de hoy. Escríbele una”'}
+          text={
+            isDoodleNote
+              ? `“${cleanNote.replace(/^🎨\s*/, '')}”\n✨ Toca para ver el dibujo`
+              : hasNote
+              ? `“${cleanNote}”`
+              : '“Aún no hay notita de hoy. Escríbele una”'
+          }
           style={{
             fontSize: 14,
             fontFamily: 'serif',
@@ -183,7 +193,13 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
           }}
         >
           <TextWidget
-            text={hasNote ? `De: ${displaySender}` : 'Escribir notita →'}
+            text={
+              hasNote
+                ? isDoodleNote
+                  ? `Dibujado por: ${displaySender}`
+                  : `De: ${displaySender}`
+                : 'Escribir notita →'
+            }
             style={{
               fontSize: 9.5,
               fontWeight: '600',
@@ -201,7 +217,7 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
           flexDirection: 'row',
           alignItems: 'flex-end',
           justifyContent: 'space-between',
-          height: 28,
+          height: 34,
         }}
       >
         {/* Pochito asomándose discretamente en la esquina sin tapar la notita */}
@@ -214,13 +230,13 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
           <SvgWidget
             svg={pochitoSvg}
             style={{
-              width: 80,
-              height: 28,
+              width: 84,
+              height: 34,
             }}
           />
         </FlexWidget>
 
-        {/* Si hay latido nuevo, aviso destacado; si no, pie discreto 'Toca para abrir' */}
+        {/* Si hay latido nuevo, aviso destacado; si no, botón directo para enviar latido sin abrir la app */}
         {hasNewHeart ? (
           <FlexWidget
             style={{
@@ -232,6 +248,8 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
               alignItems: 'center',
               marginBottom: 2,
             }}
+            clickAction="SEND_HEART"
+            clickActionData={{ action: 'SEND_HEART' }}
           >
             <SvgWidget svg={HEART_WHITE_SVG} style={{ width: 10, height: 10, marginRight: 3 }} />
             <TextWidget
@@ -246,12 +264,22 @@ export const KmrgCoupleWidget: React.FC<KmrgWidgetData> = ({
         ) : (
           <FlexWidget
             style={{
-              paddingBottom: 2,
-              paddingRight: 2,
+              backgroundColor: palette.chipBg,
+              borderColor: palette.chipBorder,
+              borderWidth: 0.8,
+              borderRadius: 10,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 2,
             }}
+            clickAction="SEND_HEART"
+            clickActionData={{ action: 'SEND_HEART' }}
           >
+            <SvgWidget svg={HEART_WHITE_SVG} style={{ width: 10, height: 10, marginRight: 4 }} />
             <TextWidget
-              text="Toca para abrir"
+              text="Enviar latido"
               style={{
                 fontSize: 9.5,
                 fontWeight: '700',

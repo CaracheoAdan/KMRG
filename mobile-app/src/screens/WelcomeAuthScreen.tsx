@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,10 +14,12 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../components/ui/Icon';
 import { UserProfile } from '../types';
 import { setCurrentProfile } from '../services/StorageService';
 import { useProfile } from '../contexts/ProfileContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { FONTS, COLORS } from '../theme/designSystem';
 
 // PIN de acceso privado de pareja (configurable vía variable de entorno)
@@ -31,11 +33,13 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
   onAuthenticated,
 }) => {
   const { getDisplayName, getAvatarUri } = useProfile();
+  const { colors, isDark } = useTheme();
   const [selectedRole, setSelectedRole] = useState<UserProfile | null>(null);
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
+  const authScrollRef = useRef<any>(null);
 
   // Restaurar estado de bloqueo persistente al montar la pantalla
   useEffect(() => {
@@ -118,21 +122,35 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <LinearGradient
+        colors={
+          isDark
+            ? [colors.background, colors.surfaceAlt, colors.background]
+            : [colors.primaryLight, colors.background, '#f0f9ff']
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          ref={authScrollRef}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Encabezado */}
           <View style={styles.header}>
-            <View style={styles.logoBadge}>
-              <Ionicons name="heart" size={14} color="#9333ea" />
-              <Text style={styles.logoText}>KMRG</Text>
+            <View style={[styles.logoBadge, { backgroundColor: isDark ? colors.surface : colors.primaryLight, borderColor: colors.border, borderWidth: 1 }]}>
+              <Ionicons name="heart" size={14} color={colors.primary} />
+              <Text style={[styles.logoText, { color: colors.primary }]}>KMRG</Text>
             </View>
-            <Text style={styles.title}>Nuestra Historia</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.text }]}>Nuestra Historia</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               Un espacio privado e íntimo para nosotros dos. Selecciona tu perfil para vincular este dispositivo.
             </Text>
           </View>
@@ -144,11 +162,16 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
               onPress={() => handleSelectRole('Javier')}
               style={[
                 styles.heartCard,
-                selectedRole === 'Javier' && styles.heartCardActiveBlue,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+                selectedRole === 'Javier' && {
+                  borderColor: '#0284c7',
+                  backgroundColor: isDark ? 'rgba(2, 132, 199, 0.16)' : '#f0f9ff',
+                  transform: [{ scale: 1.03 }],
+                },
               ]}
               activeOpacity={0.85}
             >
-              <View style={[styles.heartCircle, { backgroundColor: '#e0f2fe', overflow: 'hidden' }]}>
+              <View style={[styles.heartCircle, { backgroundColor: isDark ? 'rgba(2, 132, 199, 0.25)' : '#e0f2fe', overflow: 'hidden' }]}>
                 {getAvatarUri('Javier') ? (
                   <Image
                     source={{ uri: getAvatarUri('Javier')! }}
@@ -157,15 +180,15 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
                 ) : (
                   <Ionicons
                     name="heart"
-                    size={48}
+                    size={42}
                     color={selectedRole === 'Javier' ? '#0284c7' : '#38bdf8'}
                   />
                 )}
               </View>
-              <Text style={[styles.roleName, selectedRole === 'Javier' && styles.roleNameActiveBlue]}>
+              <Text style={[styles.roleName, { color: colors.text }, selectedRole === 'Javier' && styles.roleNameActiveBlue]}>
                 {getDisplayName('Javier')}
               </Text>
-              <Text style={styles.roleSubtext}>Perfil de Él</Text>
+              <Text style={[styles.roleSubtext, { color: colors.textMuted }]}>Perfil de Él</Text>
             </TouchableOpacity>
 
             {/* Perfil: Karla */}
@@ -173,11 +196,16 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
               onPress={() => handleSelectRole('Karla')}
               style={[
                 styles.heartCard,
-                selectedRole === 'Karla' && styles.heartCardActivePurple,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+                selectedRole === 'Karla' && {
+                  borderColor: '#9333ea',
+                  backgroundColor: isDark ? 'rgba(147, 51, 234, 0.16)' : '#faf5ff',
+                  transform: [{ scale: 1.03 }],
+                },
               ]}
               activeOpacity={0.85}
             >
-              <View style={[styles.heartCircle, { backgroundColor: '#f3e8ff', overflow: 'hidden' }]}>
+              <View style={[styles.heartCircle, { backgroundColor: isDark ? 'rgba(147, 51, 234, 0.25)' : '#f3e8ff', overflow: 'hidden' }]}>
                 {getAvatarUri('Karla') ? (
                   <Image
                     source={{ uri: getAvatarUri('Karla')! }}
@@ -186,7 +214,7 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
                 ) : (
                   <Ionicons
                     name="heart"
-                    size={48}
+                    size={42}
                     color={selectedRole === 'Karla' ? '#9333ea' : '#c084fc'}
                   />
                 )}
@@ -194,27 +222,28 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
               <Text
                 style={[
                   styles.roleName,
+                  { color: colors.text },
                   selectedRole === 'Karla' && styles.roleNameActivePurple,
                 ]}
               >
                 {getDisplayName('Karla')}
               </Text>
-              <Text style={styles.roleSubtext}>Perfil de Ella</Text>
+              <Text style={[styles.roleSubtext, { color: colors.textMuted }]}>Perfil de Ella</Text>
             </TouchableOpacity>
           </View>
 
           {/* Formulario de PIN de Pareja */}
           {selectedRole && (
-            <View style={styles.pinCard}>
+            <View style={[styles.pinCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.pinHeader}>
-                <Ionicons name="lock-closed" size={18} color="#2b2d42" />
-                <Text style={styles.pinTitle}>
+                <Ionicons name="lock-closed" size={18} color={colors.primary} />
+                <Text style={[styles.pinTitle, { color: colors.text }]}>
                   {selectedRole === 'Karla'
                     ? `Bienvenida, ${getDisplayName('Karla')}`
                     : `Bienvenido, ${getDisplayName('Javier')}`}
                 </Text>
               </View>
-              <Text style={styles.pinSubtitle}>
+              <Text style={[styles.pinSubtitle, { color: colors.textSecondary }]}>
                 Ingresa el código privado de pareja para autorizar este teléfono:
               </Text>
 
@@ -224,13 +253,18 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
                   setPin(val.replace(/[^0-9]/g, ''));
                   setPinError(false);
                 }}
+                onFocus={() => setTimeout(() => authScrollRef.current?.scrollToEnd({ animated: true }), 180)}
                 placeholder="••••"
-                placeholderTextColor="#adb5bd"
+                placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 keyboardType="numeric"
                 maxLength={8}
                 editable={lockoutRemaining === 0}
-                style={[styles.pinInput, pinError && styles.pinInputError]}
+                style={[
+                  styles.pinInput,
+                  { backgroundColor: colors.surfaceAlt, borderColor: colors.border, color: colors.text },
+                  pinError && styles.pinInputError,
+                ]}
                 autoFocus
               />
 
@@ -266,12 +300,13 @@ export const WelcomeAuthScreen: React.FC<{ onAuthenticated: (profile: UserProfil
 
           {/* Pie informativo */}
           <View style={styles.footer}>
-            <Text style={styles.footerNote}>
+            <Text style={[styles.footerNote, { color: colors.textMuted }]}>
               Conexión protegida. Una vez vinculado, este teléfono conservará tu sesión activa.
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </LinearGradient>
     </SafeAreaView>
   );
 };

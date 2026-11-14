@@ -6,6 +6,7 @@ import {
   listMessages,
   getMessageById,
   createMessage,
+  bulkCreateMessages,
   updateMessage,
   deleteMessage,
 } from '../controllers/messages.controller';
@@ -17,8 +18,10 @@ import {
   deleteMilestone,
 } from '../controllers/milestones.controller';
 import { listInteractions, emergencyResetAppState } from '../controllers/interactions.controller';
+import { getAdminStats } from '../controllers/stats.controller';
 import {
   createMessageSchema,
+  bulkCreateMessagesSchema,
   updateMessageSchema,
   uuidParamSchema,
 } from '../schemas/messages.schema';
@@ -35,6 +38,7 @@ router.use(requireAdminAuth);
 
 // ── Messages CRUD ──
 router.get('/messages', listMessages);
+router.post('/messages/bulk', validate({ body: bulkCreateMessagesSchema }), bulkCreateMessages);
 router.get('/messages/:id', validate({ params: uuidParamSchema }), getMessageById);
 router.post('/messages', validate({ body: createMessageSchema }), createMessage);
 router.put('/messages/:id', validate({ params: uuidParamSchema, body: updateMessageSchema }), updateMessage);
@@ -47,7 +51,8 @@ router.post('/milestones', validate({ body: createMilestoneSchema }), createMile
 router.put('/milestones/:id', validate({ params: uuidParamSchema, body: updateMilestoneSchema }), updateMilestone);
 router.delete('/milestones/:id', validate({ params: uuidParamSchema }), deleteMilestone);
 
-// ── Interactions & Emergency Recovery ──
+// ── Stats, Interactions & Emergency Recovery ──
+router.get('/stats', getAdminStats);
 router.get('/interactions', listInteractions);
 router.post('/emergency-reset', emergencyResetAppState);
 

@@ -19,7 +19,7 @@ export const createInteraction = async (req: Request, res: Response): Promise<vo
 
     if (supabase) {
       try {
-        await supabase.from('interactions').insert([
+        const { error: sbErr } = await supabase.from('interactions').insert([
           {
             id: interaction.id,
             sender: cleanSender,
@@ -27,6 +27,9 @@ export const createInteraction = async (req: Request, res: Response): Promise<vo
             payload: payload ?? {},
           },
         ]);
+        if (sbErr) {
+          logger.warn({ err: sbErr }, 'Supabase devolvió error al sincronizar interacción');
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar interacción a Supabase');
       }
@@ -110,7 +113,7 @@ export const emergencyResetAppState = async (req: Request, res: Response): Promi
     // 2. Transmitir en tiempo real y persistir en Supabase para que la app lo reciba de inmediato
     if (supabase) {
       try {
-        await supabase.from('interactions').insert([
+        const { error: sbErr } = await supabase.from('interactions').insert([
           {
             sender: 'Admin',
             type: 'remote_emergency_reset',
@@ -122,6 +125,9 @@ export const emergencyResetAppState = async (req: Request, res: Response): Promi
             payload: cleanHome,
           },
         ]);
+        if (sbErr) {
+          logger.warn({ err: sbErr }, 'Supabase devolvió error al registrar remote_emergency_reset');
+        }
       } catch (err) {
         logger.warn({ err }, 'Supabase no pudo registrar remote_emergency_reset');
       }

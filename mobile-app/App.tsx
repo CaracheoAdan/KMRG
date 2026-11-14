@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabNavigator } from './src/navigation/TabNavigator';
@@ -21,26 +22,60 @@ import {
   getSpecialPlacesState,
   getGamesState,
 } from './src/services/CoupleSyncService';
+import { AppLockGate } from './src/components/features/AppLockGate';
+import { savePushToken } from './src/services/feature/pushTokenService';
+import { CoupleFeaturesProvider, useCoupleFeatures } from './src/contexts/CoupleFeaturesContext';
 
 function MainNavigator() {
   const { profile, isLoading, setProfile } = useProfile();
   const { primaryColor } = useTheme();
+  const { openFeature } = useCoupleFeatures();
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const checkPendingWidgetFeature = async () => {
+      try {
+        const pending = await AsyncStorage.getItem('@kmrg_pending_widget_feature');
+        if (pending) {
+          await AsyncStorage.removeItem('@kmrg_pending_widget_feature');
+          if (pending === 'napkin_doodle') {
+            setTimeout(() => {
+              openFeature('napkin_doodle');
+            }, 350);
+          }
+        }
+      } catch {}
+    };
+
+    void checkPendingWidgetFeature();
+
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') {
+        void checkPendingWidgetFeature();
+      }
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [profile, openFeature]);
 
   useEffect(() => {
     if (!profile) return;
     const stopWatcher = startGlobalPartnerNotificationWatcher(profile);
 
+    // 1. Priorizar lo visible en Hoy para arranque rápido sin saturar el hilo JS
     void Promise.all([
       syncSupabaseMessages(profile),
-      syncSupabaseMilestones(),
       getHomeState(),
-      getMoviesState(),
-      getSpecialPlacesState(),
-      getGamesState(),
-    ]).then(async ([_, __, homeState]) => {
+    ]).then(async ([_, homeState]) => {
       void scheduleDailyMessage();
       try {
         const pushToken = await registerDevicePushToken();
+        if (pushToken) {
+          void savePushToken(profile, pushToken);
+        }
         if (pushToken && homeState.pushTokens?.[profile] !== pushToken) {
           const nextHome = {
             ...homeState,
@@ -56,7 +91,18 @@ function MainNavigator() {
       }
     });
 
+    // 2. Diferir sincronización secundaria de otras pestañas después del primer render interactivo
+    const deferredTimer = setTimeout(() => {
+      void Promise.all([
+        syncSupabaseMilestones(),
+        getMoviesState(),
+        getSpecialPlacesState(),
+        getGamesState(),
+      ]);
+    }, 700);
+
     return () => {
+      clearTimeout(deferredTimer);
       stopWatcher();
     };
   }, [profile]);
@@ -206,10 +252,14 @@ export default function App() {
       <SafeAreaProvider>
       <ProfileProvider>
         <ThemeProvider>
-          <CustomAlertProvider>
-            <MainNavigator />
-            <ThemeSelectorModal />
-          </CustomAlertProvider>
+          <CoupleFeaturesProvider>
+            <CustomAlertProvider>
+              <AppLockGate>
+                <MainNavigator />
+              </AppLockGate>
+              <ThemeSelectorModal />
+            </CustomAlertProvider>
+          </CoupleFeaturesProvider>
         </ThemeProvider>
       </ProfileProvider>
     </SafeAreaProvider>

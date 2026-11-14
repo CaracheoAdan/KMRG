@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -51,6 +51,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openedCapsule, setOpenedCapsule] = useState<TimeCapsuleItem | null>(null);
+  const capsuleWidgetScrollRef = useRef<any>(null);
 
   const todayStr = toLocalDateString(new Date());
 
@@ -258,7 +259,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
         onRequestClose={() => setIsAddOpen(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
@@ -272,7 +273,11 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={capsuleWidgetScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.label}>Título de la cápsula</Text>
               <TextInput
                 value={title}
@@ -331,6 +336,7 @@ export const TimeCapsulesWidget: React.FC<Props> = ({
               <TextInput
                 value={content}
                 onChangeText={setContent}
+                onFocus={() => setTimeout(() => capsuleWidgetScrollRef.current?.scrollToEnd({ animated: true }), 180)}
                 placeholder="Escribe lo que quieres que lea cuando llegue ese día..."
                 placeholderTextColor="#94a3b8"
                 multiline

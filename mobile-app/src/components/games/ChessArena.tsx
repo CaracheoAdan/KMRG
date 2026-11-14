@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,11 +7,137 @@ import {
   Animated,
   ScrollView,
   Dimensions,
+  Image,
+  Modal,
 } from 'react-native';
+import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 import { Ionicons } from '../ui/Icon';
 import { GamesState } from '../../services/CoupleSyncService';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
+import { useProfile } from '../../contexts/ProfileContext';
+import { useTheme } from '../../contexts/ThemeContext';
+
+type ChessPieceType = 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
+
+const ChessPieceSvg: React.FC<{
+  type: ChessPieceType;
+  color: 'w' | 'b';
+  size: number;
+}> = ({ type, color, size }) => {
+  const fill = color === 'w' ? '#ffffff' : '#1e293b';
+  const stroke = color === 'w' ? '#334155' : '#e2e8f0';
+  const detailStroke = color === 'w' ? '#64748b' : '#94a3b8';
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 45 45">
+      {type === 'p' && (
+        <>
+          <Circle cx="22.5" cy="13" r="5.5" fill={fill} stroke={stroke} strokeWidth="2.2" />
+          <Path
+            d="M 16.5 21 Q 22.5 18 28.5 21 L 26.5 28 Q 22.5 30 18.5 28 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M 13.5 37 C 14.5 31 18 28 22.5 28 C 27 28 30.5 31 31.5 37 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+          <Rect x="11" y="36.5" width="23" height="3.8" rx="1.8" fill={fill} stroke={stroke} strokeWidth="2" />
+        </>
+      )}
+
+      {type === 'r' && (
+        <>
+          <Path
+            d="M 12 9 H 16.5 V 13 H 20 V 9 H 25 V 13 H 28.5 V 9 H 33 V 17 L 29.5 20 H 15.5 L 12 17 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.1"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M 16 20 H 29 L 30.5 34 H 14.5 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.1"
+            strokeLinejoin="round"
+          />
+          <Rect x="11" y="34" width="23" height="5.5" rx="1.5" fill={fill} stroke={stroke} strokeWidth="2.1" />
+        </>
+      )}
+
+      {type === 'b' && (
+        <>
+          <Circle cx="22.5" cy="8.5" r="2.6" fill={fill} stroke={stroke} strokeWidth="2" />
+          <Path
+            d="M 22.5 11.2 C 15.5 16.2 14 23 16.5 29 H 28.5 C 31 23 29.5 16.2 22.5 11.2 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+          <Line x1="19.5" y1="18.5" x2="25.5" y2="24" stroke={detailStroke} strokeWidth="2" strokeLinecap="round" />
+          <Rect x="14.5" y="29" width="16" height="4" rx="1.4" fill={fill} stroke={stroke} strokeWidth="2" />
+          <Path d="M 11 35 H 34 L 31.5 39.8 H 13.5 Z" fill={fill} stroke={stroke} strokeWidth="2.1" strokeLinejoin="round" />
+        </>
+      )}
+
+      {type === 'n' && (
+        <>
+          <Path
+            d="M 14.5 36.5 C 14.5 27.5 16.5 21.5 20.5 18.5 L 16 19.5 C 13 18.5 12.5 15 15.5 12.5 C 18.5 10 21 9 23.5 9 L 25 6 L 27.8 9.5 C 32 11 34 16 33 22 C 32 27 30 31 31.5 36.5 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+          <Circle cx="19" cy="13.8" r="1.5" fill={stroke} />
+          <Rect x="11.5" y="36.2" width="22.5" height="4" rx="1.6" fill={fill} stroke={stroke} strokeWidth="2" />
+        </>
+      )}
+
+      {type === 'q' && (
+        <>
+          <Path
+            d="M 9 15 L 14 26 L 17.5 12 L 22.5 25 L 27.5 12 L 31 26 L 36 15 L 32 33 H 13 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.1"
+            strokeLinejoin="round"
+          />
+          <Circle cx="9" cy="13.5" r="2" fill={fill} stroke={stroke} strokeWidth="1.6" />
+          <Circle cx="17.5" cy="10.8" r="2" fill={fill} stroke={stroke} strokeWidth="1.6" />
+          <Circle cx="22.5" cy="9.8" r="2.2" fill={fill} stroke={stroke} strokeWidth="1.6" />
+          <Circle cx="27.5" cy="10.8" r="2" fill={fill} stroke={stroke} strokeWidth="1.6" />
+          <Circle cx="36" cy="13.5" r="2" fill={fill} stroke={stroke} strokeWidth="1.6" />
+          <Rect x="11" y="33" width="23" height="6.2" rx="1.8" fill={fill} stroke={stroke} strokeWidth="2.1" />
+        </>
+      )}
+
+      {type === 'k' && (
+        <>
+          <Line x1="22.5" y1="6" x2="22.5" y2="14" stroke={stroke} strokeWidth="2.6" strokeLinecap="round" />
+          <Line x1="18.8" y1="9.5" x2="26.2" y2="9.5" stroke={stroke} strokeWidth="2.6" strokeLinecap="round" />
+          <Path
+            d="M 22.5 14 C 15 13 10.5 19 12.5 26 C 14 30 17 32 22.5 32 C 28 32 31 30 32.5 26 C 34.5 19 30 13 22.5 14 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+          <Line x1="22.5" y1="15" x2="22.5" y2="31" stroke={detailStroke} strokeWidth="1.8" />
+          <Rect x="11" y="32.2" width="23" height="7" rx="1.8" fill={fill} stroke={stroke} strokeWidth="2.1" />
+        </>
+      )}
+    </Svg>
+  );
+};
 
 interface Props {
   chess: GamesState['chess'];
@@ -22,7 +148,7 @@ interface Props {
   selectedChessPos: [number, number] | null;
   validChessTargets: [number, number][];
   chessHistoryLength: number;
-  onCellPress: (r: number, c: number) => void;
+  onCellPress: (r: number, c: number, promoteTo?: 'q' | 'r' | 'b' | 'n') => void;
   onUndo: () => void;
   onReset: () => void;
 }
@@ -74,6 +200,12 @@ export const ChessArena: React.FC<Props> = ({
   onUndo,
   onReset,
 }) => {
+  const { getDisplayName, getAvatarUri } = useProfile();
+  const { colors, isDark } = useTheme();
+  const karlaAvatarUri = getAvatarUri('Karla');
+  const javierAvatarUri = getAvatarUri('Javier');
+  const karlaName = getDisplayName('Karla');
+  const javierName = getDisplayName('Javier');
   const isWinner = !!chess.winner;
   const isWhite = chess.turn === 'w';
 
@@ -88,6 +220,11 @@ export const ChessArena: React.FC<Props> = ({
 
   // Animación de pulso para Jaque
   const checkPulseAnim = useRef(new Animated.Value(1)).current;
+  const [pendingPromoMove, setPendingPromoMove] = useState<{
+    r: number;
+    c: number;
+    color: 'w' | 'b';
+  } | null>(null);
 
   useEffect(() => {
     if (isKingInCheck && !isWinner) {
@@ -107,7 +244,24 @@ export const ChessArena: React.FC<Props> = ({
 
   const handleCellPress = (r: number, c: number) => {
     void triggerGameHaptic('selection');
+    if (selectedChessPos && !chess.winner) {
+      const isTarget = validChessTargets.some(([tr, tc]) => tr === r && tc === c);
+      const [sr, sc] = selectedChessPos;
+      const movingPiece = chess.board[sr]?.[sc];
+      if (isTarget && movingPiece?.type === 'p' && (r === 0 || r === 7)) {
+        setPendingPromoMove({ r, c, color: movingPiece.color });
+        return;
+      }
+    }
     onCellPress(r, c);
+  };
+
+  const handleSelectPromotion = (promoType: 'q' | 'r' | 'b' | 'n') => {
+    if (!pendingPromoMove) return;
+    const { r, c } = pendingPromoMove;
+    setPendingPromoMove(null);
+    void triggerGameHaptic('success');
+    onCellPress(r, c, promoType);
   };
 
   // Piezas capturadas y cálculo de ventaja material
@@ -118,9 +272,10 @@ export const ChessArena: React.FC<Props> = ({
   const diffKarla = materialKarla - materialJavier;
   const diffJavier = materialJavier - materialKarla;
 
+  const moveHistory = chess.moveHistory || [];
   // Notación de la última jugada si existe
-  let lastMoveNotation = '';
-  if (chess.lastMove) {
+  let lastMoveNotation = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : '';
+  if (!lastMoveNotation && chess.lastMove) {
     const fromCol = COLS_LETTERS[chess.lastMove.from[1]];
     const fromRow = ROWS_NUMBERS[chess.lastMove.from[0]];
     const toCol = COLS_LETTERS[chess.lastMove.to[1]];
@@ -143,21 +298,30 @@ export const ChessArena: React.FC<Props> = ({
         </Animated.View>
       )}
 
-      {/* 2. Barra Superior: Javier (Negras) con Avatar, Nombre, Ventaja Material y Capturas */}
+      {/* 2. Barra Superior: Javier (Negras) con Avatar Real, Nombre, Ventaja Material y Capturas */}
       <View
         style={[
           styles.playerBar,
-          !isWhite && !isWinner && styles.playerBarActiveJavier,
+          { backgroundColor: isDark ? colors.surface : '#ffffff', borderColor: colors.border },
+          !isWhite && !isWinner && (isDark ? { borderWidth: 2, borderColor: '#38bdf8', backgroundColor: '#0c4a6e33' } : styles.playerBarActiveJavier),
           { width: frameWidth },
         ]}
       >
         <View style={styles.playerInfoRow}>
           <View style={[styles.playerAvatar, { backgroundColor: '#e0f2fe', borderColor: !isWhite && !isWinner ? '#0284c7' : '#38bdf8' }]}>
-            <Text style={[styles.playerAvatarText, { color: '#0369a1' }]}>J</Text>
+            {javierAvatarUri ? (
+              <Image source={{ uri: javierAvatarUri }} style={styles.playerAvatarImg} />
+            ) : (
+              <Text style={[styles.playerAvatarText, { color: '#0369a1' }]}>
+                {javierName.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
           <View style={styles.playerNameColumn}>
-            <Text style={styles.playerName}>Javier</Text>
-            <Text style={styles.playerRole}>Negras ⚔️</Text>
+            <Text style={[styles.playerName, { color: colors.text }]} numberOfLines={1}>
+              {javierName}
+            </Text>
+            <Text style={[styles.playerRole, { color: colors.textSecondary }]}>Negras ⚔️</Text>
           </View>
           {diffJavier > 0 && (
             <View style={styles.materialAdvantageBadgeJavier}>
@@ -273,28 +437,13 @@ export const ChessArena: React.FC<Props> = ({
                         />
                       )}
 
-                      {/* Glifo de la Pieza con Volumen y Sombra Realista */}
+                      {/* Pieza SVG estilizada consistente entre iOS y Android */}
                       {piece && (
-                        <Text
-                          style={[
-                            styles.pieceGlyph,
-                            {
-                              fontSize: Math.floor(cellSize * 0.76),
-                              color: pieceColor === 'w' ? '#ffffff' : '#18181b',
-                              textShadowColor:
-                                pieceColor === 'w'
-                                  ? 'rgba(0, 0, 0, 0.75)'
-                                  : 'rgba(255, 255, 255, 0.75)',
-                              textShadowOffset:
-                                pieceColor === 'w'
-                                  ? { width: 0, height: 2.5 }
-                                  : { width: 0, height: 1.5 },
-                              textShadowRadius: 4,
-                            },
-                          ]}
-                        >
-                          {glyph}
-                        </Text>
+                        <ChessPieceSvg
+                          type={piece.type}
+                          color={piece.color}
+                          size={Math.floor(cellSize * 0.84)}
+                        />
                       )}
                     </TouchableOpacity>
                   );
@@ -322,21 +471,30 @@ export const ChessArena: React.FC<Props> = ({
         </View>
       </View>
 
-      {/* 4. Barra Inferior: Karlita (Blancas) con Avatar, Nombre, Ventaja Material y Capturas */}
+      {/* 4. Barra Inferior: Karlita (Blancas) con Avatar Real, Nombre, Ventaja Material y Capturas */}
       <View
         style={[
           styles.playerBar,
-          isWhite && !isWinner && styles.playerBarActiveKarla,
+          { backgroundColor: isDark ? colors.surface : '#ffffff', borderColor: colors.border },
+          isWhite && !isWinner && (isDark ? { borderWidth: 2, borderColor: '#ec4899', backgroundColor: '#83184333' } : styles.playerBarActiveKarla),
           { width: frameWidth },
         ]}
       >
         <View style={styles.playerInfoRow}>
           <View style={[styles.playerAvatar, { backgroundColor: '#fdf2f8', borderColor: isWhite && !isWinner ? '#ec4899' : '#f472b6' }]}>
-            <Text style={[styles.playerAvatarText, { color: '#be185d' }]}>K</Text>
+            {karlaAvatarUri ? (
+              <Image source={{ uri: karlaAvatarUri }} style={styles.playerAvatarImg} />
+            ) : (
+              <Text style={[styles.playerAvatarText, { color: '#be185d' }]}>
+                {karlaName.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
           <View style={styles.playerNameColumn}>
-            <Text style={styles.playerName}>Karlita</Text>
-            <Text style={styles.playerRole}>Blancas 👑</Text>
+            <Text style={[styles.playerName, { color: colors.text }]} numberOfLines={1}>
+              {karlaName}
+            </Text>
+            <Text style={[styles.playerRole, { color: colors.textSecondary }]}>Blancas 👑</Text>
           </View>
           {diffKarla > 0 && (
             <View style={styles.materialAdvantageBadgeKarla}>
@@ -359,11 +517,16 @@ export const ChessArena: React.FC<Props> = ({
       </View>
 
       {/* 5. Historial de Jugadas en Notación con Chips Horizontales */}
-      <View style={[styles.movesHistoryCard, { width: frameWidth }]}>
+      <View
+        style={[
+          styles.movesHistoryCard,
+          { width: frameWidth, backgroundColor: isDark ? colors.surface : '#ffffff', borderColor: colors.border },
+        ]}
+      >
         <View style={styles.movesHistoryHeader}>
           <Ionicons name="time-outline" size={13} color="#64748b" />
           <Text style={styles.movesHistoryTitle}>
-            Historial de Jugadas ({chessHistoryLength} turnos)
+            Historial de Jugadas ({moveHistory.length || chessHistoryLength} turnos)
           </Text>
           {lastMoveNotation !== '' && (
             <View style={styles.lastMoveNotationChip}>
@@ -378,23 +541,13 @@ export const ChessArena: React.FC<Props> = ({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.movesScrollRow}
         >
-          {chessHistoryLength === 0 ? (
+          {moveHistory.length === 0 && chessHistoryLength === 0 ? (
             <Text style={styles.noMovesText}>Partida lista • Blancas abren el juego</Text>
-          ) : (
-            Array.from({ length: Math.ceil(chessHistoryLength / 2) }).map((_, i) => {
-              const isCurrentRound = i === Math.ceil(chessHistoryLength / 2) - 1;
-              const hasBlackMove = i * 2 + 1 < chessHistoryLength;
-
-              let moveWhite = 'e4';
-              let moveBlack = hasBlackMove ? 'e5' : '';
-
-              if (isCurrentRound && lastMoveNotation) {
-                if (!isWhite) {
-                  moveWhite = lastMoveNotation;
-                } else {
-                  moveBlack = lastMoveNotation;
-                }
-              }
+          ) : moveHistory.length > 0 ? (
+            Array.from({ length: Math.ceil(moveHistory.length / 2) }).map((_, i) => {
+              const isCurrentRound = i === Math.ceil(moveHistory.length / 2) - 1;
+              const moveWhite = moveHistory[i * 2];
+              const moveBlack = moveHistory[i * 2 + 1];
 
               return (
                 <View
@@ -410,7 +563,7 @@ export const ChessArena: React.FC<Props> = ({
                   <Text style={[styles.moveWhiteText, isCurrentRound && styles.moveWhiteTextActive]}>
                     {moveWhite}
                   </Text>
-                  {hasBlackMove && (
+                  {moveBlack && (
                     <Text style={[styles.moveBlackText, isCurrentRound && styles.moveBlackTextActive]}>
                       {moveBlack}
                     </Text>
@@ -418,6 +571,10 @@ export const ChessArena: React.FC<Props> = ({
                 </View>
               );
             })
+          ) : (
+            <View style={[styles.movePill, styles.movePillActive]}>
+              <Text style={styles.moveWhiteText}>{lastMoveNotation || 'Jugada'}</Text>
+            </View>
           )}
         </ScrollView>
       </View>
@@ -442,6 +599,47 @@ export const ChessArena: React.FC<Props> = ({
           />
         </View>
       </View>
+
+      {/* Modal de Coronación de Peón */}
+      <Modal
+        visible={!!pendingPromoMove}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingPromoMove(null)}
+      >
+        <View style={styles.promoBackdrop}>
+          <View style={[styles.promoCard, isDark && { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.promoTitle, { color: colors.text }]}>¡Coronación de Peón!</Text>
+            <Text style={[styles.promoSubtitle, { color: colors.textSecondary }]}>
+              Elige la pieza en la que quieres transformar tu peón
+            </Text>
+            <View style={styles.promoChoicesRow}>
+              {(
+                [
+                  { type: 'q', label: 'Dama' },
+                  { type: 'n', label: 'Caballo' },
+                  { type: 'r', label: 'Torre' },
+                  { type: 'b', label: 'Alfil' },
+                ] as const
+              ).map((opt) => (
+                <TouchableOpacity
+                  key={opt.type}
+                  onPress={() => handleSelectPromotion(opt.type)}
+                  style={[styles.promoOptionBtn, isDark && { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+                  activeOpacity={0.8}
+                >
+                  <ChessPieceSvg
+                    type={opt.type}
+                    color={pendingPromoMove?.color || 'w'}
+                    size={40}
+                  />
+                  <Text style={[styles.promoOptionLabel, { color: colors.text }]}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -477,9 +675,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     ...GAMES_THEME.shadows.soft,
@@ -544,12 +742,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  playerAvatarImg: {
+    width: '100%',
+    height: '100%',
   },
   playerAvatarText: {
     fontSize: 13,
@@ -683,8 +886,8 @@ const styles = StyleSheet.create({
   },
   movesHistoryCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: 16,
+    padding: 9,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     gap: 4,
@@ -775,5 +978,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     paddingTop: 2,
+  },
+  promoBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  promoCard: {
+    width: '100%' as const,
+    maxWidth: 330,
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    padding: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    ...GAMES_THEME.shadows.card,
+  },
+  promoTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  promoSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  promoChoicesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    width: '100%' as const,
+  },
+  promoOptionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    gap: 4,
+  },
+  promoOptionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

@@ -14,6 +14,7 @@
     "android": {
       "package": "com.kmrg.app",
       "versionCode": 5,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -45,7 +46,7 @@
               "description": "Nuestros días juntos, la notita del día y aviso de latidos de amor.",
               "resizeMode": "horizontal|vertical",
               "widgetCategory": "home_screen|keyguard",
-              "updatePeriodMillis": 1800000
+              "updatePeriodMillis": 900000
             },
             {
               "name": "KmrgMiniWidget",
@@ -57,7 +58,7 @@
               "description": "Contador de días juntos y aviso de latidos.",
               "resizeMode": "horizontal|vertical",
               "widgetCategory": "home_screen|keyguard",
-              "updatePeriodMillis": 1800000
+              "updatePeriodMillis": 900000
             }
           ]
         }

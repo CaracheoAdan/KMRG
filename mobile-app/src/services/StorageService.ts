@@ -305,6 +305,19 @@ export const getSentMessages = async (profile: UserProfile): Promise<Message[]> 
 };
 
 /**
+ * Recupera el mensaje sin enmascarar desde la caché local para que el autor pueda
+ * editar su propia carta programada sin perder su contenido original.
+ */
+export const getRawMessageById = async (id: string): Promise<Message | null> => {
+  try {
+    const messages = await getCachedMessages();
+    return messages.find((m) => m.id === id) || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Marca un mensaje localmente como leído
  */
 export const markMessageAsRead = async (id: string): Promise<void> => {

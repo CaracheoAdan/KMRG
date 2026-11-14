@@ -12,7 +12,9 @@ async function main(): Promise<void> {
 
   // 1. Crear o actualizar usuario administrador a partir de variables de entorno
   const adminEmail = (process.env.SEED_ADMIN_EMAIL || 'admin@kmrg.app').toLowerCase().trim();
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || '12345678';
+  const adminPassword =
+    process.env.SEED_ADMIN_PASSWORD ||
+    (process.env.NODE_ENV === 'production' ? '' : '12345678');
 
   if (!adminPassword || adminPassword.trim().length < 8) {
     throw new Error(

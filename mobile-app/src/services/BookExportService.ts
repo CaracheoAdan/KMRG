@@ -14,6 +14,16 @@ import {
   parseLetterContentAndPhoto,
   toLocalDateString,
 } from './StorageService';
+import {
+  fetchDailyAnswers,
+  buildDailyQuestionGroups,
+  DailyDayGroup,
+} from './feature/dailyQuestionService';
+import { getQuestionById } from './feature/dailyQuestionBank';
+import {
+  getGratitudeEntries,
+  GratitudeEntryRow,
+} from './feature/gratitudeService';
 
 let FileSystemModule: any = null;
 
@@ -45,6 +55,8 @@ export interface ExportBookOptions {
   milestones?: Milestone[];
   places?: SpecialPlace[];
   letterExtras?: Record<string, LetterExtraData>;
+  dailyQuestionGroups?: DailyDayGroup[];
+  gratitudeEntries?: GratitudeEntryRow[];
   mode?: 'share' | 'print' | 'auto';
 }
 
@@ -61,6 +73,8 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
     milestones = [],
     places = [],
     letterExtras = {},
+    dailyQuestionGroups = [],
+    gratitudeEntries = [],
   } = options;
 
   const todayStr = toLocalDateString(new Date());
@@ -186,6 +200,84 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
             )
             .join('')}
         </div>`
+      : '';
+
+  const answeredQuestions = [...dailyQuestionGroups]
+    .filter((g) => g.bothAnswered && g.karla?.answer && g.javier?.answer)
+    .sort((a, b) => toLocalDateString(a.date).localeCompare(toLocalDateString(b.date)));
+
+  const questionsChapterHtml =
+    answeredQuestions.length > 0
+      ? `
+  <!-- CAPÍTULO 4: PREGUNTAS Y RESPUESTAS -->
+  <div class="chapter chapter-break">
+    <div class="chapter-header">
+      <div class="chapter-tag">Capítulo · Nuestras Preguntas y Respuestas</div>
+      <h2 class="chapter-title">Capítulo · Nuestras Preguntas y Respuestas (${answeredQuestions.length})</h2>
+    </div>
+    ${answeredQuestions
+      .map((g) => {
+        const qItem = (g.question?.id && getQuestionById(g.question.id)) || g.question;
+        const dateLabel = formatDisplayDate(g.date, {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+        return `
+        <div class="letter-card" style="border-left: 5px solid ${escapeHtml(primaryColor)};">
+          <div class="letter-header">
+            <span class="letter-date">${escapeHtml(dateLabel)}</span>
+            <span class="letter-meta">${escapeHtml(qItem?.category || 'Conexión')}</span>
+          </div>
+          <p class="letter-content" style="font-weight: 700; font-style: normal;">¿${escapeHtml(
+            (qItem?.question || '').replace(/^[¿?]+|[?]+$/g, '')
+          )}?</p>
+          <div class="letter-reply-box" style="margin-top: 8px;">
+            <p class="letter-reply-text" style="margin-bottom: 6px;"><strong>Karlita:</strong> “${escapeHtml(
+              g.karla?.answer || ''
+            )}”</p>
+            <p class="letter-reply-text"><strong>Javier:</strong> “${escapeHtml(
+              g.javier?.answer || ''
+            )}”</p>
+          </div>
+        </div>`;
+      })
+      .join('')}
+  </div>`
+      : '';
+
+  const sortedGratitude = [...gratitudeEntries]
+    .filter((e) => Boolean(e && e.text))
+    .sort((a, b) => toLocalDateString(a.entry_date).localeCompare(toLocalDateString(b.entry_date)));
+
+  const gratitudeChapterHtml =
+    sortedGratitude.length > 0
+      ? `
+  <!-- CAPÍTULO 5: DIARIO DE GRATITUD -->
+  <div class="chapter chapter-break">
+    <div class="chapter-header">
+      <div class="chapter-tag">Capítulo · Diario de Gratitud</div>
+      <h2 class="chapter-title">Capítulo · Diario de Gratitud (${sortedGratitude.length})</h2>
+    </div>
+    ${sortedGratitude
+      .map((entry) => {
+        const dateLabel = formatDisplayDate(entry.entry_date, {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+        const authorName = entry.profile === 'Karla' ? 'Karlita' : 'Javier';
+        return `
+        <div class="reason-card">
+          <div class="reason-num">🌷</div>
+          <div class="reason-body">
+            <p class="reason-text">“${escapeHtml(entry.text)}”</p>
+            <span class="reason-author">${escapeHtml(dateLabel)} — Escrito por ${authorName}</span>
+          </div>
+        </div>`;
+      })
+      .join('')}
+  </div>`
       : '';
 
   return `<!DOCTYPE html>
@@ -496,6 +588,8 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
     ${milestonesHtml}
     ${placesHtml}
   </div>
+  ${questionsChapterHtml}
+  ${gratitudeChapterHtml}
 </body>
 </html>`;
 }
@@ -506,8 +600,35 @@ export function generatePrintableBookHtml(options: ExportBookOptions): string {
 export async function exportCoupleBookToPdf(options: ExportBookOptions): Promise<boolean> {
   const { mode = 'auto' } = options;
 
+  let dailyQuestionGroups = options.dailyQuestionGroups;
+  let gratitudeEntries = options.gratitudeEntries;
+
+  if (!dailyQuestionGroups) {
+    try {
+      const answers = await fetchDailyAnswers();
+      const built = buildDailyQuestionGroups(answers);
+      dailyQuestionGroups = built.groups.filter((g) => g.bothAnswered);
+    } catch {
+      dailyQuestionGroups = [];
+    }
+  }
+
+  if (!gratitudeEntries) {
+    try {
+      gratitudeEntries = await getGratitudeEntries();
+    } catch {
+      gratitudeEntries = [];
+    }
+  }
+
+  const enrichedOptions: ExportBookOptions = {
+    ...options,
+    dailyQuestionGroups,
+    gratitudeEntries,
+  };
+
   try {
-    const html = generatePrintableBookHtml(options);
+    const html = generatePrintableBookHtml(enrichedOptions);
 
     // 1. Entorno Web
     if (Platform.OS === 'web') {

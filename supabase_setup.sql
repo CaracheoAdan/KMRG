@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sender VARCHAR(50) NOT NULL DEFAULT 'Javier',       -- 'Javier' o 'Ella' / 'Karla'
     recipient VARCHAR(50) NOT NULL DEFAULT 'Karla',    -- 'Javier' o 'Karla'
-    content TEXT NOT NULL CHECK (char_length(content) <= 5000),
+    content TEXT NOT NULL CHECK (char_length(content) <= 500000),
     scheduled_date DATE NOT NULL,
     theme_color VARCHAR(50) NOT NULL DEFAULT '#e63946',
     is_read BOOLEAN NOT NULL DEFAULT false,

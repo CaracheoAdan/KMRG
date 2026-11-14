@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
   Platform,
+  KeyboardAvoidingView,
   Vibration,
   Dimensions,
 } from 'react-native';
@@ -29,6 +30,7 @@ interface Props {
   primaryColor: string;
   onSaveCapsule: (capsule: TimeCapsuleItem) => void;
   onOpenCapsule: (capsuleId: string) => void;
+  onDeleteCapsule?: (capsuleId: string) => void;
 }
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -58,10 +60,33 @@ export const TimeCapsuleModal: React.FC<Props> = ({
   primaryColor,
   onSaveCapsule,
   onOpenCapsule,
+  onDeleteCapsule,
 }) => {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
   const [selectedCapsule, setSelectedCapsule] = useState<TimeCapsuleItem | null>(null);
+  const createScrollRef = useRef<any>(null);
+
+  const confirmDeleteCapsule = (cap: TimeCapsuleItem) => {
+    if (!onDeleteCapsule) return;
+    Alert.alert(
+      '¿Eliminar Cápsula del Tiempo?',
+      `Se eliminará "${cap.title}" de forma permanente para ambos.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            onDeleteCapsule(cap.id);
+            if (selectedCapsule?.id === cap.id) {
+              setSelectedCapsule(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Form State
   const [title, setTitle] = useState('');
@@ -164,7 +189,10 @@ export const TimeCapsuleModal: React.FC<Props> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
         <View style={[styles.sheetContainer, { backgroundColor: colors.surface }]}>
           {/* Header */}
           <View style={styles.header}>
@@ -263,6 +291,25 @@ export const TimeCapsuleModal: React.FC<Props> = ({
                   <Ionicons name="arrow-back" size={16} color="#ffffff" />
                   <Text style={styles.backToListText}>Volver a las Cápsulas</Text>
                 </TouchableOpacity>
+
+                {onDeleteCapsule && (
+                  <TouchableOpacity
+                    onPress={() => confirmDeleteCapsule(selectedCapsule)}
+                    style={{
+                      marginTop: 10,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      paddingVertical: 10,
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#ef4444' }}>
+                      Eliminar cápsula
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </ScrollView>
           ) : activeTab === 'list' ? (
@@ -287,7 +334,7 @@ export const TimeCapsuleModal: React.FC<Props> = ({
               ) : (
                 capsules.map((cap) => {
                   const rem = getRemainingTime(cap.unlockDate);
-                  const isOpened = !!cap.openedAt;
+                  const isOpened = Boolean(cap.openedAt || cap.isOpened);
 
                   return (
                     <View key={cap.id} style={styles.capsuleCard}>
@@ -307,6 +354,16 @@ export const TimeCapsuleModal: React.FC<Props> = ({
                             {cap.occasion} · Para abrir: {cap.unlockDate}
                           </Text>
                         </View>
+                        {onDeleteCapsule && (
+                          <TouchableOpacity
+                            onPress={() => confirmDeleteCapsule(cap)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={{ padding: 6 }}
+                            accessibilityLabel={`Eliminar cápsula ${cap.title}`}
+                          >
+                            <Ionicons name="trash-outline" size={17} color="#94a3b8" />
+                          </TouchableOpacity>
+                        )}
                       </View>
 
                       {/* Contador en Vivo o Botón de Apertura */}
@@ -360,7 +417,13 @@ export const TimeCapsuleModal: React.FC<Props> = ({
             </ScrollView>
           ) : (
             /* Formulario de Creación */
-            <ScrollView style={styles.contentScroll} contentContainerStyle={styles.scrollInner}>
+            <ScrollView
+              ref={createScrollRef}
+              style={styles.contentScroll}
+              contentContainerStyle={styles.scrollInner}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>Título de la Cápsula</Text>
                 <TextInput
@@ -405,6 +468,7 @@ export const TimeCapsuleModal: React.FC<Props> = ({
                   numberOfLines={4}
                   value={content}
                   onChangeText={setContent}
+                  onFocus={() => setTimeout(() => createScrollRef.current?.scrollToEnd({ animated: true }), 180)}
                 />
               </View>
 
@@ -454,7 +518,7 @@ export const TimeCapsuleModal: React.FC<Props> = ({
             onClose={() => setIsDatePickerOpen(false)}
           />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

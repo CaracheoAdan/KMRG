@@ -19,6 +19,12 @@ import {
   DEFAULT_PLACES_STATE,
 } from '../services/CoupleSyncService';
 import { getCachedMilestones, calculateTimeTogether } from '../services/StorageService';
+import {
+  fetchDailyAnswers,
+  buildDailyQuestionGroups,
+} from '../services/feature/dailyQuestionService';
+import { getGratitudeEntries } from '../services/feature/gratitudeService';
+import { fetchQuizData } from '../services/feature/quizService';
 import { FONTS } from '../theme/designSystem';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -50,6 +56,11 @@ export const CoupleWrappedModal: React.FC<Props> = ({
   const [pointsKarla, setPointsKarla] = useState(0);
   const [pointsJavier, setPointsJavier] = useState(0);
   const [trophiesTotal, setTrophiesTotal] = useState(0);
+  const [bothAnsweredQuestions, setBothAnsweredQuestions] = useState(0);
+  const [questionStreakDays, setQuestionStreakDays] = useState(0);
+  const [gratitudeNotesCount, setGratitudeNotesCount] = useState(0);
+  const [quizTotalQuestions, setQuizTotalQuestions] = useState(0);
+  const [quizCorrectAttempts, setQuizCorrectAttempts] = useState(0);
 
   useEffect(() => {
     if (!visible) return;
@@ -110,6 +121,37 @@ export const CoupleWrappedModal: React.FC<Props> = ({
       .catch((err) => {
         console.warn('[CoupleWrappedModal] Error cargando métricas:', err);
       });
+
+    // Cargar métricas de Preguntas Diarias, Diario de Gratitud y Quiz de Pareja
+    (async () => {
+      try {
+        const rawAnswers = await fetchDailyAnswers();
+        const { bothAnsweredTotal, streakDays } = buildDailyQuestionGroups(rawAnswers);
+        setBothAnsweredQuestions(bothAnsweredTotal);
+        setQuestionStreakDays(streakDays);
+      } catch (err) {
+        console.warn('[CoupleWrappedModal] Error cargando preguntas diarias:', err);
+      }
+
+      try {
+        const entries = await getGratitudeEntries();
+        setGratitudeNotesCount(Array.isArray(entries) ? entries.length : 0);
+      } catch (err) {
+        console.warn('[CoupleWrappedModal] Error cargando diario de gratitud:', err);
+      }
+
+      try {
+        const quiz = await fetchQuizData();
+        setQuizTotalQuestions(quiz.questions?.length || 0);
+        setQuizCorrectAttempts(
+          Array.isArray(quiz.attempts)
+            ? quiz.attempts.filter((a) => a.is_correct).length
+            : 0
+        );
+      } catch (err) {
+        console.warn('[CoupleWrappedModal] Error cargando quiz de pareja:', err);
+      }
+    })();
   }, [visible, daysTogether, streakCount, anniversaryDate]);
 
   const calcFromAnniv = useMemo(
@@ -194,6 +236,27 @@ export const CoupleWrappedModal: React.FC<Props> = ({
                 <Text style={[styles.metricNumber, { color: colors.text }]}>{photosCount}</Text>
                 <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Recuerdos</Text>
                 <Text style={styles.metricSub}>Guardados en álbum</Text>
+              </View>
+
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                <Ionicons name="chatbubbles-outline" size={20} color={primaryColor} />
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{bothAnsweredQuestions}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Preguntas respondidas juntos</Text>
+                <Text style={styles.metricSub}>Racha de {questionStreakDays} días</Text>
+              </View>
+
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                <Ionicons name="flower-outline" size={20} color={primaryColor} />
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{gratitudeNotesCount}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Notas de gratitud</Text>
+                <Text style={styles.metricSub}>Diario de agradecimiento</Text>
+              </View>
+
+              <View style={[styles.metricBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border, width: '100%' }]}>
+                <Ionicons name="help-buoy-outline" size={20} color={primaryColor} />
+                <Text style={[styles.metricNumber, { color: colors.text }]}>{quizCorrectAttempts}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Aciertos en el Quiz de Pareja</Text>
+                <Text style={styles.metricSub}>De {quizTotalQuestions} preguntas creadas entre ambos</Text>
               </View>
             </View>
 

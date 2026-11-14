@@ -26,6 +26,7 @@ import {
   getSpecialPlacesState,
   saveSpecialPlacesState,
   mergeSpecialPlaces,
+  applyIncomingRealtimePlacesState,
   DEFAULT_SPECIAL_PLACES,
 } from '../services/CoupleSyncService';
 import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
@@ -114,6 +115,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
     height: INLINE_MAP_HEIGHT,
   });
   const [tileError, setTileError] = useState(false);
+  const addPlaceScrollRef = useRef<any>(null);
 
   // Info del lugar buscado recientemente para prellenar si el apuntador sigue sobre él
   const [searchedPlaceInfo, setSearchedPlaceInfo] = useState<{
@@ -148,6 +150,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
 
   // Modal de detalle de un lugar existente
   const [detailModalPlace, setDetailModalPlace] = useState<SpecialPlace | null>(null);
+  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
 
   // Animación del pin seleccionado
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -197,7 +200,11 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
             payload.new?.payload?.places &&
             payload.new?.sender !== currentProfile
           ) {
-            setPlaces((prev) => mergeSpecialPlaces({ places: prev }, payload.new.payload).places);
+            setPlaces((prev) => {
+              const merged = mergeSpecialPlaces({ places: prev }, payload.new.payload);
+              void applyIncomingRealtimePlacesState(prev, payload.new.payload);
+              return merged.places;
+            });
           }
         }
       )
@@ -324,10 +331,13 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
   // Al confirmar un punto del mapa para abrir el formulario de Nuevo Pin
   const openAddPlaceModalAtCoordinates = useCallback(
     async (lat: number, lon: number, prefilledAddress?: string, prefilledTitle?: string) => {
+      setEditingPlaceId(null);
       setNewLat(lat);
       setNewLon(lon);
       setCenterLat(lat);
       setCenterLon(lon);
+      setNewNotes('');
+      setNewImageUri(null);
       if (prefilledTitle) {
         setNewTitle(prefilledTitle);
       } else {
@@ -482,6 +492,40 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
       } catch (e) {
         console.warn('Error subiendo foto de lugar a storage:', e);
       }
+    }
+
+    if (editingPlaceId) {
+      let updatedPlace: SpecialPlace | null = null;
+      const next = places.map((p) => {
+        if (p.id === editingPlaceId) {
+          updatedPlace = {
+            ...p,
+            title: newTitle.trim(),
+            category: newCategory,
+            address: newAddress.trim() || `${newLat.toFixed(4)}, ${newLon.toFixed(4)}`,
+            date: newDate,
+            notes: newNotes.trim() || 'Un recuerdo inolvidable juntos.',
+            rating: newRating,
+            latitude: newLat,
+            longitude: newLon,
+            imageUri: finalPhotoUrl,
+          };
+          return updatedPlace;
+        }
+        return p;
+      });
+      await syncPlaces(next);
+      if (updatedPlace && selectedPlace?.id === editingPlaceId) {
+        setSelectedPlace(updatedPlace);
+      }
+      setEditingPlaceId(null);
+      setSearchedPlaceInfo(null);
+      setNewTitle('');
+      setNewAddress('');
+      setNewNotes('');
+      setNewImageUri(null);
+      setIsAddModalOpen(false);
+      return;
     }
 
     const item: SpecialPlace = {
@@ -1233,6 +1277,39 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                   </TouchableOpacity>
 
                   <TouchableOpacity
+                    onPress={() => {
+                      const target = detailModalPlace;
+                      setNewTitle(target.title);
+                      setNewAddress(target.address);
+                      setNewCategory(target.category);
+                      setNewDate(toLocalDateString(target.date));
+                      setNewNotes(target.notes || '');
+                      setNewRating(target.rating || 5);
+                      setNewImageUri(target.imageUri || null);
+                      setNewLat(target.latitude);
+                      setNewLon(target.longitude);
+                      setEditingPlaceId(target.id);
+                      setDetailModalPlace(null);
+                      setIsAddModalOpen(true);
+                    }}
+                    style={[
+                      styles.detailDeleteBtn,
+                      {
+                        backgroundColor: `${primaryColor}18`,
+                        width: undefined,
+                        paddingHorizontal: 12,
+                        flexDirection: 'row',
+                        gap: 5,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="pencil" size={16} color={primaryColor} />
+                    <Text style={{ fontSize: 12.5, fontWeight: '700', color: primaryColor }}>
+                      Editar
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
                     onPress={() => handleDeletePlace(detailModalPlace)}
                     style={styles.detailDeleteBtn}
                   >
@@ -1250,29 +1327,41 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
         visible={isAddModalOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setIsAddModalOpen(false)}
+        onRequestClose={() => {
+          setEditingPlaceId(null);
+          setIsAddModalOpen(false);
+        }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <View style={styles.addModalCard}>
             <View style={styles.detailHeaderBar}>
               <View>
-                <Text style={styles.addModalTitle}>Guardar Pin en el Mapa</Text>
+                <Text style={styles.addModalTitle}>
+                  {editingPlaceId ? 'Editar Lugar Especial' : 'Guardar Pin en el Mapa'}
+                </Text>
                 <Text style={styles.addModalSub}>
                   Coordenadas: {newLat.toFixed(4)}, {newLon.toFixed(4)}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setIsAddModalOpen(false)}
+                onPress={() => {
+                  setEditingPlaceId(null);
+                  setIsAddModalOpen(false);
+                }}
                 style={styles.closeIconBtn}
               >
                 <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={addPlaceScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.fieldLabel}>Nombre de este lugar especial</Text>
               <TextInput
                 value={newTitle}
@@ -1345,6 +1434,7 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
               <TextInput
                 value={newNotes}
                 onChangeText={setNewNotes}
+                onFocus={() => setTimeout(() => addPlaceScrollRef.current?.scrollToEnd({ animated: true }), 180)}
                 placeholder="¿Qué pasó aquí que nunca quieren olvidar?"
                 placeholderTextColor="#94a3b8"
                 multiline
@@ -1365,7 +1455,9 @@ export const SpecialPlacesMap: React.FC<Props> = ({ currentProfile, primaryColor
                 style={[styles.savePlaceBtn, { backgroundColor: primaryColor }]}
               >
                 <Ionicons name="location" size={18} color="#ffffff" />
-                <Text style={styles.savePlaceBtnText}>Guardar Pin en Nuestro Mapa</Text>
+                <Text style={styles.savePlaceBtnText}>
+                  {editingPlaceId ? 'Guardar Cambios del Lugar' : 'Guardar Pin en Nuestro Mapa'}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
 

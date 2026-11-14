@@ -7,13 +7,18 @@ import {
   Animated,
   Dimensions,
   Alert,
+  Image,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../ui/Icon';
 import { UserProfile } from '../../types';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
+import { useProfile } from '../../contexts/ProfileContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export interface SavedSudokuSession {
+  sessionId?: string;
   difficulty: 'easy' | 'medium' | 'hard';
   board: number[][];
   solution: number[][];
@@ -21,6 +26,7 @@ export interface SavedSudokuSession {
   notes: Record<string, number[]>;
   mistakes: number;
   completed: boolean;
+  completedBy?: UserProfile | null;
   placedBy?: Record<string, 'Karla' | 'Javier'>;
 }
 
@@ -55,10 +61,17 @@ export const SudokuArena: React.FC<Props> = ({
   onNewGame,
   isSudokuGameOver,
 }) => {
+  const { getDisplayName, getAvatarUri } = useProfile();
+  const karlaAvatar = getAvatarUri('Karla');
+  const javierAvatar = getAvatarUri('Javier');
+  const { colors, isDark } = useTheme();
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Temporizador de partida en vivo
+  // Temporizador de partida en vivo (se reinicia al empezar tablero nuevo)
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    setElapsedSeconds(0);
+  }, [sudoku.sessionId]);
   useEffect(() => {
     if (sudoku.completed || isSudokuGameOver) return;
     const interval = setInterval(() => {
@@ -94,6 +107,16 @@ export const SudokuArena: React.FC<Props> = ({
     });
     return count;
   }, [sudoku.board]);
+
+  const placedCounts = useMemo(() => {
+    let k = 0;
+    let j = 0;
+    Object.values(sudoku.placedBy || {}).forEach((owner) => {
+      if (owner === 'Karla') k++;
+      else if (owner === 'Javier') j++;
+    });
+    return { Karla: k, Javier: j };
+  }, [sudoku.placedBy]);
 
   // Contador de dígitos restantes
   const digitCounts: Record<number, number> = {
@@ -131,9 +154,14 @@ export const SudokuArena: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      {/* 1. Barra Superior: Selector de Dificultad + Vidas */}
-      <View style={[styles.topBar, { width: exactGridSize }]}>
-        <View style={styles.segmentedControl}>
+      {/* 1. Barra Bento Superior: Selector de Dificultad + Vidas */}
+      <LinearGradient
+        colors={isDark ? [colors.surface, colors.surfaceAlt] : [colors.primaryLight, colors.surface]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.topBar, { width: exactGridSize, borderColor: colors.border }, GAMES_THEME.shadows.soft]}
+      >
+        <View style={[styles.segmentedControl, isDark && { backgroundColor: colors.background }]}>
           {[
             { key: 'easy', label: 'Fácil' },
             { key: 'medium', label: 'Medio' },
@@ -166,10 +194,10 @@ export const SudokuArena: React.FC<Props> = ({
                     onNewGame(d.key as any);
                   }
                 }}
-                style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                style={[styles.segmentBtn, active && [styles.segmentBtnActive, isDark && { backgroundColor: colors.surface }]]}
                 accessibilityLabel={`Dificultad ${d.label}`}
               >
-                <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                <Text style={[styles.segmentText, active && [styles.segmentTextActive, isDark && { color: colors.text }]]}>
                   {d.label}
                 </Text>
               </TouchableOpacity>
@@ -194,7 +222,7 @@ export const SudokuArena: React.FC<Props> = ({
             })}
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* 2. Cuadrícula 9x9 con Ajuste Exacto y Líneas 3x3 de Caja Completas */}
       <Animated.View
@@ -333,7 +361,7 @@ export const SudokuArena: React.FC<Props> = ({
             accessibilityLabel="Obtener pista mágica"
           >
             <Ionicons name="bulb" size={14} color="#9333ea" />
-            <Text style={[styles.dockToolBtnText, styles.dockToolBtnHintText]}>Pista (+50)</Text>
+            <Text style={[styles.dockToolBtnText, styles.dockToolBtnHintText]}>Pista (-15)</Text>
           </TouchableOpacity>
         </View>
 
@@ -378,20 +406,40 @@ export const SudokuArena: React.FC<Props> = ({
           </View>
         )}
 
-        {/* Barra de Progreso (X/81 celdas) y Temporizador */}
-        <View style={styles.sudokuProgressCard}>
+        {/* Barra de Progreso (X/81 celdas), Aporte por Jugador y Temporizador */}
+        <View style={[styles.sudokuProgressCard, { backgroundColor: isDark ? colors.surface : '#ffffff', borderColor: colors.border }]}>
           <View style={styles.sudokuProgressRow}>
             <View style={styles.timerChip}>
-              <Ionicons name="time-outline" size={13} color="#475569" />
-              <Text style={styles.timerText}>{formatTimer(elapsedSeconds)}</Text>
+              <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+              <Text style={[styles.timerText, { color: colors.textSecondary }]}>{formatTimer(elapsedSeconds)}</Text>
+            </View>
+
+            <View style={styles.contribRow}>
+              <View style={styles.contribPill}>
+                {karlaAvatar ? (
+                  <Image source={{ uri: karlaAvatar }} style={styles.contribAvatar} />
+                ) : (
+                  <View style={[styles.contribDot, { backgroundColor: '#9333ea' }]} />
+                )}
+                <Text style={[styles.contribText, { color: '#9333ea' }]}>{placedCounts.Karla}</Text>
+              </View>
+              <Text style={[styles.contribSep, { color: colors.textMuted }]}>•</Text>
+              <View style={styles.contribPill}>
+                {javierAvatar ? (
+                  <Image source={{ uri: javierAvatar }} style={styles.contribAvatar} />
+                ) : (
+                  <View style={[styles.contribDot, { backgroundColor: '#0284c7' }]} />
+                )}
+                <Text style={[styles.contribText, { color: '#0284c7' }]}>{placedCounts.Javier}</Text>
+              </View>
             </View>
 
             <View style={styles.cellCountChip}>
-              <Text style={styles.cellCountText}>{filledCellsCount}/81 celdas</Text>
+              <Text style={styles.cellCountText}>{filledCellsCount}/81</Text>
             </View>
           </View>
 
-          <View style={styles.progressBarTrack}>
+          <View style={[styles.progressBarTrack, isDark && { backgroundColor: colors.surfaceAlt }]}>
             <View
               style={[
                 styles.progressBarFill,
@@ -404,16 +452,16 @@ export const SudokuArena: React.FC<Props> = ({
         {/* Leyenda Explicativa de Colores */}
         <View style={styles.colorLegendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#1e293b' }]} />
-            <Text style={styles.legendText}>Original</Text>
+            <View style={[styles.legendDot, { backgroundColor: isDark ? '#94a3b8' : '#1e293b' }]} />
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Original</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#9333ea' }]} />
-            <Text style={[styles.legendText, { color: '#9333ea' }]}>Karlita</Text>
+            <Text style={[styles.legendText, { color: '#9333ea' }]}>{getDisplayName('Karla')}</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#0284c7' }]} />
-            <Text style={[styles.legendText, { color: '#0284c7' }]}>Javier</Text>
+            <Text style={[styles.legendText, { color: '#0284c7' }]}>{getDisplayName('Javier')}</Text>
           </View>
         </View>
       </View>
@@ -435,7 +483,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 2,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   segmentedControl: {
     flexDirection: 'row',
@@ -615,12 +666,12 @@ const styles = StyleSheet.create({
   sudokuProgressCard: {
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    gap: 4,
+    gap: 5,
     ...GAMES_THEME.shadows.soft,
   },
   sudokuProgressRow: {
@@ -637,6 +688,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#475569',
+  },
+  contribRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contribPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  contribAvatar: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  contribDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  contribText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  contribSep: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   cellCountChip: {
     flexDirection: 'row',

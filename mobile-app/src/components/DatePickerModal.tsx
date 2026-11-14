@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from './ui/Icon';
-import { formatDisplayDate, toLocalDateString } from '../services/StorageService';
+import { calculateTimeTogether, formatDisplayDate, toLocalDateString } from '../services/StorageService';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface DatePickerModalProps {
@@ -175,55 +175,52 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
           </View>
 
           {/* Accesos rápidos O Selector de Año/Mes para Aniversario */}
+          {!showQuickSelect && (() => {
+            const timeTogether = calculateTimeTogether(tempDate);
+            return (
+              <View style={[styles.anniversaryDaysBanner, { backgroundColor: `${primaryColor}12`, borderColor: `${primaryColor}30` }]}>
+                <Text style={[styles.anniversaryDaysValue, { color: primaryColor }]}>
+                  {timeTogether.totalDays} días juntos
+                </Text>
+                <Text style={styles.anniversaryDaysBreakdown}>
+                  {timeTogether.years > 0 ? `${timeTogether.years}a · ` : ''}
+                  {timeTogether.months > 0 ? `${timeTogether.months}m · ` : ''}
+                  {timeTogether.days}d de amor
+                </Text>
+              </View>
+            );
+          })()}
+
           {showQuickSelect ? (
             <View style={styles.quickButtonsRow}>
               {minDate ? (
                 <>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const t = new Date();
-                      t.setDate(t.getDate() + 1);
-                      const s = toLocalDateString(t);
-                      setTempDate(s);
-                      const parts = s.split('-').map(Number);
-                      setCurrentYear(parts[0]);
-                      setCurrentMonth(parts[1] - 1);
-                    }}
-                    style={styles.quickBtn}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.quickBtnText}>Mañana</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const t = new Date();
-                      t.setDate(t.getDate() + 7);
-                      const s = toLocalDateString(t);
-                      setTempDate(s);
-                      const parts = s.split('-').map(Number);
-                      setCurrentYear(parts[0]);
-                      setCurrentMonth(parts[1] - 1);
-                    }}
-                    style={styles.quickBtn}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.quickBtnText}>En 1 sem</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const t = new Date();
-                      t.setDate(t.getDate() + 30);
-                      const s = toLocalDateString(t);
-                      setTempDate(s);
-                      const parts = s.split('-').map(Number);
-                      setCurrentYear(parts[0]);
-                      setCurrentMonth(parts[1] - 1);
-                    }}
-                    style={styles.quickBtn}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.quickBtnText}>En 1 mes</Text>
-                  </TouchableOpacity>
+                  {[
+                    { label: 'Hoy', offset: 0 },
+                    { label: 'Mañana', offset: 1 },
+                    { label: 'En 1 sem', offset: 7 },
+                    { label: 'En 1 mes', offset: 30 },
+                  ].map((opt) => (
+                    <TouchableOpacity
+                      key={opt.label}
+                      onPress={() => {
+                        const t = new Date();
+                        t.setDate(t.getDate() + opt.offset);
+                        let s = toLocalDateString(t);
+                        if (minDate && s < minDate) {
+                          s = minDate;
+                        }
+                        setTempDate(s);
+                        const parts = s.split('-').map(Number);
+                        setCurrentYear(parts[0]);
+                        setCurrentMonth(parts[1] - 1);
+                      }}
+                      style={styles.quickBtn}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.quickBtnText}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </>
               ) : (
                 <>
@@ -694,5 +691,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#2b2d42',
+  },
+  anniversaryDaysBanner: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  anniversaryDaysValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  anniversaryDaysBreakdown: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#495057',
+    marginTop: 2,
   },
 });

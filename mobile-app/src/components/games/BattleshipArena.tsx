@@ -8,6 +8,7 @@ import {
   Dimensions,
   PanResponder,
   ScrollView,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
@@ -29,6 +30,7 @@ import {
 import { UserProfile } from '../../types';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
+import { useProfile } from '../../contexts/ProfileContext';
 
 interface Props {
   boardPx: number;
@@ -64,53 +66,107 @@ const SHIP_CONFIG: Record<
   carrier: {
     name: 'Portaaviones',
     size: 5,
-    bg: '#ef4444',
-    darkBg: '#b91c1c',
-    lightBg: '#fca5a5',
+    bg: '#475569',
+    darkBg: '#1e293b',
+    lightBg: '#94a3b8',
     icon: 'airplane',
-    desc: 'Cubierta con pista y cazas',
+    desc: 'Cubierta angular con catapultas y cazas',
   },
   battleship: {
     name: 'Acorazado',
     size: 4,
-    bg: '#f97316',
-    darkBg: '#c2410c',
-    lightBg: '#fed7aa',
+    bg: '#334155',
+    darkBg: '#0f172a',
+    lightBg: '#94a3b8',
     icon: 'shield',
-    desc: 'Torretas de artillería pesada',
+    desc: 'Cubierta blindada con torretas triples',
   },
   cruiser: {
     name: 'Crucero',
     size: 3,
-    bg: '#8b5cf6',
-    darkBg: '#6d28d9',
-    lightBg: '#c4b5fd',
+    bg: '#0369a1',
+    darkBg: '#0c4a6e',
+    lightBg: '#38bdf8',
     icon: 'boat',
-    desc: 'Cañones dobles y chimenea',
+    desc: 'Lanzadores VLS y helipuerto de popa',
   },
   submarine: {
     name: 'Submarino',
     size: 3,
-    bg: '#10b981',
-    darkBg: '#047857',
-    lightBg: '#6ee7b7',
+    bg: '#115e59',
+    darkBg: '#042f2e',
+    lightBg: '#2dd4bf',
     icon: 'locate',
-    desc: 'Casco hidrodinámico y periscopio',
+    desc: 'Casco sigiloso con hidroplanos y periscopio',
   },
   destroyer: {
     name: 'Destructor',
     size: 2,
-    bg: '#ec4899',
-    darkBg: '#be185d',
-    lightBg: '#f472b6',
+    bg: '#64748b',
+    darkBg: '#334155',
+    lightBg: '#cbd5e1',
     icon: 'flame',
-    desc: 'Proa afilada y antena radar',
+    desc: 'Interceptor furtivo de proa afilada',
   },
 };
 
 // ============================================================================
 // COMPONENTE VISUAL: SILUETA NAVAL REALISTA DESDE ARRIBA (react-native-svg)
 // ============================================================================
+const getShipIsHoriz = (ship: BattleshipShip): boolean =>
+  (ship.orientation ||
+    (ship.cells.length > 1 && ship.cells[1] - ship.cells[0] === 1 ? 'H' : 'V')) === 'H';
+
+const computeShipDragPlacement = (
+  ship: BattleshipShip,
+  allFleet: BattleshipShip[],
+  dR: number,
+  dC: number
+) => {
+  const isHoriz = getShipIsHoriz(ship);
+  const minR = Math.min(...ship.cells.map((c) => Math.floor(c / 10)));
+  const minC = Math.min(...ship.cells.map((c) => c % 10));
+  const maxR = isHoriz ? 9 : 10 - ship.size;
+  const maxC = isHoriz ? 10 - ship.size : 9;
+  const targetR = Math.max(0, Math.min(minR + dR, maxR));
+  const targetC = Math.max(0, Math.min(minC + dC, maxC));
+
+  const occupiedByOthers = new Set<number>();
+  for (const other of allFleet) {
+    if (other.id === ship.id) continue;
+    for (const c of other.cells) occupiedByOthers.add(c);
+  }
+
+  const tryCellsAt = (r: number, c: number): number[] | null => {
+    if (r < 0 || r > maxR || c < 0 || c > maxC) return null;
+    const candidate: number[] = [];
+    for (let i = 0; i < ship.size; i++) {
+      const nr = isHoriz ? r : r + i;
+      const nc = isHoriz ? c + i : c;
+      const idx = nr * 10 + nc;
+      if (occupiedByOthers.has(idx)) return null;
+      candidate.push(idx);
+    }
+    return candidate;
+  };
+
+  const rawCells: number[] = [];
+  for (let i = 0; i < ship.size; i++) {
+    const nr = isHoriz ? targetR : targetR + i;
+    const nc = isHoriz ? targetC + i : targetC;
+    rawCells.push(nr * 10 + nc);
+  }
+
+  return {
+    isHoriz,
+    targetR,
+    targetC,
+    rawCells,
+    directCells: tryCellsAt(targetR, targetC),
+    tryCellsAt,
+  };
+};
+
 interface NavalShipSpriteProps {
   shipId: string;
   size: number;
@@ -119,12 +175,13 @@ interface NavalShipSpriteProps {
   isSelected?: boolean;
   isGhost?: boolean;
   isValidGhost?: boolean;
+  isSunk?: boolean;
   isMini?: boolean;
   miniW?: number;
   miniH?: number;
 }
 
-const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
+const NavalShipSprite = React.memo<NavalShipSpriteProps>(({
   shipId,
   size,
   orientation,
@@ -132,14 +189,15 @@ const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
   isSelected = false,
   isGhost = false,
   isValidGhost = true,
+  isSunk = false,
   isMini = false,
   miniW,
   miniH,
 }) => {
   const meta = SHIP_CONFIG[shipId] || {
-    bg: '#0284c7',
-    darkBg: '#0369a1',
-    lightBg: '#7dd3fc',
+    bg: '#475569',
+    darkBg: '#1e293b',
+    lightBg: '#94a3b8',
   };
 
   const W = isMini ? (miniW || size * 14) : size * cellSize;
@@ -149,25 +207,30 @@ const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
   const svgWidth = isMini ? W : isHoriz ? W : H;
   const svgHeight = isMini ? H : isHoriz ? H : W;
 
-  // Colores dinámicos
-  const gradId = `navalGrad_${shipId}_${isGhost ? (isValidGhost ? 'valid' : 'invalid') : 'normal'}_${isMini ? 'mini' : 'board'}`;
+  const gradId = `navalGrad_${shipId}_${isGhost ? (isValidGhost ? 'valid' : 'invalid') : isSunk ? 'sunk' : 'normal'}_${isMini ? 'mini' : 'board'}`;
 
   const fillStart = isGhost
     ? isValidGhost
       ? 'rgba(34, 197, 94, 0.45)'
       : 'rgba(239, 68, 68, 0.45)'
+    : isSunk
+    ? '#7f1d1d'
     : meta.lightBg;
 
   const fillMid = isGhost
     ? isValidGhost
       ? 'rgba(22, 163, 74, 0.55)'
       : 'rgba(220, 38, 38, 0.55)'
+    : isSunk
+    ? '#450a0a'
     : meta.bg;
 
   const fillEnd = isGhost
     ? isValidGhost
       ? 'rgba(21, 128, 61, 0.65)'
       : 'rgba(185, 28, 28, 0.65)'
+    : isSunk
+    ? '#1f0707'
     : meta.darkBg;
 
   const strokeColor = isGhost
@@ -176,47 +239,119 @@ const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
       : '#ef4444'
     : isSelected
     ? '#facc15'
-    : 'rgba(255, 255, 255, 0.75)';
+    : isSunk
+    ? '#f87171'
+    : 'rgba(226, 232, 240, 0.78)';
 
-  const strokeWidth = isGhost ? 2 : isSelected ? 2.6 : isMini ? 0.8 : 1.2;
+  const strokeWidth = isGhost ? 2 : isSelected ? 2.4 : isMini ? 0.75 : 1.15;
 
-  // Trayectoria continua de casco horizontal
+  // Geometría proporcional compatible tanto en radar (cellSize 26-34) como en badges mini (miniH 11-14)
+  const padY = isMini ? Math.max(1.2, H * 0.14) : Math.max(2.6, H * 0.11);
+  const yTop = padY;
+  const yBot = H - padY;
+  const midY = H / 2;
+  const beamH = yBot - yTop;
+  const bowX = isMini ? 1.4 : 2.8;
+  const sternX = W - (isMini ? 1.4 : 2.8);
+
+  const isCarrier = shipId === 'carrier';
   const isSub = shipId === 'submarine';
-  const proaCurve = isSub ? 12 : 15;
-  const popaRound = isSub ? 12 : 5;
+  const isDestroyer = shipId === 'destroyer';
 
-  const hullPath = isSub
-    ? `M ${proaCurve} 3.5 L ${W - popaRound} 3.5 Q ${W - 2} 3.5 ${W - 2} ${H / 2} Q ${W - 2} ${H - 3.5} ${W - popaRound} ${H - 3.5} L ${proaCurve} ${H - 3.5} Q 2 ${H - 3.5} 2 ${H / 2} Q 2 3.5 ${proaCurve} 3.5 Z`
-    : `M 3.5 ${H / 2} Q 8 3.5 ${proaCurve} 3.5 L ${W - popaRound} 3.5 Q ${W - 2} 3.5 ${W - 2} 6 L ${W - 2} ${H - 6} Q ${W - 2} ${H - 3.5} ${W - popaRound} ${H - 3.5} L ${proaCurve} ${H - 3.5} Q 8 ${H - 3.5} 3.5 ${H / 2} Z`;
+  const bowLen = isSub
+    ? Math.min(W * 0.24, H * 0.65)
+    : isDestroyer
+    ? Math.min(W * 0.30, H * 0.85)
+    : Math.min(W * 0.22, H * 0.72);
+  const sternBevel = isSub ? Math.min(W * 0.22, H * 0.55) : Math.min(W * 0.08, 4.5);
 
-  // Cubierta interior sutil
-  const innerDeckPath = isSub
-    ? `M ${proaCurve + 2} 5.5 L ${W - popaRound - 2} 5.5 Q ${W - 4} 5.5 ${W - 4} ${H / 2} Q ${W - 4} ${H - 5.5} ${W - popaRound - 2} ${H - 5.5} L ${proaCurve + 2} ${H - 5.5} Q 4 ${H - 5.5} 4 ${H / 2} Q 4 5.5 ${proaCurve + 2} 5.5 Z`
-    : `M 6.5 ${H / 2} Q 10 5.5 ${proaCurve + 1} 5.5 L ${W - popaRound - 1} 5.5 L ${W - popaRound - 1} ${H - 5.5} L ${proaCurve + 1} ${H - 5.5} Q 10 ${H - 5.5} 6.5 ${H / 2} Z`;
+  const hullPath = isCarrier
+    ? (() => {
+        const deckTop = Math.max(1, yTop - (isMini ? 0.3 : 1.0));
+        const deckBot = Math.min(H - 1, yBot + (isMini ? 0.3 : 0.8));
+        return `M ${bowX} ${yTop + beamH * 0.14} L ${bowX + W * 0.08} ${yTop} L ${W * 0.26} ${deckTop} L ${W * 0.76} ${deckTop} L ${sternX - 2} ${yTop + 0.6} L ${sternX} ${yTop + 2} L ${sternX} ${yBot - 2} L ${sternX - 2} ${deckBot - 0.8} L ${W * 0.14} ${deckBot} L ${bowX + W * 0.05} ${yBot - beamH * 0.12} Z`;
+      })()
+    : isSub
+    ? `M ${bowX + bowLen} ${yTop} L ${W * 0.58} ${yTop} Q ${W * 0.84} ${yTop + beamH * 0.08} ${sternX} ${midY - beamH * 0.22} L ${sternX} ${midY + beamH * 0.22} Q ${W * 0.84} ${yBot - beamH * 0.08} ${W * 0.58} ${yBot} L ${bowX + bowLen} ${yBot} Q ${bowX} ${yBot} ${bowX} ${midY} Q ${bowX} ${yTop} ${bowX + bowLen} ${yTop} Z`
+    : `M ${bowX} ${midY} Q ${bowX + bowLen * 0.45} ${yTop} ${bowX + bowLen} ${yTop} L ${sternX - sternBevel} ${yTop} Q ${sternX} ${yTop + 1} ${sternX} ${yTop + beamH * 0.22} L ${sternX} ${yBot - beamH * 0.22} Q ${sternX} ${yBot - 1} ${sternX - sternBevel} ${yBot} L ${bowX + bowLen} ${yBot} Q ${bowX + bowLen * 0.45} ${yBot} ${bowX} ${midY} Z`;
+
+  const innerDeckPath = isCarrier
+    ? `M ${bowX + W * 0.1} ${yTop + 2} L ${W * 0.75} ${yTop + 1} L ${sternX - 2.5} ${yTop + 2.5} L ${sternX - 2.5} ${yBot - 2} L ${W * 0.16} ${yBot - 1} Z`
+    : isSub
+    ? `M ${bowX + bowLen + 2} ${midY - beamH * 0.14} L ${W * 0.72} ${midY - beamH * 0.12} L ${W * 0.72} ${midY + beamH * 0.12} L ${bowX + bowLen + 2} ${midY + beamH * 0.14} Z`
+    : `M ${bowX + bowLen * 0.55} ${midY} L ${bowX + bowLen + 1} ${yTop + 2} L ${sternX - sternBevel - 1} ${yTop + 2} L ${sternX - sternBevel - 1} ${yBot - 2} L ${bowX + bowLen + 1} ${yBot - 2} Z`;
 
   // Contenido detallado horizontal
   const renderHorizontalShipInterior = () => (
-    <G>
-      {/* Sombra suave de casco sobre el agua */}
+    <G opacity={isSunk ? 0.72 : 1}>
+      {/* Sombra de casco proyectada sobre el océano */}
       {!isMini && !isGhost && (
         <Path
           d={hullPath}
-          transform="translate(1.5, 2)"
-          fill="rgba(0, 8, 20, 0.35)"
+          transform="translate(1.5, 2.2)"
+          fill="rgba(2, 6, 23, 0.55)"
         />
       )}
 
-      {/* Espuma suave en popa contenida estrictamente dentro de la silueta (sin salirse a la columna J) */}
-      {!isMini && !isGhost && (
-        <Path
-          d={`M ${W - 4} ${H * 0.35} Q ${W - 1.5} ${H * 0.5} ${W - 4} ${H * 0.65}`}
-          stroke="rgba(255, 255, 255, 0.45)"
-          strokeWidth={1.2}
-          fill="none"
-        />
+      {/* Hidroplanos de proa y timones de popa del submarino */}
+      {!isGhost && isSub && (
+        <G>
+          <Rect
+            x={W * 0.22}
+            y={Math.max(0.8, yTop - (isMini ? 1 : 2.2))}
+            width={isMini ? W * 0.08 : 5}
+            height={isMini ? 1.3 : 2.6}
+            rx={0.6}
+            fill="#0d9488"
+            stroke="rgba(204, 251, 241, 0.65)"
+            strokeWidth={0.5}
+          />
+          <Rect
+            x={W * 0.22}
+            y={Math.min(H - 2, yBot - (isMini ? 0.3 : 0.4))}
+            width={isMini ? W * 0.08 : 5}
+            height={isMini ? 1.3 : 2.6}
+            rx={0.6}
+            fill="#0d9488"
+            stroke="rgba(204, 251, 241, 0.65)"
+            strokeWidth={0.5}
+          />
+          {!isMini && (
+            <G>
+              <Line
+                x1={sternX - 1.5}
+                y1={midY - beamH * 0.34}
+                x2={sternX - 1.5}
+                y2={midY + beamH * 0.34}
+                stroke="#5eead4"
+                strokeWidth={1.6}
+              />
+              <Line
+                x1={sternX}
+                y1={midY - 2.6}
+                x2={sternX + 1}
+                y2={midY + 2.6}
+                stroke="#fbbf24"
+                strokeWidth={1.4}
+              />
+            </G>
+          )}
+        </G>
       )}
 
-      {/* Casco principal con degradado temático */}
+      {/* Estela de espuma blanca en popa */}
+      {!isMini && !isGhost && !isSunk && (
+        <G opacity={0.45}>
+          <Path
+            d={`M ${sternX - 2} ${midY - beamH * 0.26} Q ${sternX} ${midY} ${sternX - 2} ${midY + beamH * 0.26}`}
+            stroke="#e0f2fe"
+            strokeWidth={1.2}
+            fill="none"
+          />
+        </G>
+      )}
+
+      {/* Casco principal con acabado metálico */}
       <Path
         d={hullPath}
         fill={`url(#${gradId})`}
@@ -224,310 +359,477 @@ const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
         strokeWidth={strokeWidth}
       />
 
-      {/* Cubierta interior más clara */}
+      {/* Cubierta interior y bisel de armadura */}
       {!isGhost && (
         <Path
           d={innerDeckPath}
-          fill="rgba(255, 255, 255, 0.16)"
-          stroke="rgba(0, 0, 0, 0.12)"
-          strokeWidth={0.6}
+          fill={isSub ? 'rgba(20, 184, 166, 0.16)' : 'rgba(15, 23, 42, 0.36)'}
+          stroke="rgba(255, 255, 255, 0.14)"
+          strokeWidth={0.55}
         />
       )}
 
-      {/* Detalles específicos por tipo de buque */}
-      {!isGhost && shipId === 'carrier' && (
+      {/* 1. PORTAAVIONES: Cubierta angular, catapultas, cables de frenado, torre y cazas delta */}
+      {!isGhost && isCarrier && (
         <G>
-          {/* Pista de despegue con línea discontinua */}
+          {/* Pista angular pintada en grafito oscuro */}
+          <Path
+            d={`M ${W * 0.18} ${midY - beamH * 0.30} L ${sternX - 3} ${midY + beamH * 0.02} L ${sternX - 3} ${midY + beamH * 0.34} L ${W * 0.18} ${midY + beamH * 0.04} Z`}
+            fill="rgba(15, 23, 42, 0.55)"
+          />
+          {/* Borde táctico amarillo/rojo de pista */}
           <Line
-            x1={18}
-            y1={H / 2}
-            x2={W - 8}
-            y2={H / 2}
-            stroke="#ffffff"
-            strokeWidth={isMini ? 0.9 : 1.5}
-            strokeDasharray={isMini ? '3,2' : '6,4'}
+            x1={W * 0.18}
+            y1={midY - beamH * 0.30}
+            x2={sternX - 3}
+            y2={midY + beamH * 0.02}
+            stroke="#facc15"
+            strokeWidth={isMini ? 0.6 : 1.0}
           />
-          {/* Torre de mando isla en la borda superior */}
-          <Rect
-            x={W * 0.44}
-            y={isMini ? 2 : 4}
-            width={isMini ? W * 0.14 : W * 0.16}
-            height={isMini ? 3 : 5}
-            rx={1}
-            fill="#881337"
-            stroke="#ffffff"
-            strokeWidth={0.6}
+          {/* Eje central discontinuo de aterrizaje */}
+          <Line
+            x1={W * 0.20}
+            y1={midY - beamH * 0.13}
+            x2={sternX - 4}
+            y2={midY + beamH * 0.17}
+            stroke="#f8fafc"
+            strokeWidth={isMini ? 0.75 : 1.3}
+            strokeDasharray={isMini ? '2.5,2' : '5,3.5'}
           />
-          {/* 2 Aviones navales en cubierta */}
+          {/* Rieles de catapultas de proa */}
           {!isMini && (
             <G>
-              {/* Avión 1 (Proa derecha) */}
-              <Path
-                d={`M ${W * 0.28 - 4} ${H / 2 + 5} L ${W * 0.28 + 4} ${H / 2 + 5} M ${W * 0.28} ${H / 2 + 1.5} L ${W * 0.28} ${H / 2 + 8.5} M ${W * 0.28 + 3} ${H / 2 + 3} L ${W * 0.28 + 3} ${H / 2 + 7}`}
-                stroke="#ffffff"
-                strokeWidth={1.2}
-                fill="none"
+              <Line
+                x1={bowX + 5}
+                y1={midY - beamH * 0.18}
+                x2={W * 0.28}
+                y2={midY - beamH * 0.18}
+                stroke="#38bdf8"
+                strokeWidth={1.1}
               />
-              {/* Avión 2 (Popa izquierda) */}
+              <Line
+                x1={bowX + 5}
+                y1={midY + beamH * 0.16}
+                x2={W * 0.24}
+                y2={midY + beamH * 0.16}
+                stroke="#38bdf8"
+                strokeWidth={1.1}
+              />
+              {/* 3 cables de detención en cubierta de aterrizaje */}
+              <Line
+                x1={W * 0.78}
+                y1={midY - beamH * 0.08}
+                x2={W * 0.78}
+                y2={midY + beamH * 0.25}
+                stroke="rgba(226, 232, 240, 0.65)"
+                strokeWidth={0.9}
+              />
+              <Line
+                x1={W * 0.84}
+                y1={midY - beamH * 0.06}
+                x2={W * 0.84}
+                y2={midY + beamH * 0.27}
+                stroke="rgba(226, 232, 240, 0.65)"
+                strokeWidth={0.9}
+              />
+            </G>
+          )}
+          {/* Isla / Torre de control en estribor */}
+          <Rect
+            x={W * 0.48}
+            y={yBot - beamH * 0.30}
+            width={W * 0.16}
+            height={beamH * 0.24}
+            rx={1.5}
+            fill="#0f172a"
+            stroke="#cbd5e1"
+            strokeWidth={0.65}
+          />
+          {!isMini && (
+            <Rect
+              x={W * 0.51}
+              y={yBot - beamH * 0.24}
+              width={W * 0.09}
+              height={beamH * 0.10}
+              rx={0.8}
+              fill="#38bdf8"
+            />
+          )}
+          {/* 3 Cazas navales de ala delta en cubierta */}
+          {!isMini && (
+            <G>
+              {/* Caza 1 en catapulta proa */}
               <Path
-                d={`M ${W * 0.72 - 4} ${H / 2 - 5} L ${W * 0.72 + 4} ${H / 2 - 5} M ${W * 0.72} ${H / 2 - 8.5} L ${W * 0.72} ${H / 2 - 1.5} M ${W * 0.72 + 3} ${H / 2 - 7} L ${W * 0.72 + 3} ${H / 2 - 3}`}
+                d={`M ${W * 0.16} ${midY - beamH * 0.18} L ${W * 0.22} ${midY - beamH * 0.30} L ${W * 0.22} ${midY - beamH * 0.06} Z`}
+                fill="#e2e8f0"
+                stroke="#0f172a"
+                strokeWidth={0.5}
+              />
+              {/* Caza 2 en zona de estacionamiento */}
+              <Path
+                d={`M ${W * 0.37} ${yBot - beamH * 0.22} L ${W * 0.43} ${yBot - beamH * 0.34} L ${W * 0.43} ${yBot - beamH * 0.10} Z`}
+                fill="#cbd5e1"
+                stroke="#0f172a"
+                strokeWidth={0.5}
+              />
+              {/* Caza 3 en popa estribor */}
+              <Path
+                d={`M ${W * 0.69} ${yBot - beamH * 0.20} L ${W * 0.75} ${yBot - beamH * 0.32} L ${W * 0.75} ${yBot - beamH * 0.08} Z`}
+                fill="#ef4444"
                 stroke="#ffffff"
-                strokeWidth={1.2}
-                fill="none"
+                strokeWidth={0.45}
               />
             </G>
           )}
         </G>
       )}
 
+      {/* 2. ACORAZADO: Cubierta de madera teca, 3 torretas triples y ciudadela */}
       {!isGhost && shipId === 'battleship' && (
         <G>
-          {/* 3 Torretas con cañones largos (2 adelante, 1 atrás) */}
-          {/* Torre 1 proa */}
-          <Circle
-            cx={W * 0.22}
-            cy={H / 2}
-            r={isMini ? 2.5 : 4.4}
-            fill="#78350f"
-            stroke="#ffffff"
-            strokeWidth={0.7}
-          />
-          <Line
-            x1={W * 0.22 - (isMini ? 2 : 3)}
-            y1={H / 2 - (isMini ? 0.8 : 1.5)}
-            x2={W * 0.22 - (isMini ? 6 : 10)}
-            y2={H / 2 - (isMini ? 0.8 : 1.5)}
-            stroke="#451a03"
-            strokeWidth={isMini ? 0.9 : 1.6}
-          />
-          <Line
-            x1={W * 0.22 - (isMini ? 2 : 3)}
-            y1={H / 2 + (isMini ? 0.8 : 1.5)}
-            x2={W * 0.22 - (isMini ? 6 : 10)}
-            y2={H / 2 + (isMini ? 0.8 : 1.5)}
-            stroke="#451a03"
-            strokeWidth={isMini ? 0.9 : 1.6}
-          />
-
-          {/* Torre 2 intermedia */}
-          <Circle
-            cx={W * 0.39}
-            cy={H / 2}
-            r={isMini ? 2.5 : 4.4}
-            fill="#78350f"
-            stroke="#ffffff"
-            strokeWidth={0.7}
-          />
-          <Line
-            x1={W * 0.39 - (isMini ? 2 : 3)}
-            y1={H / 2 - (isMini ? 0.8 : 1.5)}
-            x2={W * 0.39 - (isMini ? 6 : 10)}
-            y2={H / 2 - (isMini ? 0.8 : 1.5)}
-            stroke="#451a03"
-            strokeWidth={isMini ? 0.9 : 1.6}
-          />
-          <Line
-            x1={W * 0.39 - (isMini ? 2 : 3)}
-            y1={H / 2 + (isMini ? 0.8 : 1.5)}
-            x2={W * 0.39 - (isMini ? 6 : 10)}
-            y2={H / 2 + (isMini ? 0.8 : 1.5)}
-            stroke="#451a03"
-            strokeWidth={isMini ? 0.9 : 1.6}
-          />
-
-          {/* Puente central acorazado */}
+          {/* Cubierta central de teca clásica */}
           <Rect
-            x={W * 0.53}
-            y={H / 2 - (isMini ? 2.5 : 4.5)}
-            width={isMini ? W * 0.12 : W * 0.15}
-            height={isMini ? 5 : 9}
-            rx={1.5}
-            fill="#92400e"
-            stroke="#ffffff"
-            strokeWidth={0.7}
+            x={bowX + bowLen + 1}
+            y={midY - beamH * 0.28}
+            width={Math.max(4, sternX - bowX - bowLen - sternBevel - 2)}
+            height={beamH * 0.56}
+            rx={2}
+            fill="rgba(180, 83, 9, 0.48)"
+            stroke="rgba(253, 230, 138, 0.25)"
+            strokeWidth={0.5}
           />
+          {!isMini && (
+            <Line
+              x1={bowX + bowLen + 3}
+              y1={midY}
+              x2={sternX - sternBevel - 3}
+              y2={midY}
+              stroke="rgba(254, 243, 199, 0.2)"
+              strokeWidth={0.7}
+            />
+          )}
 
-          {/* Torre 3 popa */}
-          <Circle
-            cx={W * 0.79}
-            cy={H / 2}
-            r={isMini ? 2.5 : 4.4}
-            fill="#78350f"
-            stroke="#ffffff"
-            strokeWidth={0.7}
-          />
-          <Line
-            x1={W * 0.79 + (isMini ? 2 : 3)}
-            y1={H / 2 - (isMini ? 0.8 : 1.5)}
-            x2={W * 0.79 + (isMini ? 6 : 10)}
-            y2={H / 2 - (isMini ? 0.8 : 1.5)}
-            stroke="#451a03"
-            strokeWidth={isMini ? 0.9 : 1.6}
-          />
-          <Line
-            x1={W * 0.79 + (isMini ? 2 : 3)}
-            y1={H / 2 + (isMini ? 0.8 : 1.5)}
-            x2={W * 0.79 + (isMini ? 6 : 10)}
-            y2={H / 2 + (isMini ? 0.8 : 1.5)}
-            stroke="#451a03"
-            strokeWidth={isMini ? 0.9 : 1.6}
-          />
-        </G>
-      )}
-
-      {!isGhost && shipId === 'cruiser' && (
-        <G>
-          {/* Torre 1 proa */}
+          {/* Torre 1 Proa (3 cañones) */}
           <Circle
             cx={W * 0.25}
-            cy={H / 2}
-            r={isMini ? 2.2 : 3.8}
-            fill="#581c87"
-            stroke="#ffffff"
+            cy={midY}
+            r={isMini ? Math.max(1.8, H * 0.17) : Math.max(3.6, H * 0.16)}
+            fill="#475569"
+            stroke="#e2e8f0"
             strokeWidth={0.7}
           />
           <Line
-            x1={W * 0.25 - (isMini ? 2 : 3)}
-            y1={H / 2}
-            x2={W * 0.25 - (isMini ? 5 : 9)}
-            y2={H / 2}
-            stroke="#3b0764"
-            strokeWidth={isMini ? 0.9 : 1.5}
+            x1={W * 0.25}
+            y1={midY - (isMini ? 0.8 : 1.5)}
+            x2={W * 0.25 - (isMini ? 3.5 : 8.5)}
+            y2={midY - (isMini ? 0.8 : 1.5)}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+          <Line
+            x1={W * 0.25}
+            y1={midY}
+            x2={W * 0.25 - (isMini ? 3.5 : 8.5)}
+            y2={midY}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+          <Line
+            x1={W * 0.25}
+            y1={midY + (isMini ? 0.8 : 1.5)}
+            x2={W * 0.25 - (isMini ? 3.5 : 8.5)}
+            y2={midY + (isMini ? 0.8 : 1.5)}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
           />
 
-          {/* Puente y chimeneas centrales */}
+          {/* Torre 2 Superfiring (3 cañones) */}
+          <Circle
+            cx={W * 0.41}
+            cy={midY}
+            r={isMini ? Math.max(1.8, H * 0.17) : Math.max(3.6, H * 0.16)}
+            fill="#64748b"
+            stroke="#e2e8f0"
+            strokeWidth={0.7}
+          />
+          <Line
+            x1={W * 0.41}
+            y1={midY - (isMini ? 0.8 : 1.5)}
+            x2={W * 0.41 - (isMini ? 3.5 : 8.5)}
+            y2={midY - (isMini ? 0.8 : 1.5)}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+          <Line
+            x1={W * 0.41}
+            y1={midY}
+            x2={W * 0.41 - (isMini ? 3.5 : 8.5)}
+            y2={midY}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+          <Line
+            x1={W * 0.41}
+            y1={midY + (isMini ? 0.8 : 1.5)}
+            x2={W * 0.41 - (isMini ? 3.5 : 8.5)}
+            y2={midY + (isMini ? 0.8 : 1.5)}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+
+          {/* Ciudadela central blindada */}
           <Rect
-            x={W * 0.43}
-            y={H / 2 - (isMini ? 2.2 : 4)}
-            width={isMini ? W * 0.16 : W * 0.2}
-            height={isMini ? 4.4 : 8}
-            rx={1.5}
-            fill="#6b21a8"
-            stroke="#ffffff"
-            strokeWidth={0.7}
+            x={W * 0.52}
+            y={midY - beamH * 0.28}
+            width={W * 0.17}
+            height={beamH * 0.56}
+            rx={2}
+            fill="#1e293b"
+            stroke="#cbd5e1"
+            strokeWidth={0.75}
           />
-          <Circle
-            cx={W * 0.49}
-            cy={H / 2}
-            r={isMini ? 1.2 : 2}
-            fill="#3b0764"
-            stroke="#ffffff"
-            strokeWidth={0.5}
-          />
-          <Circle
-            cx={W * 0.58}
-            cy={H / 2}
-            r={isMini ? 1.2 : 2}
-            fill="#3b0764"
-            stroke="#ffffff"
-            strokeWidth={0.5}
+          <Rect
+            x={W * 0.55}
+            y={midY - beamH * 0.14}
+            width={W * 0.08}
+            height={beamH * 0.28}
+            rx={1}
+            fill="#f59e0b"
           />
 
-          {/* Torre 2 popa */}
+          {/* Torre 3 Popa (3 cañones) */}
           <Circle
-            cx={W * 0.77}
-            cy={H / 2}
-            r={isMini ? 2.2 : 3.8}
-            fill="#581c87"
-            stroke="#ffffff"
+            cx={W * 0.80}
+            cy={midY}
+            r={isMini ? Math.max(1.8, H * 0.17) : Math.max(3.6, H * 0.16)}
+            fill="#475569"
+            stroke="#e2e8f0"
             strokeWidth={0.7}
           />
           <Line
-            x1={W * 0.77 + (isMini ? 2 : 3)}
-            y1={H / 2}
-            x2={W * 0.77 + (isMini ? 5 : 9)}
-            y2={H / 2}
-            stroke="#3b0764"
-            strokeWidth={isMini ? 0.9 : 1.5}
+            x1={W * 0.80}
+            y1={midY - (isMini ? 0.8 : 1.5)}
+            x2={W * 0.80 + (isMini ? 3.5 : 8.5)}
+            y2={midY - (isMini ? 0.8 : 1.5)}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+          <Line
+            x1={W * 0.80}
+            y1={midY}
+            x2={W * 0.80 + (isMini ? 3.5 : 8.5)}
+            y2={midY}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
+          />
+          <Line
+            x1={W * 0.80}
+            y1={midY + (isMini ? 0.8 : 1.5)}
+            x2={W * 0.80 + (isMini ? 3.5 : 8.5)}
+            y2={midY + (isMini ? 0.8 : 1.5)}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.7 : 1.3}
           />
         </G>
       )}
 
-      {!isGhost && shipId === 'submarine' && (
+      {/* 3. CRUCERO: Cañón proa, módulo VLS, chimeneas y helipuerto trasero */}
+      {!isGhost && shipId === 'cruiser' && (
         <G>
-          {/* Vela de mando y periscopio (sin cañones) */}
+          {/* Cañón automático proa */}
+          <Circle
+            cx={W * 0.22}
+            cy={midY}
+            r={isMini ? 1.7 : 3.2}
+            fill="#e0f2fe"
+            stroke="#0f172a"
+            strokeWidth={0.65}
+          />
+          <Line
+            x1={W * 0.22}
+            y1={midY}
+            x2={W * 0.22 - (isMini ? 3.2 : 7.5)}
+            y2={midY}
+            stroke="#082f49"
+            strokeWidth={isMini ? 0.8 : 1.4}
+          />
+
+          {/* Matriz de lanzadores verticales de misiles VLS */}
+          {!isMini && (
+            <Rect
+              x={W * 0.30}
+              y={midY - beamH * 0.19}
+              width={W * 0.10}
+              height={beamH * 0.38}
+              rx={1}
+              fill="#082f49"
+              stroke="#7dd3fc"
+              strokeWidth={0.7}
+            />
+          )}
+
+          {/* Puente de mando y chimeneas dobles */}
           <Rect
-            x={W * 0.4}
-            y={H / 2 - (isMini ? 2.5 : 4.4)}
-            width={isMini ? W * 0.16 : W * 0.2}
-            height={isMini ? 5 : 8.8}
-            rx={isMini ? 2 : 3.5}
-            fill="#064e3b"
-            stroke="#ffffff"
-            strokeWidth={0.8}
+            x={W * 0.44}
+            y={midY - beamH * 0.24}
+            width={W * 0.22}
+            height={beamH * 0.48}
+            rx={1.5}
+            fill="#0c4a6e"
+            stroke="#bae6fd"
+            strokeWidth={0.7}
           />
           <Circle
-            cx={W * 0.48}
-            cy={H / 2}
-            r={isMini ? 1.2 : 2}
-            fill="#34d399"
-            stroke="#ffffff"
-            strokeWidth={0.6}
+            cx={W * 0.51}
+            cy={midY}
+            r={isMini ? 1 : 1.8}
+            fill="#020617"
+            stroke="#7dd3fc"
+            strokeWidth={0.5}
           />
-          {/* Ranuras acústicas / lastre */}
+          <Circle
+            cx={W * 0.60}
+            cy={midY}
+            r={isMini ? 1 : 1.8}
+            fill="#020617"
+            stroke="#7dd3fc"
+            strokeWidth={0.5}
+          />
+
+          {/* Helipuerto en cubierta de popa con marca "H" */}
+          <Circle
+            cx={W * 0.81}
+            cy={midY}
+            r={isMini ? Math.max(1.8, H * 0.20) : Math.max(4, H * 0.22)}
+            fill="rgba(15, 23, 42, 0.55)"
+            stroke="#fbbf24"
+            strokeWidth={isMini ? 0.65 : 1}
+          />
           {!isMini && (
-            <G opacity={0.4}>
-              <Line x1={W * 0.22} y1={6} x2={W * 0.34} y2={6} stroke="#ffffff" strokeWidth={1} />
-              <Line
-                x1={W * 0.22}
-                y1={H - 6}
-                x2={W * 0.34}
-                y2={H - 6}
-                stroke="#ffffff"
-                strokeWidth={1}
-              />
-              <Line x1={W * 0.66} y1={6} x2={W * 0.78} y2={6} stroke="#ffffff" strokeWidth={1} />
-              <Line
-                x1={W * 0.66}
-                y1={H - 6}
-                x2={W * 0.78}
-                y2={H - 6}
-                stroke="#ffffff"
-                strokeWidth={1}
-              />
+            <Path
+              d={`M ${W * 0.81 - 2} ${midY - 2.2} L ${W * 0.81 - 2} ${midY + 2.2} M ${W * 0.81 + 2} ${midY - 2.2} L ${W * 0.81 + 2} ${midY + 2.2} M ${W * 0.81 - 2} ${midY} L ${W * 0.81 + 2} ${midY}`}
+              stroke="#f8fafc"
+              strokeWidth={1.1}
+            />
+          )}
+        </G>
+      )}
+
+      {/* 4. SUBMARINO: Vela hidrodinámica, periscopio óptico y ranuras de lastre */}
+      {!isGhost && isSub && (
+        <G>
+          {/* Línea dorsal continua */}
+          {!isMini && (
+            <Line
+              x1={bowX + bowLen}
+              y1={midY}
+              x2={sternX - 4}
+              y2={midY}
+              stroke="rgba(153, 246, 228, 0.25)"
+              strokeWidth={0.9}
+              strokeDasharray="3,2"
+            />
+          )}
+          {/* Vela de mando */}
+          <Rect
+            x={W * 0.39}
+            y={midY - beamH * 0.22}
+            width={W * 0.20}
+            height={beamH * 0.44}
+            rx={isMini ? 1.8 : 3.5}
+            fill="#042f2e"
+            stroke="#5eead4"
+            strokeWidth={0.75}
+          />
+          {/* Lente de periscopio / radar */}
+          <Circle
+            cx={W * 0.48}
+            cy={midY}
+            r={isMini ? 1.1 : 2}
+            fill="#38bdf8"
+            stroke="#ffffff"
+            strokeWidth={0.55}
+          />
+          {!isMini && (
+            <G opacity={0.45}>
+              <Line x1={W * 0.21} y1={yTop + 2} x2={W * 0.34} y2={yTop + 2} stroke="#99f6e4" strokeWidth={0.9} />
+              <Line x1={W * 0.21} y1={yBot - 2} x2={W * 0.34} y2={yBot - 2} stroke="#99f6e4" strokeWidth={0.9} />
+              <Line x1={W * 0.64} y1={yTop + 2.5} x2={W * 0.76} y2={yTop + 3.2} stroke="#99f6e4" strokeWidth={0.9} />
+              <Line x1={W * 0.64} y1={yBot - 2.5} x2={W * 0.76} y2={yBot - 3.2} stroke="#99f6e4" strokeWidth={0.9} />
             </G>
           )}
         </G>
       )}
 
-      {!isGhost && shipId === 'destroyer' && (
+      {/* 5. DESTRUCTOR: Interceptor furtivo con chevrón de proa, torreta y lanzamisiles */}
+      {!isGhost && isDestroyer && (
         <G>
-          {/* Proa afilada, 1 cañón y antena radar */}
+          {/* Chevrón de velocidad en proa */}
+          {!isMini && (
+            <Path
+              d={`M ${bowX + W * 0.22} ${midY - beamH * 0.20} L ${bowX + W * 0.11} ${midY} L ${bowX + W * 0.22} ${midY + beamH * 0.20}`}
+              stroke="#38bdf8"
+              strokeWidth={1.1}
+              fill="none"
+            />
+          )}
+          {/* Torreta furtiva de tiro rápido */}
           <Circle
-            cx={W * 0.33}
-            cy={H / 2}
-            r={isMini ? 2 : 3.6}
-            fill="#831843"
-            stroke="#ffffff"
-            strokeWidth={0.7}
+            cx={W * 0.34}
+            cy={midY}
+            r={isMini ? 1.7 : 3.2}
+            fill="#1e293b"
+            stroke="#f8fafc"
+            strokeWidth={0.65}
           />
           <Line
-            x1={W * 0.33 - (isMini ? 2 : 3)}
-            y1={H / 2}
-            x2={W * 0.33 - (isMini ? 5 : 9)}
-            y2={H / 2}
-            stroke="#500724"
-            strokeWidth={isMini ? 0.9 : 1.5}
+            x1={W * 0.34}
+            y1={midY}
+            x2={W * 0.34 - (isMini ? 3 : 7)}
+            y2={midY}
+            stroke="#0f172a"
+            strokeWidth={isMini ? 0.8 : 1.4}
           />
-          {/* Puente y antena */}
+          {/* Puente angular + barra radar */}
           <Rect
-            x={W * 0.58}
-            y={H / 2 - (isMini ? 2.2 : 3.8)}
-            width={isMini ? W * 0.18 : W * 0.22}
-            height={isMini ? 4.4 : 7.6}
+            x={W * 0.50}
+            y={midY - beamH * 0.23}
+            width={W * 0.20}
+            height={beamH * 0.46}
             rx={1.5}
-            fill="#9d174d"
-            stroke="#ffffff"
-            strokeWidth={0.7}
+            fill="#0f172a"
+            stroke="#cbd5e1"
+            strokeWidth={0.65}
           />
           <Line
-            x1={W * 0.69}
-            y1={H / 2 - (isMini ? 1.5 : 2.5)}
-            x2={W * 0.69}
-            y2={H / 2 + (isMini ? 1.5 : 2.5)}
-            stroke="#ffffff"
-            strokeWidth={isMini ? 0.8 : 1.2}
+            x1={W * 0.60}
+            y1={midY - beamH * 0.16}
+            x2={W * 0.60}
+            y2={midY + beamH * 0.16}
+            stroke="#38bdf8"
+            strokeWidth={isMini ? 0.75 : 1.2}
           />
+          {/* Celdas lanzamisiles en popa */}
+          {!isMini && (
+            <G>
+              <Rect
+                x={W * 0.76}
+                y={midY - beamH * 0.20}
+                width={W * 0.10}
+                height={beamH * 0.16}
+                rx={0.8}
+                fill="#ef4444"
+              />
+              <Rect
+                x={W * 0.76}
+                y={midY + beamH * 0.04}
+                width={W * 0.10}
+                height={beamH * 0.16}
+                rx={0.8}
+                fill="#ef4444"
+              />
+            </G>
+          )}
         </G>
       )}
     </G>
@@ -558,7 +860,86 @@ const NavalShipSprite: React.FC<NavalShipSpriteProps> = ({
       )}
     </Svg>
   );
-};
+});
+
+const OceanSonarOverlay = React.memo<{ gridWidth: number; coordsHeaderPx: number }>(({
+  gridWidth,
+  coordsHeaderPx,
+}) => {
+  const half = gridWidth / 2;
+  return (
+    <Svg
+      style={[StyleSheet.absoluteFill, { left: coordsHeaderPx }]}
+      pointerEvents="none"
+      width={gridWidth}
+      height={gridWidth}
+    >
+      {/* Anillos concéntricos de radar naval */}
+      <Circle
+        cx={half}
+        cy={half}
+        r={gridWidth * 0.18}
+        stroke="rgba(56, 189, 248, 0.14)"
+        strokeWidth={0.9}
+        strokeDasharray="4,4"
+        fill="none"
+      />
+      <Circle
+        cx={half}
+        cy={half}
+        r={gridWidth * 0.34}
+        stroke="rgba(56, 189, 248, 0.12)"
+        strokeWidth={0.9}
+        strokeDasharray="5,5"
+        fill="none"
+      />
+      <Circle
+        cx={half}
+        cy={half}
+        r={gridWidth * 0.48}
+        stroke="rgba(56, 189, 248, 0.11)"
+        strokeWidth={1}
+        fill="none"
+      />
+      {/* Ejes de retícula de sonar */}
+      <Line
+        x1={half}
+        y1={0}
+        x2={half}
+        y2={gridWidth}
+        stroke="rgba(56, 189, 248, 0.10)"
+        strokeWidth={0.8}
+      />
+      <Line
+        x1={0}
+        y1={half}
+        x2={gridWidth}
+        y2={half}
+        stroke="rgba(56, 189, 248, 0.10)"
+        strokeWidth={0.8}
+      />
+      {/* Ondas oceánicas sutiles */}
+      <Path
+        d={`M 0 ${gridWidth * 0.25} Q ${gridWidth * 0.25} ${gridWidth * 0.22} ${half} ${gridWidth * 0.25} T ${gridWidth} ${gridWidth * 0.25}`}
+        stroke="rgba(125, 211, 252, 0.11)"
+        strokeWidth={1.1}
+        fill="none"
+      />
+      <Path
+        d={`M 0 ${gridWidth * 0.56} Q ${gridWidth * 0.3} ${gridWidth * 0.59} ${gridWidth * 0.6} ${gridWidth * 0.54} T ${gridWidth} ${gridWidth * 0.56}`}
+        stroke="rgba(125, 211, 252, 0.09)"
+        strokeWidth={1.1}
+        fill="none"
+      />
+      <Path
+        d={`M 0 ${gridWidth * 0.84} Q ${gridWidth * 0.2} ${gridWidth * 0.81} ${half} ${gridWidth * 0.85} T ${gridWidth} ${gridWidth * 0.84}`}
+        stroke="rgba(125, 211, 252, 0.10)"
+        strokeWidth={1.1}
+        fill="none"
+      />
+    </Svg>
+  );
+});
 
 // ============================================================================
 // COMPONENTE PRINCIPAL: BATTLESHIP ARENA
@@ -571,8 +952,17 @@ export const BattleshipArena: React.FC<Props> = ({
   onReadyFleet,
   onFire,
   onReset,
-  onDragStateChange,
+  onDragStateChange: _onDragStateChange,
 }) => {
+  const { getDisplayName, getAvatarUri } = useProfile();
+  const partnerProfile: UserProfile = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+  const myDisplayName = getDisplayName(currentProfile);
+  const partnerDisplayName = getDisplayName(partnerProfile);
+  const myAvatarUri = getAvatarUri(currentProfile);
+  const partnerAvatarUri = getAvatarUri(partnerProfile);
+  const formatShotCoord = (cell: number) =>
+    `${COLS_LETTERS[cell % 10]}${Math.floor(cell / 10) + 1}`;
+
   const [radarMode, setRadarMode] = useState<'attack' | 'fleet'>('attack');
   const [localSetupFleet, setLocalSetupFleet] = useState<BattleshipShip[] | null>(null);
   const [selectedSetupShipId, setSelectedSetupShipId] = useState<string>('carrier');
@@ -592,7 +982,6 @@ export const BattleshipArena: React.FC<Props> = ({
 
   // Animaciones
   const radarPulseAnim = useRef(new Animated.Value(0)).current;
-  const shipGlowPulseAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const dragPan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
@@ -620,18 +1009,6 @@ export const BattleshipArena: React.FC<Props> = ({
     loop.start();
     return () => loop.stop();
   }, [radarPulseAnim]);
-
-  // Pulso de glow en barco seleccionado
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shipGlowPulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(shipGlowPulseAnim, { toValue: 0, duration: 700, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [shipGlowPulseAnim]);
 
   // Limpiar timer de aviso
   useEffect(() => {
@@ -934,8 +1311,7 @@ export const BattleshipArena: React.FC<Props> = ({
     coordsHeaderPx,
     amIReady,
     handleSmartRotate,
-    handleConfirmReady,
-    onDragStateChange,
+    onReadyFleet,
     showBanner,
     triggerShake,
   });
@@ -948,8 +1324,7 @@ export const BattleshipArena: React.FC<Props> = ({
       coordsHeaderPx,
       amIReady,
       handleSmartRotate,
-      handleConfirmReady,
-      onDragStateChange,
+      onReadyFleet,
       showBanner,
       triggerShake,
     };
@@ -974,27 +1349,29 @@ export const BattleshipArena: React.FC<Props> = ({
             Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
           onMoveShouldSetPanResponderCapture: (_, gesture) =>
             Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+          onPanResponderTerminationRequest: () => false,
 
           onPanResponderGrant: () => {
             const {
               myFleet: currentFleet,
+              selectedSetupShipId: currentSelected,
               amIReady: ready,
-              handleConfirmReady: unlockFleet,
-              onDragStateChange: notifyDrag,
+              onReadyFleet: syncReady,
             } = stateRef.current;
 
             if (ready) {
-              onReadyFleet(currentFleet, false);
+              syncReady(currentFleet, false);
             }
 
             const currentShip = currentFleet.find((s) => s.id === shipId);
             if (!currentShip) return;
 
             setDraggedShipId(shipId);
-            setSelectedSetupShipId(shipId);
+            if (currentSelected !== shipId) {
+              setSelectedSetupShipId(shipId);
+            }
             lastGhostKeyRef.current = '';
             dragPan.setValue({ x: 0, y: 0 });
-            notifyDrag?.(true);
             void triggerGameHaptic('selection');
           },
 
@@ -1005,40 +1382,16 @@ export const BattleshipArena: React.FC<Props> = ({
             const currentShip = currentFleet.find((s) => s.id === shipId);
             if (!currentShip) return;
 
-            const isHoriz =
-              (currentShip.orientation ||
-                (currentShip.cells.length > 1 &&
-                currentShip.cells[1] - currentShip.cells[0] === 1
-                  ? 'H'
-                  : 'V')) === 'H';
-
-            const minR = Math.min(...currentShip.cells.map((c) => Math.floor(c / 10)));
-            const minC = Math.min(...currentShip.cells.map((c) => c % 10));
-
             const dR = Math.round(gesture.dy / cSize);
             const dC = Math.round(gesture.dx / cSize);
-
-            const targetR = minR + dR;
-            const targetC = minC + dC;
-
-            const maxR = isHoriz ? 9 : 10 - currentShip.size;
-            const maxC = isHoriz ? 10 - currentShip.size : 9;
-
-            const inBounds = targetR >= 0 && targetR <= maxR && targetC >= 0 && targetC <= maxC;
-
-            const targetCells: number[] = [];
-            for (let i = 0; i < currentShip.size; i++) {
-              const nr = isHoriz ? targetR : targetR + i;
-              const nc = isHoriz ? targetC + i : targetC;
-              targetCells.push(nr * 10 + nc);
-            }
-
-            const otherShips = currentFleet.filter((s) => s.id !== currentShip.id);
-            const hasCollision = otherShips.some((s) =>
-              s.cells.some((c) => targetCells.includes(c))
+            const { isHoriz, targetR, targetC, rawCells, directCells } = computeShipDragPlacement(
+              currentShip,
+              currentFleet,
+              dR,
+              dC
             );
 
-            const isValidPlacement = inBounds && !hasCollision;
+            const isValidPlacement = Boolean(directCells);
             const stateKey = `${currentShip.id}_${targetR}_${targetC}_${isValidPlacement}`;
 
             if (stateKey !== lastGhostKeyRef.current) {
@@ -1046,7 +1399,7 @@ export const BattleshipArena: React.FC<Props> = ({
               setGhostPlacement({
                 shipId: currentShip.id,
                 orientation: isHoriz ? 'H' : 'V',
-                cells: targetCells,
+                cells: rawCells,
                 isValid: isValidPlacement,
               });
             }
@@ -1058,12 +1411,9 @@ export const BattleshipArena: React.FC<Props> = ({
               cellSize: cSize,
               selectedSetupShipId: currentSelected,
               handleSmartRotate: rotateShip,
-              onDragStateChange: notifyDrag,
               showBanner: banner,
               triggerShake: shake,
             } = stateRef.current;
-
-            notifyDrag?.(false);
 
             const currentShip = currentFleet.find((s) => s.id === shipId);
             if (!currentShip) {
@@ -1094,70 +1444,55 @@ export const BattleshipArena: React.FC<Props> = ({
               return;
             }
 
-            // Arrastre terminado:
-            const isHoriz =
-              (currentShip.orientation ||
-                (currentShip.cells.length > 1 &&
-                currentShip.cells[1] - currentShip.cells[0] === 1
-                  ? 'H'
-                  : 'V')) === 'H';
-
-            const minR = Math.min(...currentShip.cells.map((c) => Math.floor(c / 10)));
-            const minC = Math.min(...currentShip.cells.map((c) => c % 10));
-
+            // Arrastre terminado: usar posición sujeta al tablero + snap cercano de 1 casilla
             const dR = Math.round(gesture.dy / cSize);
             const dC = Math.round(gesture.dx / cSize);
-
-            const targetR = minR + dR;
-            const targetC = minC + dC;
-
-            const maxR = isHoriz ? 9 : 10 - currentShip.size;
-            const maxC = isHoriz ? 10 - currentShip.size : 9;
-
-            const inBounds = targetR >= 0 && targetR <= maxR && targetC >= 0 && targetC <= maxC;
-
-            const targetCells: number[] = [];
-            for (let i = 0; i < currentShip.size; i++) {
-              const nr = isHoriz ? targetR : targetR + i;
-              const nc = isHoriz ? targetC + i : targetC;
-              targetCells.push(nr * 10 + nc);
-            }
-
-            const otherShips = currentFleet.filter((s) => s.id !== currentShip.id);
-            const hasCollision = otherShips.some((s) =>
-              s.cells.some((c) => targetCells.includes(c))
+            const { targetR, targetC, directCells, tryCellsAt } = computeShipDragPlacement(
+              currentShip,
+              currentFleet,
+              dR,
+              dC
             );
 
-            const isValidPlacement = inBounds && !hasCollision;
+            let placedCells: number[] | null = directCells;
+            if (!placedCells) {
+              const nearbyOffsets = [
+                { dr: -1, dc: 0 },
+                { dr: 1, dc: 0 },
+                { dr: 0, dc: -1 },
+                { dr: 0, dc: 1 },
+                { dr: -1, dc: -1 },
+                { dr: -1, dc: 1 },
+                { dr: 1, dc: -1 },
+                { dr: 1, dc: 1 },
+              ];
+              for (const off of nearbyOffsets) {
+                const candidate = tryCellsAt(targetR + off.dr, targetC + off.dc);
+                if (candidate) {
+                  placedCells = candidate;
+                  break;
+                }
+              }
+            }
 
-            if (isValidPlacement) {
+            dragPan.setValue({ x: 0, y: 0 });
+            setGhostPlacement(null);
+            setDraggedShipId(null);
+
+            if (placedCells) {
               const updated = currentFleet.map((s) =>
-                s.id === currentShip.id ? { ...s, cells: targetCells } : s
+                s.id === currentShip.id ? { ...s, cells: placedCells! } : s
               );
               setLocalSetupFleet(updated);
-              dragPan.setValue({ x: 0, y: 0 });
-              setGhostPlacement(null);
-              setDraggedShipId(null);
               void triggerGameHaptic('selection');
             } else {
               void triggerGameHaptic('error');
               shake();
               banner('No cabe aquí', true);
-              Animated.spring(dragPan, {
-                toValue: { x: 0, y: 0 },
-                friction: 6,
-                tension: 50,
-                useNativeDriver: false,
-              }).start(() => {
-                setDraggedShipId(null);
-                setGhostPlacement(null);
-              });
             }
           },
 
           onPanResponderTerminate: () => {
-            const { onDragStateChange: notifyDrag } = stateRef.current;
-            notifyDrag?.(false);
             dragPan.setValue({ x: 0, y: 0 });
             setDraggedShipId(null);
             setGhostPlacement(null);
@@ -1195,14 +1530,21 @@ export const BattleshipArena: React.FC<Props> = ({
                 },
               ]}
             >
-              <Ionicons name="boat" size={38} color="#38bdf8" />
+              {bs.phase === 'invited' && bs.invitedBy && getAvatarUri(bs.invitedBy) ? (
+                <Image
+                  source={{ uri: getAvatarUri(bs.invitedBy)! }}
+                  style={styles.inviteAvatarImg}
+                />
+              ) : (
+                <Ionicons name="boat" size={38} color="#38bdf8" />
+              )}
             </Animated.View>
 
             <Text style={styles.oceanCardTitle}>Battleship Naval en Pareja</Text>
             <Text style={styles.oceanCardSubtitle}>
               {bs.phase === 'invited'
-                ? `${bs.invitedBy === 'Karla' ? 'Karlita' : 'Javier'} te desafió a un combate naval.`
-                : 'Invita a tu pareja a un combate táctico en el océano de 10x10.'}
+                ? `${bs.invitedBy ? getDisplayName(bs.invitedBy) : partnerDisplayName} te desafió a un combate naval.`
+                : `Invita a ${partnerDisplayName} a un combate táctico en el océano de 10x10.`}
             </Text>
 
             {bs.phase === 'invited' && bs.invitedBy !== currentProfile ? (
@@ -1292,7 +1634,7 @@ export const BattleshipArena: React.FC<Props> = ({
 
           {/* Tablero Océano 10x10 con Coordenadas Exactas */}
           <LinearGradient
-            colors={['#03182b', '#082f49', '#0c4a6e']}
+            colors={['#020617', '#06243b', '#0a3a5c']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[
@@ -1323,6 +1665,7 @@ export const BattleshipArena: React.FC<Props> = ({
 
                   {Array.from({ length: 10 }).map((_, c) => {
                     const idx = r * 10 + c;
+                    const isAlternate = (r + c) % 2 === 0;
 
                     return (
                       <TouchableOpacity
@@ -1338,7 +1681,9 @@ export const BattleshipArena: React.FC<Props> = ({
                           {
                             width: cellSize,
                             height: cellSize,
-                            backgroundColor: 'rgba(8, 47, 73, 0.88)',
+                            backgroundColor: isAlternate
+                              ? 'rgba(15, 45, 72, 0.52)'
+                              : 'rgba(6, 28, 49, 0.72)',
                           },
                         ]}
                       />
@@ -1347,39 +1692,23 @@ export const BattleshipArena: React.FC<Props> = ({
                 </View>
               ))}
 
-              {/* Textura de ondas continua y sutil en TODO el tablero */}
-              <Svg
-                style={[StyleSheet.absoluteFill, { left: coordsHeaderPx }]}
-                pointerEvents="none"
-                width={gridWidth}
-                height={gridWidth}
-              >
-                <Path
-                  d={`M 0 ${gridWidth * 0.25} Q ${gridWidth * 0.25} ${gridWidth * 0.22} ${gridWidth * 0.5} ${gridWidth * 0.25} T ${gridWidth} ${gridWidth * 0.25}`}
-                  stroke="rgba(56, 189, 248, 0.12)"
-                  strokeWidth={1.2}
-                  fill="none"
-                />
-                <Path
-                  d={`M 0 ${gridWidth * 0.55} Q ${gridWidth * 0.3} ${gridWidth * 0.58} ${gridWidth * 0.6} ${gridWidth * 0.54} T ${gridWidth} ${gridWidth * 0.55}`}
-                  stroke="rgba(56, 189, 248, 0.10)"
-                  strokeWidth={1.2}
-                  fill="none"
-                />
-                <Path
-                  d={`M 0 ${gridWidth * 0.85} Q ${gridWidth * 0.2} ${gridWidth * 0.82} ${gridWidth * 0.5} ${gridWidth * 0.86} T ${gridWidth} ${gridWidth * 0.85}`}
-                  stroke="rgba(56, 189, 248, 0.11)"
-                  strokeWidth={1.2}
-                  fill="none"
-                />
-              </Svg>
+              {/* Radar de sonar concéntrico y ondas oceánicas */}
+              <OceanSonarOverlay gridWidth={gridWidth} coordsHeaderPx={coordsHeaderPx} />
 
-              {/* Sombra Fantasma (Ghost Preview) mientras se arrastra */}
+              {/* Sombra Fantasma ligera (View sin SVG) mientras se arrastra */}
               {ghostPlacement && ghostPlacement.cells.length > 0 && (() => {
                 const ghostMinR = Math.min(...ghostPlacement.cells.map((c) => Math.floor(c / 10)));
                 const ghostMinC = Math.min(...ghostPlacement.cells.map((c) => c % 10));
                 const gLeft = ghostMinC * cellSize + coordsHeaderPx;
                 const gTop = ghostMinR * cellSize;
+                const ghostW =
+                  ghostPlacement.orientation === 'H'
+                    ? ghostPlacement.cells.length * cellSize
+                    : cellSize;
+                const ghostH =
+                  ghostPlacement.orientation === 'H'
+                    ? cellSize
+                    : ghostPlacement.cells.length * cellSize;
 
                 return (
                   <View
@@ -1387,21 +1716,21 @@ export const BattleshipArena: React.FC<Props> = ({
                     style={[
                       styles.ghostShipContainer,
                       {
-                        left: gLeft,
-                        top: gTop,
+                        left: gLeft + 2,
+                        top: gTop + 2,
+                        width: ghostW - 4,
+                        height: ghostH - 4,
                         zIndex: 40,
+                        borderRadius: 8,
+                        borderWidth: 2,
+                        borderStyle: 'dashed',
+                        borderColor: ghostPlacement.isValid ? '#22c55e' : '#ef4444',
+                        backgroundColor: ghostPlacement.isValid
+                          ? 'rgba(34, 197, 94, 0.28)'
+                          : 'rgba(239, 68, 68, 0.28)',
                       },
                     ]}
-                  >
-                    <NavalShipSprite
-                      shipId={ghostPlacement.shipId}
-                      size={ghostPlacement.cells.length}
-                      orientation={ghostPlacement.orientation}
-                      cellSize={cellSize}
-                      isGhost={true}
-                      isValidGhost={ghostPlacement.isValid}
-                    />
-                  </View>
+                  />
                 );
               })()}
 
@@ -1452,17 +1781,6 @@ export const BattleshipArena: React.FC<Props> = ({
                             { scale: 1.05 },
                           ],
                         },
-                        isSelected &&
-                          !isBeingDragged && {
-                            transform: [
-                              {
-                                scale: shipGlowPulseAnim.interpolate({
-                                  inputRange: [0, 1],
-                                  outputRange: [1, 1.025],
-                                }),
-                              },
-                            ],
-                          },
                       ]}
                     >
                       <NavalShipSprite
@@ -1583,6 +1901,102 @@ export const BattleshipArena: React.FC<Props> = ({
       {/* ================= FASE 3: COMBATE NAVAL EN VIVO ================= */}
       {(bs.phase === 'battle' || bs.phase === 'finished') && (
         <View style={styles.battleWrap}>
+          {/* HUD Superior de Almirantes + Feedback de Último Disparo */}
+          <View style={[styles.battleHudCard, { width: exactFrameWidth }, GAMES_THEME.shadows.soft]}>
+            <View style={[styles.hudPlayerChip, isMyTurn && styles.hudPlayerChipActive]}>
+              <View style={styles.hudAvatarCircle}>
+                {myAvatarUri ? (
+                  <Image source={{ uri: myAvatarUri }} style={styles.hudAvatarImg} />
+                ) : (
+                  <Text style={styles.hudAvatarInitial}>{myDisplayName.charAt(0).toUpperCase()}</Text>
+                )}
+              </View>
+              <View style={{ flexShrink: 1 }}>
+                <Text style={styles.hudPlayerName} numberOfLines={1}>{myDisplayName}</Text>
+                <Text style={styles.hudPlayerFleetText}>
+                  {currentProfile === 'Karla' ? remainingShipsKarla : remainingShipsJavier}/5 barcos
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.lastShotBanner,
+                bs.lastShot?.sunkShipName
+                  ? styles.lastShotSunk
+                  : bs.lastShot?.hit
+                  ? styles.lastShotHit
+                  : styles.lastShotWater,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.lastShotText,
+                  bs.lastShot?.hit ? { color: '#991b1b' } : { color: '#0369a1' },
+                ]}
+                numberOfLines={2}
+              >
+                {bs.lastShot
+                  ? `${formatShotCoord(bs.lastShot.cell)} · ${
+                      bs.lastShot.sunkShipName
+                        ? `💥 ${bs.lastShot.sunkShipName}`
+                        : bs.lastShot.hit
+                        ? '🔥 Impacto'
+                        : '💧 Agua'
+                    }`
+                  : '⚓ Sin disparos aún'}
+              </Text>
+            </View>
+
+            <View style={[styles.hudPlayerChip, !isMyTurn && bs.phase === 'battle' && styles.hudPlayerChipActive, { flexDirection: 'row-reverse' }]}>
+              <View style={styles.hudAvatarCircle}>
+                {partnerAvatarUri ? (
+                  <Image source={{ uri: partnerAvatarUri }} style={styles.hudAvatarImg} />
+                ) : (
+                  <Text style={styles.hudAvatarInitial}>{partnerDisplayName.charAt(0).toUpperCase()}</Text>
+                )}
+              </View>
+              <View style={{ alignItems: 'flex-end', flexShrink: 1 }}>
+                <Text style={styles.hudPlayerName} numberOfLines={1}>{partnerDisplayName}</Text>
+                <Text style={styles.hudPlayerFleetText}>
+                  {currentProfile === 'Karla' ? remainingShipsJavier : remainingShipsKarla}/5 barcos
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Tracker Visual de Flota Enemiga (5 siluetas con estado flotando/hundido) */}
+          <View style={[styles.enemyFleetTrackerCard, { width: exactFrameWidth }]}>
+            <Text style={styles.enemyFleetLabel}>Flota de {partnerDisplayName}:</Text>
+            <View style={styles.enemyFleetShipsRow}>
+              {enemyFleet.map((ship) => {
+                const sunk = isShipSunk(ship, myShots);
+                return (
+                  <View
+                    key={ship.id}
+                    style={[
+                      styles.enemyShipTrackerPill,
+                      sunk && styles.enemyShipTrackerPillSunk,
+                    ]}
+                  >
+                    <View style={{ opacity: sunk ? 0.35 : 1 }}>
+                      <NavalShipSprite
+                        shipId={ship.id}
+                        size={ship.size}
+                        orientation="H"
+                        cellSize={9}
+                        isMini
+                        miniW={ship.size * 9}
+                        miniH={11}
+                      />
+                    </View>
+                    {sunk && <Text style={styles.sunkSkullText}>💀</Text>}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Toggle de Modos: Radar Ataque vs Mis Barcos */}
           <View style={[styles.radarToggleContainer, { width: exactFrameWidth }]}>
             <TouchableOpacity
@@ -1638,7 +2052,7 @@ export const BattleshipArena: React.FC<Props> = ({
 
           {/* Tablero de Combate */}
           <LinearGradient
-            colors={['#03182b', '#082f49', '#0c4a6e']}
+            colors={['#020617', '#06243b', '#0a3a5c']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[
@@ -1669,11 +2083,14 @@ export const BattleshipArena: React.FC<Props> = ({
 
                   {Array.from({ length: 10 }).map((_, c) => {
                     const idx = r * 10 + c;
+                    const isAlternate = (r + c) % 2 === 0;
 
                     if (radarMode === 'attack') {
                       const hasShot = myShots.includes(idx);
                       const hitShip = hasShot && enemyFleet.find((s) => s.cells.includes(idx));
                       const isSunk = Boolean(hitShip && isShipSunk(hitShip, myShots));
+                      const isLastShotCell =
+                        bs.lastShot?.shooter === currentProfile && bs.lastShot?.cell === idx;
 
                       return (
                         <TouchableOpacity
@@ -1686,12 +2103,18 @@ export const BattleshipArena: React.FC<Props> = ({
                               width: cellSize,
                               height: cellSize,
                               backgroundColor: isSunk
-                                ? 'rgba(239, 68, 68, 0.45)'
+                                ? 'rgba(185, 28, 28, 0.36)'
                                 : hitShip
-                                ? 'rgba(249, 115, 22, 0.45)'
+                                ? 'rgba(234, 88, 12, 0.34)'
                                 : hasShot
-                                ? 'rgba(56, 189, 248, 0.15)'
-                                : 'rgba(8, 47, 73, 0.92)',
+                                ? 'rgba(14, 116, 144, 0.25)'
+                                : isAlternate
+                                ? 'rgba(15, 45, 72, 0.56)'
+                                : 'rgba(6, 28, 49, 0.76)',
+                            },
+                            isLastShotCell && {
+                              borderColor: hitShip ? '#fde047' : '#38bdf8',
+                              borderWidth: 1.5,
                             },
                           ]}
                           activeOpacity={0.65}
@@ -1700,22 +2123,22 @@ export const BattleshipArena: React.FC<Props> = ({
                             <View style={styles.sunkCellOverlay}>
                               <Ionicons
                                 name="skull"
-                                size={Math.max(10, cellSize * 0.5)}
-                                color="#fca5a5"
+                                size={Math.max(10, cellSize * 0.48)}
+                                color="#fecaca"
                               />
                             </View>
                           ) : hitShip ? (
-                            <Ionicons
-                              name="flame"
-                              size={Math.max(11, cellSize * 0.52)}
-                              color="#fde047"
-                            />
+                            <View style={styles.hitBlastRing}>
+                              <Ionicons
+                                name="flame"
+                                size={Math.max(10, cellSize * 0.48)}
+                                color="#fef08a"
+                              />
+                            </View>
                           ) : hasShot ? (
-                            <Ionicons
-                              name="water"
-                              size={Math.max(10, cellSize * 0.45)}
-                              color="#38bdf8"
-                            />
+                            <View style={styles.waterSplashOuter}>
+                              <View style={styles.waterSplashInner} />
+                            </View>
                           ) : isMyTurn ? (
                             <View style={styles.crosshairDot} />
                           ) : null}
@@ -1727,6 +2150,8 @@ export const BattleshipArena: React.FC<Props> = ({
                       const isHitOnMe = Boolean(ship && hasShot);
                       const isSunkOnMe = Boolean(ship && isHitOnMe && isShipSunk(ship, enemyShots));
                       const isMiss = !ship && hasShot;
+                      const isLastShotCell =
+                        bs.lastShot?.shooter !== currentProfile && bs.lastShot?.cell === idx;
 
                       return (
                         <View
@@ -1737,33 +2162,41 @@ export const BattleshipArena: React.FC<Props> = ({
                               width: cellSize,
                               height: cellSize,
                               backgroundColor: isSunkOnMe
-                                ? 'rgba(239, 68, 68, 0.55)'
+                                ? 'rgba(185, 28, 28, 0.40)'
                                 : isHitOnMe
-                                ? 'rgba(249, 115, 22, 0.55)'
+                                ? 'rgba(234, 88, 12, 0.36)'
                                 : isMiss
-                                ? 'rgba(56, 189, 248, 0.15)'
-                                : 'rgba(8, 47, 73, 0.92)',
+                                ? 'rgba(14, 116, 144, 0.25)'
+                                : isAlternate
+                                ? 'rgba(15, 45, 72, 0.56)'
+                                : 'rgba(6, 28, 49, 0.76)',
+                            },
+                            isLastShotCell && {
+                              borderColor: isHitOnMe ? '#fde047' : '#38bdf8',
+                              borderWidth: 1.5,
                             },
                           ]}
                         >
                           {isSunkOnMe ? (
-                            <Ionicons
-                              name="skull"
-                              size={Math.max(10, cellSize * 0.5)}
-                              color="#fca5a5"
-                            />
+                            <View style={styles.sunkCellOverlay}>
+                              <Ionicons
+                                name="skull"
+                                size={Math.max(10, cellSize * 0.48)}
+                                color="#fecaca"
+                              />
+                            </View>
                           ) : isHitOnMe ? (
-                            <Ionicons
-                              name="flame"
-                              size={Math.max(11, cellSize * 0.52)}
-                              color="#fde047"
-                            />
+                            <View style={styles.hitBlastRing}>
+                              <Ionicons
+                                name="flame"
+                                size={Math.max(10, cellSize * 0.48)}
+                                color="#fef08a"
+                              />
+                            </View>
                           ) : isMiss ? (
-                            <Ionicons
-                              name="water"
-                              size={Math.max(10, cellSize * 0.45)}
-                              color="#38bdf8"
-                            />
+                            <View style={styles.waterSplashOuter}>
+                              <View style={styles.waterSplashInner} />
+                            </View>
                           ) : null}
                         </View>
                       );
@@ -1772,8 +2205,16 @@ export const BattleshipArena: React.FC<Props> = ({
                 </View>
               ))}
 
-              {/* Renderizar barcos: en 'Mis Barcos' siempre, y en 'Tablero del Otro' al terminar para ver dónde estaban sus barcos */}
-              {(radarMode === 'fleet' ? myFleet : bs.phase === 'finished' ? enemyFleet : []).map(
+              {/* Overlay táctico de sonar sobre el tablero de combate */}
+              <OceanSonarOverlay gridWidth={gridWidth} coordsHeaderPx={coordsHeaderPx} />
+
+              {/* En 'Mis Barcos' muestra toda tu flota; en ataque revela barcos enemigos hundidos en vivo (y todos al terminar) */}
+              {(radarMode === 'fleet'
+                ? myFleet
+                : bs.phase === 'finished'
+                ? enemyFleet
+                : enemyFleet.filter((s) => isShipSunk(s, myShots))
+              ).map(
                 (ship) => {
                   const relevantShots = radarMode === 'fleet' ? enemyShots : myShots;
                   const isHoriz =
@@ -1812,6 +2253,7 @@ export const BattleshipArena: React.FC<Props> = ({
                         size={ship.size}
                         orientation={isHoriz ? 'H' : 'V'}
                         cellSize={cellSize}
+                        isSunk={isSunk}
                       />
 
                       {/* Marcadores de impacto en combate */}
@@ -1905,6 +2347,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  inviteAvatarImg: {
+    width: '100%' as const,
+    height: '100%' as const,
   },
   oceanCardTitle: {
     fontSize: 22,
@@ -1996,7 +2443,7 @@ const styles = StyleSheet.create({
   // Tablero Océano
   boardOceanFrame: {
     borderRadius: 16,
-    borderColor: 'rgba(56, 189, 248, 0.4)',
+    borderColor: 'rgba(56, 189, 248, 0.55)',
     overflow: 'hidden',
   },
   coordsLettersRow: {
@@ -2008,7 +2455,8 @@ const styles = StyleSheet.create({
   coordLetterText: {
     fontSize: 10.5,
     fontWeight: '800',
-    color: '#7dd3fc',
+    color: '#bae6fd',
+    letterSpacing: 0.4,
     textAlign: 'center',
   },
   coordNumberCell: {
@@ -2018,13 +2466,13 @@ const styles = StyleSheet.create({
   coordNumberText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#7dd3fc',
+    color: '#bae6fd',
   },
   oceanCell: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.5,
-    borderColor: 'rgba(56, 189, 248, 0.16)',
+    borderColor: 'rgba(56, 189, 248, 0.22)',
   },
 
   // Barcos interactivos
@@ -2181,16 +2629,163 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   sunkCellOverlay: {
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(153, 27, 27, 0.4)',
+    backgroundColor: 'rgba(127, 29, 29, 0.55)',
+  },
+  waterSplashOuter: {
+    width: '66%' as const,
+    height: '66%' as const,
+    borderRadius: 99,
+    borderWidth: 1.4,
+    borderColor: 'rgba(56, 189, 248, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(14, 116, 144, 0.22)',
+  },
+  waterSplashInner: {
+    width: '44%' as const,
+    height: '44%' as const,
+    borderRadius: 99,
+    backgroundColor: 'rgba(125, 211, 252, 0.85)',
+  },
+  hitBlastRing: {
+    width: '78%' as const,
+    height: '78%' as const,
+    borderRadius: 99,
+    borderWidth: 1.5,
+    borderColor: 'rgba(253, 224, 71, 0.85)',
+    backgroundColor: 'rgba(234, 88, 12, 0.48)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   crosshairDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(56, 189, 248, 0.4)',
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(56, 189, 248, 0.42)',
+  },
+  battleHudCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 6,
+  },
+  hudPlayerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    maxWidth: 112,
+  },
+  hudPlayerChipActive: {
+    borderColor: '#0284c7',
+    backgroundColor: '#f0f9ff',
+  },
+  hudAvatarCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  hudAvatarImg: {
+    width: '100%' as const,
+    height: '100%' as const,
+  },
+  hudAvatarInitial: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0369a1',
+  },
+  hudPlayerName: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  hudPlayerFleetText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  lastShotBanner: {
+    flex: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lastShotWater: {
+    backgroundColor: '#f0f9ff',
+    borderColor: '#bae6fd',
+  },
+  lastShotHit: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+  },
+  lastShotSunk: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
+  lastShotText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  enemyFleetTrackerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#082f49',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.28)',
+  },
+  enemyFleetLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#bae6fd',
+  },
+  enemyFleetShipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  enemyShipTrackerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  enemyShipTrackerPillSunk: {
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.6)',
+  },
+  sunkSkullText: {
+    fontSize: 9,
   },
 });

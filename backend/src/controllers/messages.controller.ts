@@ -1,8 +1,18 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { logger } from '../config/logger';
 import { supabase } from '../config/supabase';
 import { handlePrismaError } from '../utils/prismaErrors';
+
+function getLocalTodayIso(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
 
 // ── Admin: Listar todos los mensajes ordenados por fecha ──
 export const listMessages = async (_req: Request, res: Response): Promise<void> => {
@@ -132,6 +142,68 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+// ── Admin: Crear múltiples mensajes en lote (Bulk Import / Plantillas) ──
+export const bulkCreateMessages = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { messages } = req.body as {
+      messages: Array<{
+        sender?: string;
+        recipient?: string;
+        content: string;
+        scheduled_date: string;
+        theme_color: string;
+        is_read?: boolean;
+      }>;
+    };
+
+    const items = messages.map((m) => ({
+      id: crypto.randomUUID(),
+      sender: m.sender?.trim() || 'Javier',
+      recipient: m.recipient?.trim() || 'Karla',
+      content: m.content.trim(),
+      scheduled_date: m.scheduled_date,
+      theme_color: m.theme_color,
+      is_read: m.is_read ?? false,
+    }));
+
+    // 1. Insertar lote en Prisma
+    await prisma.message.createMany({
+      data: items.map((item) => ({
+        id: item.id,
+        sender: item.sender,
+        recipient: item.recipient,
+        content: item.content,
+        scheduled_date: new Date(item.scheduled_date),
+        theme_color: item.theme_color,
+        is_read: item.is_read,
+      })),
+      skipDuplicates: true,
+    });
+
+    // 2. Sincronizar lote con Supabase Cloud si está configurado
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('messages').insert(items);
+        if (error) {
+          logger.warn({ err: error.message }, 'No se pudo sincronizar lote de mensajes a Supabase');
+        } else {
+          logger.info({ count: items.length }, 'Lote de mensajes sincronizado con Supabase');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Error de red sincronizando lote de mensajes con Supabase');
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { created: items.length },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Error en bulkCreateMessages');
+    res.status(500).json({ success: false, message: 'Error al crear mensajes en lote' });
+  }
+};
+
 // ── Admin: Actualizar un mensaje existente ──
 export const updateMessage = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -237,7 +309,7 @@ export const deleteMessage = async (req: Request, res: Response): Promise<void> 
 // ── Mobile: Sincronización de mensajes (filtrando cartas futuras por privacidad) ──
 export const syncMessages = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const todayIso = new Date().toISOString().split('T')[0];
+    const todayIso = getLocalTodayIso();
 
     if (supabase) {
       try {

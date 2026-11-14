@@ -16,6 +16,7 @@ export const KmrgMiniWidget: React.FC<KmrgWidgetData> = ({
   streakActive,
   hasNewHeart,
   heartSender,
+  petAccessory,
 }) => {
   const { totalDays, breakdown } = computeTimeTogether(anniversaryDate, daysTogether);
   const palette = getWidgetPalette(accentColor);
@@ -24,7 +25,7 @@ export const KmrgMiniWidget: React.FC<KmrgWidgetData> = ({
   const isFlameActive = streakActive !== false;
   const flameSvg = getFlameSvg(isFlameActive, milestone ? 28 : 24);
   const flameTextColor = isFlameActive ? palette.flameActive : palette.flameInactive;
-  const pochitoSvg = getPochitoPeekingSvg(palette.accentHex, milestone, 120, 38);
+  const pochitoSvg = getPochitoPeekingSvg(palette.accentHex, milestone, 120, 44, petAccessory || 'none');
 
   return (
     <FlexWidget
@@ -172,7 +173,7 @@ export const KmrgMiniWidget: React.FC<KmrgWidgetData> = ({
           svg={pochitoSvg}
           style={{
             width: 120,
-            height: 38,
+            height: 44,
           }}
         />
       </FlexWidget>

@@ -24,14 +24,42 @@ export interface DrawStroke {
 }
 
 export const CANVAS_COLORS = [
-  '#0f172a', // 1. Carbón oscuro
-  '#ef4444', // 2. Rojo carmín
-  '#f97316', // 3. Naranja
-  '#eab308', // 4. Amarillo sol
-  '#10b981', // 5. Verde esmeralda (Acento)
-  '#06b6d4', // 6. Cian
-  '#3b82f6', // 7. Azul real
-  '#ec4899', // 8. Rosa coral
+  '#0f172a', // Negro carbón
+  '#475569', // Gris pizarra
+  '#94a3b8', // Gris plata
+  '#ffffff', // Blanco puro
+  '#fef3c7', // Crema
+  '#fde6d2', // Piel clara
+  '#e0a97b', // Piel cálida
+  '#b45309', // Café canela
+  '#78350f', // Café chocolate
+  '#7f1d1d', // Rojo vino
+  '#ef4444', // Rojo vivo
+  '#fb7185', // Coral rosado
+  '#ea580c', // Naranja fuego
+  '#f97316', // Naranja
+  '#fb923c', // Durazno
+  '#f59e0b', // Ámbar dorado
+  '#eab308', // Amarillo sol
+  '#facc15', // Amarillo neón
+  '#fef08a', // Amarillo pastel
+  '#84cc16', // Verde lima
+  '#22c55e', // Verde hoja
+  '#15803d', // Verde bosque
+  '#10b981', // Verde esmeralda
+  '#6ee7b7', // Menta suave
+  '#14b8a6', // Turquesa
+  '#06b6d4', // Cian
+  '#38bdf8', // Azul cielo
+  '#3b82f6', // Azul real
+  '#4f46e5', // Azul índigo
+  '#1e3a8a', // Azul marino
+  '#581c87', // Morado profundo
+  '#8b5cf6', // Púrpura violeta
+  '#c084fc', // Lavanda
+  '#d946ef', // Fucsia neón
+  '#ec4899', // Rosa intenso
+  '#fbcfe8', // Rosa pastel
 ];
 
 export const CANVAS_STROKE_WIDTHS = [
@@ -104,6 +132,30 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
   const lastEmitTimeRef = useRef<number>(0);
   const layoutRef = useRef<{ width: number; height: number }>({ width: 320, height: 320 });
 
+  // Mantener props y callbacks frescos en ref para que PanResponder NO se recree al agregar cada trazo
+  const latestPropsRef = useRef({
+    strokes,
+    onStrokesChange,
+    onStrokeBatch,
+    onStrokeEnd,
+    currentColor,
+    currentWidth,
+    isEraserActive,
+    isBucketActive,
+    onBucketFill,
+  });
+  latestPropsRef.current = {
+    strokes,
+    onStrokesChange,
+    onStrokeBatch,
+    onStrokeEnd,
+    currentColor,
+    currentWidth,
+    isEraserActive,
+    isBucketActive,
+    onBucketFill,
+  };
+
   const handleLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (width > 0 && height > 0) {
@@ -123,10 +175,20 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt: GestureResponderEvent) => {
+        const {
+          isBucketActive: bucketActive,
+          onBucketFill: bucketFill,
+          currentColor: color,
+          currentWidth: strokeW,
+          isEraserActive: eraserActive,
+          onStrokeBatch: emitBatch,
+        } = latestPropsRef.current;
+
         // Modo Cubeta de relleno: rellena el fondo con un tap
-        if (isBucketActive) {
-          onBucketFill?.(currentColor);
+        if (bucketActive) {
+          bucketFill?.(color);
           return;
         }
 
@@ -137,8 +199,8 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         const normalizedX = Math.max(0, Math.min(1, locationX / width));
         const normalizedY = Math.max(0, Math.min(1, locationY / height));
         const initialPoint: DrawPoint = {
-          x: Number(normalizedX.toFixed(4)),
-          y: Number(normalizedY.toFixed(4)),
+          x: Number(normalizedX.toFixed(3)),
+          y: Number(normalizedY.toFixed(3)),
         };
 
         const strokeId = `s_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -147,10 +209,17 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         lastEmitTimeRef.current = Date.now();
         setLivePoints([initialPoint]);
 
-        onStrokeBatch?.(strokeId, isEraserActive ? CANVAS_BG : currentColor, currentWidth, [initialPoint], isEraserActive);
+        emitBatch?.(strokeId, eraserActive ? CANVAS_BG : color, strokeW, [initialPoint], eraserActive);
       },
       onPanResponderMove: (evt: GestureResponderEvent, _gestureState: PanResponderGestureState) => {
-        if (isBucketActive) return;
+        const {
+          isBucketActive: bucketActive,
+          currentColor: color,
+          currentWidth: strokeW,
+          isEraserActive: eraserActive,
+          onStrokeBatch: emitBatch,
+        } = latestPropsRef.current;
+        if (bucketActive) return;
 
         const { locationX, locationY } = evt.nativeEvent;
         const { width, height } = layoutRef.current;
@@ -159,8 +228,8 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         const normalizedX = Math.max(0, Math.min(1, locationX / width));
         const normalizedY = Math.max(0, Math.min(1, locationY / height));
         const newPt: DrawPoint = {
-          x: Number(normalizedX.toFixed(4)),
-          y: Number(normalizedY.toFixed(4)),
+          x: Number(normalizedX.toFixed(3)),
+          y: Number(normalizedY.toFixed(3)),
         };
 
         const pts = currentPointsRef.current;
@@ -169,40 +238,49 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         if (lastPt) {
           const dx = (newPt.x - lastPt.x) * width;
           const dy = (newPt.y - lastPt.y) * height;
-          if (dx * dx + dy * dy < 4) return;
+          if (dx * dx + dy * dy < 9) return;
         }
 
         pts.push(newPt);
         setLivePoints([...pts]);
 
         const now = Date.now();
-        if (now - lastEmitTimeRef.current >= 65) {
+        if (now - lastEmitTimeRef.current >= 85) {
           lastEmitTimeRef.current = now;
-          onStrokeBatch?.(
+          emitBatch?.(
             currentStrokeIdRef.current,
-            isEraserActive ? CANVAS_BG : currentColor,
-            currentWidth,
+            eraserActive ? CANVAS_BG : color,
+            strokeW,
             [...pts],
-            isEraserActive
+            eraserActive
           );
         }
       },
       onPanResponderRelease: () => {
-        if (isBucketActive) return;
+        const {
+          isBucketActive: bucketActive,
+          currentColor: color,
+          currentWidth: strokeW,
+          isEraserActive: eraserActive,
+          strokes: currStrokes,
+          onStrokesChange: strokesChange,
+          onStrokeEnd: strokeEnd,
+        } = latestPropsRef.current;
+        if (bucketActive) return;
 
         const pts = [...currentPointsRef.current];
         if (pts.length > 0) {
           const finishedStroke: DrawStroke = {
             id: currentStrokeIdRef.current || `s_${Date.now()}`,
-            color: isEraserActive ? CANVAS_BG : currentColor,
-            strokeWidth: currentWidth,
+            color: eraserActive ? CANVAS_BG : color,
+            strokeWidth: strokeW,
             points: pts,
-            isEraser: isEraserActive,
+            isEraser: eraserActive,
           };
 
-          const nextStrokes = [...strokes, finishedStroke];
-          onStrokesChange?.(nextStrokes);
-          onStrokeEnd?.(finishedStroke);
+          const nextStrokes = [...currStrokes, finishedStroke];
+          strokesChange?.(nextStrokes);
+          strokeEnd?.(finishedStroke);
         }
 
         currentPointsRef.current = [];
@@ -210,12 +288,33 @@ export const DrawGuessCanvas: React.FC<DrawGuessCanvasProps> = ({
         setLivePoints([]);
       },
       onPanResponderTerminate: () => {
+        const {
+          isBucketActive: bucketActive,
+          currentColor: color,
+          currentWidth: strokeW,
+          isEraserActive: eraserActive,
+          strokes: currStrokes,
+          onStrokesChange: strokesChange,
+          onStrokeEnd: strokeEnd,
+        } = latestPropsRef.current;
+        if (!bucketActive && currentPointsRef.current.length > 1) {
+          const pts = [...currentPointsRef.current];
+          const finishedStroke: DrawStroke = {
+            id: currentStrokeIdRef.current || `s_${Date.now()}`,
+            color: eraserActive ? CANVAS_BG : color,
+            strokeWidth: strokeW,
+            points: pts,
+            isEraser: eraserActive,
+          };
+          strokesChange?.([...currStrokes, finishedStroke]);
+          strokeEnd?.(finishedStroke);
+        }
         currentPointsRef.current = [];
         currentStrokeIdRef.current = '';
         setLivePoints([]);
       },
     });
-  }, [readOnly, currentColor, currentWidth, isEraserActive, isBucketActive, strokes, onStrokesChange, onStrokeBatch, onStrokeEnd, onBucketFill]);
+  }, [readOnly]);
 
   const liveSvgPath = useMemo(() => {
     if (livePoints.length === 0) return '';

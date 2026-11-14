@@ -12,16 +12,24 @@ import {
   Platform,
   Keyboard,
   Share,
+  Image,
+  ScrollView,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../ui/Icon';
 import { UserProfile, DrawGuessState, DrawGuessStroke, DrawGuessRoundRecord } from '../../types';
+import { useProfile } from '../../contexts/ProfileContext';
 import {
   DrawGuessCanvas,
   CANVAS_COLORS,
   CANVAS_STROKE_WIDTHS,
   DrawStroke,
 } from './DrawGuessCanvas';
+import {
+  ColorSpectrumPickerModal,
+  isLightHexColor,
+} from './ColorSpectrumPickerModal';
 import {
   DrawGuessWord,
   getWordChoicesForRound,
@@ -116,9 +124,22 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
 
   // Herramientas del dibujante
   const [currentColor, setCurrentColor] = useState<string>(CANVAS_COLORS[0]);
+  const [customColors, setCustomColors] = useState<string[]>([]);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState<boolean>(false);
   const [currentWidth, setCurrentWidth] = useState<number>(CANVAS_STROKE_WIDTHS[1].width);
   const [isEraser, setIsEraser] = useState<boolean>(false);
   const [isBucket, setIsBucket] = useState<boolean>(false);
+
+  const paletteColors = useMemo(() => {
+    const merged: string[] = [];
+    for (const col of [...customColors, ...CANVAS_COLORS]) {
+      const lower = col.toLowerCase();
+      if (!merged.some((existing) => existing.toLowerCase() === lower)) {
+        merged.push(col);
+      }
+    }
+    return merged;
+  }, [customColors]);
 
   // Estado del adivinador
   const [guessInput, setGuessInput] = useState<string>('');
@@ -147,26 +168,99 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
   // Shake de intento inválido/repetido
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
+  // Reacciones rápidas en vivo sobre el lienzo
+  const QUICK_REACTIONS = ['😂', '😍', '🤔', '🔥', '👏'] as const;
+  const [floatingReactions, setFloatingReactions] = useState<
+    Array<{ id: string; emoji: string; leftPct: number; anim: Animated.Value }>
+  >([]);
+
+  const spawnFloatingReaction = useCallback((emoji: string) => {
+    const id = `react_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const anim = new Animated.Value(0);
+    const leftPct = 16 + Math.floor(Math.random() * 64);
+    setFloatingReactions((prev) => [...prev.slice(-6), { id, emoji, leftPct, anim }]);
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 1350,
+      useNativeDriver: true,
+    }).start(() => {
+      setFloatingReactions((prev) => prev.filter((item) => item.id !== id));
+    });
+  }, []);
+
+  const handleSendReaction = useCallback(
+    (emoji: string) => {
+      void triggerGameHaptic('light');
+      spawnFloatingReaction(emoji);
+      channelRef.current?.send({
+        type: 'broadcast',
+        event: 'reaction',
+        payload: { emoji, sender: currentProfile },
+      });
+    },
+    [currentProfile, spawnFloatingReaction]
+  );
+
+  // Perfiles reales (foto y apodo actualizado)
+  const { getDisplayName, getAvatarUri } = useProfile();
+  const karlaName = getDisplayName('Karla');
+  const javierName = getDisplayName('Javier');
+  const karlaAvatar = getAvatarUri('Karla');
+  const javierAvatar = getAvatarUri('Javier');
+
   // Roles calculados
   const drawerProfile: UserProfile = gameState.drawer || (gameState.currentRound % 2 === 1 ? 'Karla' : 'Javier');
   const guesserProfile: UserProfile = drawerProfile === 'Karla' ? 'Javier' : 'Karla';
   const isMeDrawer = currentProfile === drawerProfile;
   const isMeGuesser = currentProfile === guesserProfile;
 
-  const drawerDisplayName = drawerProfile === 'Karla' ? 'Karlita' : 'Javier';
-  const guesserDisplayName = guesserProfile === 'Karla' ? 'Karlita' : 'Javier';
+  const drawerDisplayName = getDisplayName(drawerProfile);
+  const guesserDisplayName = getDisplayName(guesserProfile);
 
   // Guardias de ejecución única
   const isRewardingRef = useRef<boolean>(false);
   const isAdvancingRoundRef = useRef<boolean>(false);
   const previousRoundRef = useRef<number>(gameState.currentRound);
 
-  // Trazos locales
+  // Trazos locales (el dibujante conserva su lienzo vivo sin que intentos del adivinador lo regresen atrás)
   const [localStrokes, setLocalStrokes] = useState<DrawStroke[]>(gameState.strokes || []);
+  const localStrokesRef = useRef<DrawStroke[]>(localStrokes);
+  localStrokesRef.current = localStrokes;
+  const strokeSessionKeyRef = useRef<string>(`${gameState.currentRound}_${gameState.phase}`);
+  const drawerLastEditAtRef = useRef<number>(0);
 
   useEffect(() => {
-    setLocalStrokes(gameState.strokes || []);
-  }, [gameState.strokes]);
+    const nextSessionKey = `${gameState.currentRound}_${gameState.phase}`;
+    const sessionChanged = nextSessionKey !== strokeSessionKeyRef.current;
+    strokeSessionKeyRef.current = nextSessionKey;
+
+    if (sessionChanged) {
+      drawerLastEditAtRef.current = 0;
+      setLocalStrokes(gameState.strokes || []);
+      return;
+    }
+
+    // Si soy quien está dibujando en vivo, NO dejar que un eco viejo o un intento del adivinador pise mis trazos
+    if (isMeDrawer && gameState.phase === 'drawing') {
+      if (localStrokesRef.current.length === 0 && (gameState.strokes?.length || 0) > 0 && drawerLastEditAtRef.current === 0) {
+        setLocalStrokes(gameState.strokes || []);
+      }
+      return;
+    }
+
+    // Para quien observa/adivina o en fin de ronda: fusionar sin perder trazos recibidos en vivo
+    if (gameState.phase === 'drawing' && (gameState.strokes?.length || 0) > 0) {
+      setLocalStrokes((prev) => {
+        const dbStrokes = gameState.strokes || [];
+        if (prev.length === 0) return dbStrokes;
+        const seen = new Set(dbStrokes.map((s) => s.id));
+        const liveOnly = prev.filter((s) => !seen.has(s.id));
+        return liveOnly.length > 0 ? [...dbStrokes, ...liveOnly] : dbStrokes;
+      });
+    } else if (gameState.phase !== 'drawing') {
+      setLocalStrokes(gameState.strokes || []);
+    }
+  }, [gameState.strokes, gameState.currentRound, gameState.phase, isMeDrawer]);
 
   // Manejador del teclado
   useEffect(() => {
@@ -181,6 +275,9 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
   // 1. SINCRONIZACIÓN EN TIEMPO REAL VÍA SUPABASE BROADCAST CHANNEL
   const channelRef = useRef<any>(null);
   const isChannelSubscribedRef = useRef<boolean>(false);
+  const strokeSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestGameStateRef = useRef<DrawGuessState>(gameState);
+  latestGameStateRef.current = gameState;
 
   useEffect(() => {
     const channel = supabase.channel('kmrg-drawguess-live-v3', {
@@ -223,6 +320,11 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
           ]);
         }
       })
+      .on('broadcast', { event: 'reaction' }, ({ payload }: { payload: any }) => {
+        if (payload?.emoji) {
+          spawnFloatingReaction(payload.emoji);
+        }
+      })
       .subscribe((status: any) => {
         if (status === 'SUBSCRIBED') {
           isChannelSubscribedRef.current = true;
@@ -235,9 +337,13 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
 
     return () => {
       isChannelSubscribedRef.current = false;
+      if (strokeSyncTimerRef.current) {
+        clearTimeout(strokeSyncTimerRef.current);
+        strokeSyncTimerRef.current = null;
+      }
       void supabase.removeChannel(channel);
     };
-  }, [isMeDrawer]);
+  }, [isMeDrawer, spawnFloatingReaction]);
 
   // Emisión de trazos por lotes
   const handleStrokeBatch = useCallback(
@@ -251,47 +357,84 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
     []
   );
 
+  // Respaldo agrupado (debounced) en DB leyendo siempre localStrokesRef.current
+  const scheduleStrokesDbPersist = useCallback(() => {
+    if (strokeSyncTimerRef.current) {
+      clearTimeout(strokeSyncTimerRef.current);
+    }
+    strokeSyncTimerRef.current = setTimeout(() => {
+      strokeSyncTimerRef.current = null;
+      const now = Date.now();
+      drawerLastEditAtRef.current = now;
+      void onUpdateGameState({
+        ...latestGameStateRef.current,
+        strokes: localStrokesRef.current,
+        strokesUpdatedAt: now,
+        updatedAt: now,
+      });
+    }, 900);
+  }, [onUpdateGameState]);
+
   const handleStrokeEnd = useCallback(
     async (stroke: DrawStroke) => {
-      const nextStrokes = [...localStrokes, stroke];
+      const now = Date.now();
+      drawerLastEditAtRef.current = now;
+      const nextStrokes = [...localStrokesRef.current, stroke];
+      localStrokesRef.current = nextStrokes;
       setLocalStrokes(nextStrokes);
-      await onUpdateGameState({
-        ...gameState,
-        strokes: nextStrokes,
-        updatedAt: Date.now(),
+      // Enviar el trazo final en vivo por Broadcast
+      channelRef.current?.send({
+        type: 'broadcast',
+        event: 'stroke_batch',
+        payload: {
+          strokeId: stroke.id,
+          color: stroke.color,
+          strokeWidth: stroke.strokeWidth,
+          points: stroke.points,
+          isEraser: stroke.isEraser,
+          isFill: stroke.isFill,
+        },
       });
+      scheduleStrokesDbPersist();
     },
-    [localStrokes, gameState, onUpdateGameState]
+    [scheduleStrokesDbPersist]
   );
 
   const handleUndoStroke = useCallback(async () => {
-    if (localStrokes.length === 0) return;
+    if (localStrokesRef.current.length === 0) return;
     void triggerGameHaptic('light');
-    const next = localStrokes.slice(0, -1);
+    drawerLastEditAtRef.current = Date.now();
+    const next = localStrokesRef.current.slice(0, -1);
+    localStrokesRef.current = next;
     setLocalStrokes(next);
     channelRef.current?.send({ type: 'broadcast', event: 'stroke_undo', payload: {} });
-    await onUpdateGameState({
-      ...gameState,
-      strokes: next,
-      updatedAt: Date.now(),
-    });
-  }, [localStrokes, gameState, onUpdateGameState]);
+    scheduleStrokesDbPersist();
+  }, [scheduleStrokesDbPersist]);
 
   const handleClearStrokes = useCallback(async () => {
-    if (localStrokes.length === 0) return;
+    if (localStrokesRef.current.length === 0) return;
     void triggerGameHaptic('medium');
+    if (strokeSyncTimerRef.current) {
+      clearTimeout(strokeSyncTimerRef.current);
+      strokeSyncTimerRef.current = null;
+    }
+    const now = Date.now();
+    drawerLastEditAtRef.current = now;
+    localStrokesRef.current = [];
     setLocalStrokes([]);
     channelRef.current?.send({ type: 'broadcast', event: 'stroke_clear', payload: {} });
     await onUpdateGameState({
-      ...gameState,
+      ...latestGameStateRef.current,
       strokes: [],
-      updatedAt: Date.now(),
+      strokesUpdatedAt: now,
+      updatedAt: now,
     });
-  }, [localStrokes, gameState, onUpdateGameState]);
+  }, [onUpdateGameState]);
 
   const handleBucketFill = useCallback(
     async (color: string) => {
       void triggerGameHaptic('selection');
+      drawerLastEditAtRef.current = Date.now();
       const fillStroke: DrawStroke = {
         id: `fill_${Date.now()}`,
         color,
@@ -299,16 +442,13 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         points: [],
         isFill: true,
       };
-      const next = [...localStrokes, fillStroke];
+      const next = [...localStrokesRef.current, fillStroke];
+      localStrokesRef.current = next;
       setLocalStrokes(next);
       channelRef.current?.send({ type: 'broadcast', event: 'stroke_bucket', payload: { color } });
-      await onUpdateGameState({
-        ...gameState,
-        strokes: next,
-        updatedAt: Date.now(),
-      });
+      scheduleStrokesDbPersist();
     },
-    [localStrokes, gameState, onUpdateGameState]
+    [scheduleStrokesDbPersist]
   );
 
   // Splash de 1.5s al iniciar nueva ronda
@@ -343,24 +483,6 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       // Alerta de últimos 10s
       if (remaining <= 10 && remaining > 0) {
         void triggerGameHaptic('warning');
-      }
-
-      // Pista automática a los 40s transcurridos (quedan <= 35s)
-      if (
-        gameState.phase === 'drawing' &&
-        remaining <= 35 &&
-        !gameState.revealedIndices?.includes(0) &&
-        (gameState.drawerWord || gameState.selectedWord)
-      ) {
-        const fullWord = gameState.drawerWord || gameState.selectedWord || '';
-        const nextIndices = Array.from(new Set([...(gameState.revealedIndices || []), 0]));
-        const nextMask = buildWordMask(fullWord, nextIndices);
-        void onUpdateGameState({
-          ...gameState,
-          revealedIndices: nextIndices,
-          wordMask: nextMask,
-          updatedAt: Date.now(),
-        });
       }
 
       // Tiempo agotado para elegir palabra (15s)
@@ -414,6 +536,7 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       drawerWord: choice.word, // Guardado para el dibujante
       selectedWord: null, // Oculto al adivinador para anti-trampa estricta
       selectedWordHash: wordHash,
+      wordSalt: salt,
       almostHashes,
       wordMask: initialMask,
       selectedWordDifficulty: choice.difficulty,
@@ -431,34 +554,6 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
     };
 
     await onUpdateGameState(updated);
-  };
-
-  // Botón manual de Pista (-50% puntos de ronda)
-  const handleUseHint = async () => {
-    if (gameState.usedHint || !isMeGuesser) return;
-    void triggerGameHaptic('medium');
-
-    const totalLen = gameState.wordLength || 0;
-    if (totalLen <= 1) return;
-
-    const alreadyRevealed = new Set(gameState.revealedIndices || []);
-    const availablePositions: number[] = [];
-    for (let i = 0; i < totalLen; i++) {
-      if (!alreadyRevealed.has(i)) availablePositions.push(i);
-    }
-    if (availablePositions.length === 0) return;
-
-    const randomPick = availablePositions[Math.floor(Math.random() * availablePositions.length)];
-    const nextIndices = [...alreadyRevealed, randomPick];
-    const halvedPoints = Math.max(25, Math.round((gameState.roundPoints || 100) / 2));
-
-    await onUpdateGameState({
-      ...gameState,
-      revealedIndices: nextIndices,
-      usedHint: true,
-      roundPoints: halvedPoints,
-      updatedAt: Date.now(),
-    });
   };
 
   const triggerShake = () => {
@@ -504,10 +599,11 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       const evalResult = evaluateGuess(rawGuess, target);
       isCorrect = evalResult.isCorrect;
       isClose = evalResult.isClose;
+    } else if (gameState.selectedWordHash && gameState.wordSalt) {
+      const guessHash = hashWordWithSalt(rawGuess, gameState.wordSalt);
+      isCorrect = guessHash === gameState.selectedWordHash;
+      isClose = !isCorrect && (gameState.almostHashes || []).includes(guessHash);
     } else if (gameState.selectedWordHash) {
-      // Comparación segura por hash determinista
-      // El salt se deduce o compara
-      // Evaluamos con el drawer vía fallback
       isCorrect = (gameState.almostHashes || []).includes(norm);
     }
 
@@ -525,6 +621,11 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       const nextCorrectK = guesserProfile === 'Karla' ? (gameState.correctGuessesKarla || 0) + 1 : gameState.correctGuessesKarla || 0;
       const nextCorrectJ = guesserProfile === 'Javier' ? (gameState.correctGuessesJavier || 0) + 1 : gameState.correctGuessesJavier || 0;
 
+      if (strokeSyncTimerRef.current) {
+        clearTimeout(strokeSyncTimerRef.current);
+        strokeSyncTimerRef.current = null;
+      }
+
       const roundRecord: DrawGuessRoundRecord = {
         roundNumber: gameState.currentRound,
         drawer: drawerProfile,
@@ -538,7 +639,7 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         guessed: true,
         guessedAtSecondsLeft: secondsLeft,
         usedHint: gameState.usedHint,
-        strokes: localStrokes,
+        strokes: [],
       };
 
       const isLastRound = gameState.currentRound >= 6;
@@ -559,17 +660,20 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       successScaleAnim.setValue(0);
       Animated.spring(successScaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
+      const freshGs = latestGameStateRef.current;
       await onUpdateGameState({
-        ...gameState,
+        ...freshGs,
         phase: isLastRound ? 'game_over' : 'round_end',
         selectedWord: targetWord, // Ahora se revela la palabra
+        strokes: isLastRound ? [] : localStrokesRef.current,
+        strokesUpdatedAt: Date.now(),
         scoreKarla: nextScoreK,
         scoreJavier: nextScoreJ,
         guesserScoreKarla: nextGuesserK,
         guesserScoreJavier: nextGuesserJ,
         correctGuessesKarla: nextCorrectK,
         correctGuessesJavier: nextCorrectJ,
-        roundsHistory: [...(gameState.roundsHistory || []), roundRecord],
+        roundsHistory: [...(freshGs.roundsHistory || []).map((r) => ({ ...r, strokes: [] })), roundRecord],
         attempts: updatedAttempts,
         winner: matchWinner,
         updatedAt: Date.now(),
@@ -588,13 +692,14 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       void triggerGameHaptic('light');
     }
 
+    const freshGs = latestGameStateRef.current;
     const nextAttempts = [
       { player: currentProfile, guess: rawGuess, timestamp: Date.now(), isClose },
-      ...(gameState.attempts || []),
+      ...(freshGs.attempts || []),
     ].slice(0, 4);
 
     await onUpdateGameState({
-      ...gameState,
+      ...freshGs,
       attempts: nextAttempts,
       updatedAt: Date.now(),
     });
@@ -603,36 +708,43 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
   // Tiempo agotado sin acierto
   const handleRoundTimeout = async () => {
     void triggerGameHaptic('warning');
-    const targetWord = gameState.drawerWord || gameState.selectedWord || 'Palabra';
-    const isLastRound = gameState.currentRound >= 6;
+    if (strokeSyncTimerRef.current) {
+      clearTimeout(strokeSyncTimerRef.current);
+      strokeSyncTimerRef.current = null;
+    }
+    const freshGs = latestGameStateRef.current;
+    const targetWord = freshGs.drawerWord || freshGs.selectedWord || 'Palabra';
+    const isLastRound = freshGs.currentRound >= 6;
 
     let matchWinner: UserProfile | 'Empate' | null = null;
     if (isLastRound) {
-      if ((gameState.guesserScoreKarla || 0) > (gameState.guesserScoreJavier || 0)) matchWinner = 'Karla';
-      else if ((gameState.guesserScoreJavier || 0) > (gameState.guesserScoreKarla || 0)) matchWinner = 'Javier';
+      if ((freshGs.guesserScoreKarla || 0) > (freshGs.guesserScoreJavier || 0)) matchWinner = 'Karla';
+      else if ((freshGs.guesserScoreJavier || 0) > (freshGs.guesserScoreKarla || 0)) matchWinner = 'Javier';
       else matchWinner = 'Empate';
     }
 
     const roundRecord: DrawGuessRoundRecord = {
-      roundNumber: gameState.currentRound,
+      roundNumber: freshGs.currentRound,
       drawer: drawerProfile,
       guesser: guesserProfile,
       word: targetWord,
-      difficulty: gameState.selectedWordDifficulty || 'media',
-      category: gameState.selectedWordCategory || 'General',
-      categoryEmoji: gameState.categoryEmoji || '🎨',
+      difficulty: freshGs.selectedWordDifficulty || 'media',
+      category: freshGs.selectedWordCategory || 'General',
+      categoryEmoji: freshGs.categoryEmoji || '🎨',
       pointsBase: 0,
       pointsBonus: 0,
       guessed: false,
-      usedHint: gameState.usedHint,
-      strokes: localStrokes,
+      usedHint: freshGs.usedHint,
+      strokes: [],
     };
 
     await onUpdateGameState({
-      ...gameState,
+      ...freshGs,
       phase: isLastRound ? 'game_over' : 'round_end',
       selectedWord: targetWord,
-      roundsHistory: [...(gameState.roundsHistory || []), roundRecord],
+      strokes: isLastRound ? [] : localStrokesRef.current,
+      strokesUpdatedAt: Date.now(),
+      roundsHistory: [...(freshGs.roundsHistory || []).map((r) => ({ ...r, strokes: [] })), roundRecord],
       winner: matchWinner,
       updatedAt: Date.now(),
     });
@@ -770,18 +882,22 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
   return (
     <KeyboardAvoidingView
       style={styles.mainContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 20}
     >
       {/* ================= 1. MARCADOR COMPACTO UNIFICADO (K vs J + RONDA) ================= */}
       <View style={[styles.compactScoreCard, GAMES_THEME.shadows.card]}>
         {/* Jugador Karlita */}
         <View style={styles.scorePlayerCol}>
           <View style={[styles.miniAvatarCircle, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
-            <Text style={styles.miniAvatarTextKarla}>K</Text>
+            {karlaAvatar ? (
+              <Image source={{ uri: karlaAvatar }} style={styles.miniAvatarImg} />
+            ) : (
+              <Text style={styles.miniAvatarTextKarla}>{karlaName.charAt(0).toUpperCase()}</Text>
+            )}
           </View>
           <View>
-            <Text style={styles.scorePlayerName}>Karlita</Text>
+            <Text style={styles.scorePlayerName}>{karlaName}</Text>
             <Text style={styles.scorePlayerPoints}>{gameState.scoreKarla || 0} pts</Text>
           </View>
         </View>
@@ -795,10 +911,14 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         {/* Jugador Javier */}
         <View style={[styles.scorePlayerCol, { flexDirection: 'row-reverse' }]}>
           <View style={[styles.miniAvatarCircle, { backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }]}>
-            <Text style={styles.miniAvatarTextJavier}>J</Text>
+            {javierAvatar ? (
+              <Image source={{ uri: javierAvatar }} style={styles.miniAvatarImg} />
+            ) : (
+              <Text style={styles.miniAvatarTextJavier}>{javierName.charAt(0).toUpperCase()}</Text>
+            )}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.scorePlayerName}>Javier</Text>
+            <Text style={styles.scorePlayerName}>{javierName}</Text>
             <Text style={styles.scorePlayerPoints}>{gameState.scoreJavier || 0} pts</Text>
           </View>
         </View>
@@ -808,39 +928,34 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
       <View style={styles.wordTimerRow}>
         <View style={styles.wordSection}>
           {gameState.phase === 'choosing_word' ? (
-            <View style={styles.drawerWordGroup}>
-              <Ionicons
-                name={isMeDrawer ? 'color-palette' : 'time-outline'}
-                size={16}
-                color={isMeDrawer ? primaryColor : '#f59e0b'}
-              />
-              <Text style={[styles.drawerWordLabel, { color: isMeDrawer ? primaryColor : '#b45309', fontWeight: '800' }]}>
-                {isMeDrawer ? '¡ELIGE TU PALABRA!' : `ESPERANDO A ${drawerDisplayName.toUpperCase()}…`}
-              </Text>
-            </View>
+            isMeDrawer ? (
+              <View style={styles.drawerWordGroup}>
+                <Ionicons
+                  name="color-palette"
+                  size={16}
+                  color={primaryColor}
+                />
+                <Text style={[styles.drawerWordLabel, { color: primaryColor, fontWeight: '800' }]}>
+                  ¡ELIGE TU PALABRA!
+                </Text>
+              </View>
+            ) : null
           ) : isMeDrawer ? (
             <View style={styles.drawerWordGroup}>
               <Text style={styles.drawerWordLabel}>DIBUJA:</Text>
               <Text style={[styles.drawerWordHighlight, { color: primaryColor }]} numberOfLines={1}>
                 {gameState.drawerWord || gameState.selectedWord || '...'}
               </Text>
-              {gameState.selectedWordCategory && (
-                <View style={styles.categoryBadgePill}>
-                  <Text style={styles.categoryBadgeText}>
-                    {gameState.categoryEmoji || '🎨'} {gameState.selectedWordCategory}
-                  </Text>
-                </View>
-              )}
             </View>
           ) : (
             <View style={styles.guesserWordGroup}>
               <Text style={styles.guesserDashesText} numberOfLines={1} adjustsFontSizeToFit>
                 {activeWordMask}
               </Text>
-              {gameState.selectedWordCategory && (
+              {(gameState.wordLength || 0) > 0 && (
                 <View style={styles.categoryBadgePill}>
                   <Text style={styles.categoryBadgeText}>
-                    {gameState.categoryEmoji || '🎨'} {gameState.selectedWordCategory}
+                    {(gameState.wordMask ? gameState.wordMask.replace(/\s+/g, '').length : 0) || gameState.wordLength} letras
                   </Text>
                 </View>
               )}
@@ -852,61 +967,101 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         <View
           style={[
             styles.integratedTimerPill,
-            secondsLeft <= 10 && styles.integratedTimerPillWarning,
+            gameState.phase === 'drawing' && secondsLeft <= 10 && styles.integratedTimerPillWarning,
           ]}
         >
           <Ionicons
             name="time-outline"
             size={13}
-            color={secondsLeft <= 10 ? '#ef4444' : '#64748b'}
+            color={gameState.phase === 'drawing' && secondsLeft <= 10 ? '#ef4444' : '#64748b'}
           />
           <Text
             style={[
               styles.integratedTimerText,
-              secondsLeft <= 10 && styles.integratedTimerTextWarning,
+              gameState.phase === 'drawing' && secondsLeft <= 10 && styles.integratedTimerTextWarning,
             ]}
           >
-            {secondsLeft}s
+            {gameState.phase === 'drawing'
+              ? `${secondsLeft}s`
+              : isMeDrawer && gameState.phase === 'choosing_word'
+              ? `${secondsLeft}s`
+              : '--'}
           </Text>
         </View>
       </View>
 
       {/* ================= 4. LIENZO CUADRADO 1:1 CON CUADRÍCULA TENUE ================= */}
-      <View style={[styles.canvasFrame, { width: canvasSize, height: canvasSize }]}>
-        <DrawGuessCanvas
-          strokes={isReplaying ? replayStrokes : localStrokes}
-          onStrokeBatch={handleStrokeBatch}
-          onStrokeEnd={handleStrokeEnd}
-          readOnly={!isMeDrawer || gameState.phase !== 'drawing'}
-          currentColor={currentColor}
-          currentWidth={currentWidth}
-          isEraserActive={isEraser}
-          isBucketActive={isBucket}
-          onBucketFill={handleBucketFill}
-        />
+      <View style={styles.canvasAreaWrap}>
+        <View style={[styles.canvasFrame, { width: canvasSize, height: canvasSize }]}>
+          <DrawGuessCanvas
+            strokes={isReplaying ? replayStrokes : localStrokes}
+            onStrokeBatch={handleStrokeBatch}
+            onStrokeEnd={handleStrokeEnd}
+            readOnly={!isMeDrawer || gameState.phase !== 'drawing'}
+            currentColor={currentColor}
+            currentWidth={currentWidth}
+            isEraserActive={isEraser}
+            isBucketActive={isBucket}
+            onBucketFill={handleBucketFill}
+          />
 
-        {/* Overlay de espera para el adivinador cuando el dibujante elige palabra */}
-        {gameState.phase === 'choosing_word' && isMeGuesser && (
-          <View style={styles.canvasDimmedOverlay}>
-            <View style={styles.waitingCard}>
-              <View style={styles.waitingIconWrap}>
-                <Ionicons name="pencil" size={24} color={primaryColor} />
+          {/* Overlay de espera para el adivinador cuando el dibujante elige palabra */}
+          {gameState.phase === 'choosing_word' && isMeGuesser && (
+            <View style={styles.canvasDimmedOverlay}>
+              <View style={styles.waitingCard}>
+                <View style={styles.waitingIconWrap}>
+                  <Ionicons name="pencil" size={24} color={primaryColor} />
+                </View>
+                <Text style={styles.waitingCardTitle}>
+                  {drawerDisplayName} está eligiendo qué dibujar…
+                </Text>
+                <Text style={styles.waitingCardDots}>• • •</Text>
               </View>
-              <Text style={styles.waitingCardTitle}>
-                {drawerDisplayName} está eligiendo qué dibujar…
-              </Text>
-              <Text style={styles.waitingCardDots}>• • •</Text>
             </View>
-          </View>
-        )}
+          )}
 
-        {/* Toast sutil de guardado con éxito */}
-        {savedSuccessToast && (
-          <View style={styles.savedToast}>
-            <Ionicons name="checkmark-circle" size={16} color="#15803d" />
-            <Text style={styles.savedToastText}>¡Guardado en Recuerdos!</Text>
-          </View>
-        )}
+          {/* Reacciones flotantes en vivo */}
+          {floatingReactions.map((item) => (
+            <Animated.View
+              key={item.id}
+              pointerEvents="none"
+              style={[
+                styles.floatingReactionItem,
+                {
+                  left: `${item.leftPct}%`,
+                  opacity: item.anim.interpolate({
+                    inputRange: [0, 0.2, 0.85, 1],
+                    outputRange: [0, 1, 1, 0],
+                  }),
+                  transform: [
+                    {
+                      translateY: item.anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -140],
+                      }),
+                    },
+                    {
+                      scale: item.anim.interpolate({
+                        inputRange: [0, 0.2, 0.8, 1],
+                        outputRange: [0.6, 1.25, 1.05, 0.85],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.floatingReactionText}>{item.emoji}</Text>
+            </Animated.View>
+          ))}
+
+          {/* Toast sutil de guardado con éxito */}
+          {savedSuccessToast && (
+            <View style={styles.savedToast}>
+              <Ionicons name="checkmark-circle" size={16} color="#15803d" />
+              <Text style={styles.savedToastText}>¡Guardado en Recuerdos!</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* ================= 5. DOCK INFERIOR FIJO ================= */}
@@ -914,31 +1069,79 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
         {isMeDrawer && gameState.phase === 'drawing' ? (
           /* DOCK DEL DIBUJANTE: 2 FILAS */
           <View style={styles.drawerDockCard}>
-            {/* Fila 1: 8 Colores de 34px uniformes */}
+            {/* Fila 1: Botón Paleta Infinita + tira deslizable de 36+ colores */}
             <View style={styles.colorsPaletteRow}>
-              {CANVAS_COLORS.map((col) => {
-                const isSelected = currentColor === col && !isEraser && !isBucket;
-                return (
-                  <TouchableOpacity
-                    key={col}
-                    onPress={() => {
-                      void triggerGameHaptic('selection');
-                      setCurrentColor(col);
-                      setIsEraser(false);
-                      setIsBucket(false);
-                    }}
+              <TouchableOpacity
+                onPress={() => {
+                  void triggerGameHaptic('selection');
+                  setIsColorPickerOpen(true);
+                }}
+                activeOpacity={0.85}
+                style={styles.spectrumTriggerWrap}
+                accessibilityLabel="Abrir todos los colores"
+              >
+                <LinearGradient
+                  colors={['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#ec4899']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.spectrumRing}
+                >
+                  <View
                     style={[
-                      styles.colorDotBtn,
-                      { backgroundColor: col },
-                      isSelected && styles.colorDotBtnActive,
+                      styles.spectrumInner,
+                      { backgroundColor: currentColor },
+                      isLightHexColor(currentColor) && { borderColor: '#cbd5e1', borderWidth: 1 },
                     ]}
-                    activeOpacity={0.8}
-                    accessibilityLabel={`Color ${col}`}
                   >
-                    {isSelected && <View style={styles.colorDotInnerWhite} />}
-                  </TouchableOpacity>
-                );
-              })}
+                    <Ionicons
+                      name="color-palette"
+                      size={13}
+                      color={isLightHexColor(currentColor) ? '#0f172a' : '#ffffff'}
+                    />
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.colorsScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {paletteColors.map((col) => {
+                  const isSelected =
+                    currentColor.toLowerCase() === col.toLowerCase() && !isEraser && !isBucket;
+                  const lightColor = isLightHexColor(col);
+                  return (
+                    <TouchableOpacity
+                      key={col}
+                      onPress={() => {
+                        void triggerGameHaptic('selection');
+                        setCurrentColor(col);
+                        setIsEraser(false);
+                        setIsBucket(false);
+                      }}
+                      style={[
+                        styles.colorDotBtn,
+                        { backgroundColor: col },
+                        lightColor && styles.colorDotBtnLight,
+                        isSelected && styles.colorDotBtnActive,
+                      ]}
+                      activeOpacity={0.8}
+                      accessibilityLabel={`Color ${col}`}
+                    >
+                      {isSelected && (
+                        <View
+                          style={[
+                            styles.colorDotInnerWhite,
+                            lightColor && { backgroundColor: '#0f172a' },
+                          ]}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Fila 2: 3 Grosores, Borrador real, Cubeta de relleno, Deshacer, Limpiar (44px) */}
@@ -1082,44 +1285,36 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
               ))}
             </View>
 
-            {/* Indicador animado "Karlita está dibujando..." */}
+            {/* Indicador + barra de reacciones rápidas en vivo */}
             <View style={styles.drawingLiveIndicatorRow}>
-              <Ionicons name="pencil" size={13} color={primaryColor} />
-              <Text style={[styles.drawingLiveIndicatorText, { color: primaryColor }]}>
-                {drawerDisplayName} está dibujando…
-              </Text>
+              <View style={styles.drawingLiveLeft}>
+                <Ionicons name="pencil" size={13} color={primaryColor} />
+                <Text style={[styles.drawingLiveIndicatorText, { color: primaryColor }]} numberOfLines={1}>
+                  {drawerDisplayName} dibuja…
+                </Text>
+              </View>
+              <View style={styles.reactionRow}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => handleSendReaction(emoji)}
+                    style={styles.reactionChipBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.reactionChipText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
-            {/* Input grande con botón pista a la izquierda y botón enviar a la derecha */}
+            {/* Input limpio de adivinanza (sin pistas ni spoilers) */}
             <Animated.View style={[styles.inputRowContainer, { transform: [{ translateX: shakeAnim }] }]}>
-              {/* Botón Pista redondo con bombilla y badge -50% */}
-              <TouchableOpacity
-                onPress={() => void handleUseHint()}
-                disabled={gameState.usedHint}
-                style={[
-                  styles.hintRoundBtn,
-                  gameState.usedHint && { opacity: 0.45, borderColor: '#cbd5e1' },
-                ]}
-                activeOpacity={0.7}
-                accessibilityLabel="Pedir pista (-50% puntos)"
-              >
-                <Ionicons
-                  name={gameState.usedHint ? 'bulb' : 'bulb-outline'}
-                  size={19}
-                  color={gameState.usedHint ? '#94a3b8' : '#f59e0b'}
-                />
-                <View style={styles.hintBadgePill}>
-                  <Text style={styles.hintBadgeText}>-50%</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Campo de texto GRANDE */}
               <TextInput
                 ref={inputRef}
                 value={guessInput}
                 onChangeText={setGuessInput}
                 onSubmitEditing={handleSubmitGuess}
-                placeholder="Escribe tu respuesta…"
+                placeholder="Escribe lo que está dibujando…"
                 placeholderTextColor="#94a3b8"
                 style={styles.guessBigInput}
                 autoCapitalize="none"
@@ -1141,6 +1336,31 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
                 <Ionicons name="paper-plane" size={17} color="#ffffff" />
               </TouchableOpacity>
             </Animated.View>
+          </View>
+        ) : gameState.phase === 'choosing_word' && !isMeDrawer ? (
+          /* En fase de elección, el adivinador ve el dock estructurado con input deshabilitado (sin saltos) */
+          <View style={styles.guesserDockCard}>
+            <View style={styles.drawingLiveIndicatorRow}>
+              <View style={styles.drawingLiveLeft}>
+                <Ionicons name="time-outline" size={13} color="#94a3b8" />
+                <Text style={[styles.drawingLiveIndicatorText, { color: '#64748b' }]} numberOfLines={1}>
+                  {drawerDisplayName} está eligiendo…
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.inputRowContainer}>
+              <TextInput
+                editable={false}
+                placeholder="Esperando palabra…"
+                placeholderTextColor="#94a3b8"
+                style={[styles.guessBigInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]}
+              />
+
+              <View style={[styles.sendGreenBtn, { backgroundColor: '#cbd5e1' }]}>
+                <Ionicons name="lock-closed" size={15} color="#ffffff" />
+              </View>
+            </View>
           </View>
         ) : (
           /* Estado de espera o fin */
@@ -1167,9 +1387,7 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
                 ]}
               >
                 {gameState.phase === 'choosing_word'
-                  ? isMeDrawer
-                    ? 'Te toca dibujar · Elige una de las 3 palabras'
-                    : `Te toca adivinar · Esperando que ${drawerDisplayName} elija palabra…`
+                  ? 'Te toca dibujar · Elige una de las 3 palabras'
                   : gameState.phase === 'round_end'
                   ? `Fin de la ronda ${gameState.currentRound}`
                   : gameState.phase === 'game_over'
@@ -1339,19 +1557,19 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
               <Text style={styles.modalTitle}>
                 {gameState.winner === 'Empate'
                   ? '¡Empate de Amor!'
-                  : `¡Ganó ${gameState.winner === 'Karla' ? 'Karlita' : 'Javier'}!`}
+                  : `¡Ganó ${gameState.winner === 'Karla' ? karlaName : javierName}!`}
               </Text>
               <Text style={styles.modalSubtitle}>
                 {gameState.winner === 'Empate'
                   ? 'Ambos demostraron una sincronía perfecta adivinando.'
-                  : `${gameState.winner === 'Karla' ? 'Karlita' : 'Javier'} sumó más puntos adivinando los dibujos.`}
+                  : `${gameState.winner === 'Karla' ? karlaName : javierName} sumó más puntos adivinando los dibujos.`}
               </Text>
             </View>
 
             {/* Resumen comparativo */}
             <View style={styles.finalScoreGrid}>
               <View style={[styles.finalScoreCol, { borderColor: '#fbcfe8' }]}>
-                <Text style={[styles.finalPlayerName, { color: '#ec4899' }]}>Karlita</Text>
+                <Text style={[styles.finalPlayerName, { color: '#ec4899' }]}>{karlaName}</Text>
                 <Text style={styles.finalScorePts}>{gameState.scoreKarla || 0} pts</Text>
                 <Text style={styles.finalCorrectText}>
                   {gameState.correctGuessesKarla || 0} {gameState.correctGuessesKarla === 1 ? 'acierto' : 'aciertos'}
@@ -1359,7 +1577,7 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
               </View>
 
               <View style={[styles.finalScoreCol, { borderColor: '#bae6fd' }]}>
-                <Text style={[styles.finalPlayerName, { color: '#0ea5e9' }]}>Javier</Text>
+                <Text style={[styles.finalPlayerName, { color: '#0ea5e9' }]}>{javierName}</Text>
                 <Text style={styles.finalScorePts}>{gameState.scoreJavier || 0} pts</Text>
                 <Text style={styles.finalCorrectText}>
                   {gameState.correctGuessesJavier || 0} {gameState.correctGuessesJavier === 1 ? 'acierto' : 'aciertos'}
@@ -1385,6 +1603,23 @@ export const DrawGuessArena: React.FC<DrawGuessArenaProps> = ({
           </View>
         </View>
       )}
+      <ColorSpectrumPickerModal
+        visible={isColorPickerOpen}
+        initialColor={currentColor}
+        recentColors={customColors}
+        primaryColor={primaryColor}
+        onSelectColor={(hex) => {
+          setCurrentColor(hex);
+          setIsEraser(false);
+          setIsBucket(false);
+          if (!CANVAS_COLORS.some((c) => c.toLowerCase() === hex.toLowerCase())) {
+            setCustomColors((prev) =>
+              [hex, ...prev.filter((p) => p.toLowerCase() !== hex.toLowerCase())].slice(0, 12)
+            );
+          }
+        }}
+        onClose={() => setIsColorPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -1394,12 +1629,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff5f7',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 10,
     width: '100%',
-    gap: 8,
   },
   // 1. Tarjeta de Marcador Compacta (ScoreBoard unificada K vs J)
   compactScoreCard: {
@@ -1426,6 +1660,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  miniAvatarImg: {
+    width: '100%' as const,
+    height: '100%' as const,
   },
   miniAvatarTextKarla: {
     fontSize: 13,
@@ -1543,6 +1782,13 @@ const styles = StyleSheet.create({
     color: '#ef4444',
   },
 
+  canvasAreaWrap: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    width: '100%',
+    paddingTop: 8,
+  },
   canvasFrame: {
     alignSelf: 'center',
     position: 'relative',
@@ -1620,6 +1866,7 @@ const styles = StyleSheet.create({
   },
   bottomDockContainer: {
     width: '100%',
+    flexShrink: 0,
     marginTop: 4,
   },
   drawerDockCard: {
@@ -1634,19 +1881,50 @@ const styles = StyleSheet.create({
   colorsPaletteRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 8,
     paddingHorizontal: 2,
   },
+  spectrumTriggerWrap: {
+    flexShrink: 0,
+  },
+  spectrumRing: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    padding: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...GAMES_THEME.shadows.soft,
+  },
+  spectrumInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+  },
+  colorsScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 2,
+    paddingRight: 6,
+  },
   colorDotBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#ffffff',
     ...GAMES_THEME.shadows.soft,
+  },
+  colorDotBtnLight: {
+    borderColor: '#cbd5e1',
   },
   colorDotBtnActive: {
     borderWidth: 2.5,
@@ -1724,8 +2002,44 @@ const styles = StyleSheet.create({
   drawingLiveIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 8,
+  },
+  drawingLiveLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 1,
+  },
+  reactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  reactionChipBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reactionChipText: {
+    fontSize: 13,
+  },
+  floatingReactionItem: {
+    position: 'absolute',
+    bottom: 18,
+    zIndex: 30,
+  },
+  floatingReactionText: {
+    fontSize: 28,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   drawingLiveIndicatorText: {
     fontSize: 11.5,
@@ -1735,30 +2049,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  hintRoundBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fffbeb',
-    borderWidth: 1.5,
-    borderColor: '#fde68a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  hintBadgePill: {
-    position: 'absolute',
-    bottom: -4,
-    backgroundColor: '#f59e0b',
-    borderRadius: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  hintBadgeText: {
-    fontSize: 8.5,
-    fontWeight: '900',
-    color: '#ffffff',
   },
   guessBigInput: {
     flex: 1,

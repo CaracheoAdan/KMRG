@@ -94,7 +94,7 @@ export const createMilestone = async (req: Request, res: Response): Promise<void
 
     if (supabase) {
       try {
-        await supabase.from('milestones').insert([
+        const { error: sbErr } = await supabase.from('milestones').insert([
           {
             id: milestone.id,
             author: cleanAuthor,
@@ -103,6 +103,9 @@ export const createMilestone = async (req: Request, res: Response): Promise<void
             image_url: image_url.trim(),
           },
         ]);
+        if (sbErr) {
+          logger.warn({ err: sbErr }, 'Supabase devolvió error al sincronizar hito');
+        }
       } catch (err) {
         logger.warn({ err }, 'No se pudo sincronizar hito a Supabase');
       }

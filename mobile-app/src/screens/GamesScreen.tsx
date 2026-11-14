@@ -10,11 +10,13 @@ import {
   Modal,
   Alert,
   Platform,
+  KeyboardAvoidingView,
   Dimensions,
   Animated,
   ScrollView,
+  Image,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,7 +32,30 @@ import { HangmanArena } from '../components/games/HangmanArena';
 import { HANGMAN_DICTIONARY } from '../components/games/hangmanDictionary';
 import { BattleshipArena } from '../components/games/BattleshipArena';
 import { DrawGuessArena } from '../components/games/DrawGuessArena';
+import { DominoArena } from '../components/games/DominoArena';
+import { UnoArena } from '../components/games/UnoArena';
+import {
+  startNewDominoGame,
+  placeTileOnBoard,
+  calculateHandPips,
+  canPlayTile,
+  getPlayableTiles,
+  DOMINO_TARGET_SCORE,
+} from '../components/games/domino/dominoLogic';
+import {
+  startNewUnoGame,
+  processCardEffect,
+  canPlayUnoCard,
+  shuffleDeck,
+  penalizeMissedUno,
+  drawCardsWithRecycle,
+  calculateUnoHandPoints,
+  UNO_TARGET_SCORE,
+} from '../components/games/uno/unoLogic';
+import { GameVectorIcon } from '../components/games/common/GameCustomIcons';
+import { DominoTile, UnoCard, UserProfile, DominoState, UnoState, PetAccessoryType } from '../types';
 import { MoodMascot } from '../components/MoodMascot';
+import { PochitoBear } from '../components/PochitoBear';
 import { GameHeader } from '../components/games/common/GameHeader';
 import { GameButton } from '../components/games/common/GameButton';
 import { CelebrationOverlay } from '../components/games/common/CelebrationOverlay';
@@ -39,8 +64,10 @@ import { GAMES_THEME, triggerGameHaptic } from '../theme/gamesTheme';
 import {
   getGamesState,
   saveGamesState,
+  applyIncomingRealtimeGamesState,
   DEFAULT_GAMES_STATE,
   GamesState,
+  SudokuSessionState,
   ChessPiece,
   createInitialChessBoard,
   createRandomBattleshipFleet,
@@ -50,7 +77,9 @@ import {
   getWeeklyResetKey,
   createDefaultBreakdown,
   createDefaultGameScoreItem,
-  mergeGamesStates,
+  getHomeState,
+  subscribeHomeState,
+  DEFAULT_HOME_STATE,
 } from '../services/CoupleSyncService';
 import { supabase } from '../config/supabase';
 
@@ -66,7 +95,7 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const COMPACT_BOARD_SIZE = Math.min(SCREEN_W - 56, Math.floor(SCREEN_H * 0.31), 252);
 const FULL_BOARD_SIZE = Math.min(SCREEN_W - 32, Math.floor(SCREEN_H * 0.42), 336);
 
-type GameTab = 'tictactoe' | 'sudoku' | 'chess' | 'hangman' | 'battleship' | 'drawguess';
+type GameTab = 'tictactoe' | 'sudoku' | 'chess' | 'hangman' | 'battleship' | 'drawguess' | 'domino' | 'uno';
 
 interface VictoryCelebration {
   winnerName: string;
@@ -91,6 +120,8 @@ const ALL_GAMES: Array<{
   { id: 'battleship', label: 'Battleship', icon: 'boat', description: 'Hunde la flota enemiga', bgTint: '#cffafe', iconColor: '#0891b2' },
   { id: 'hangman', label: 'Ahorcado', icon: 'extension-puzzle', description: 'Adivina la palabra oculta', bgTint: '#ffe4e6', iconColor: '#e11d48' },
   { id: 'drawguess', label: 'Dibuja y Adivina', icon: 'brush', description: 'Pictionary en tiempo real', bgTint: '#ecfdf5', iconColor: '#10b981' },
+  { id: 'domino', label: 'Dominó', icon: 'apps', description: 'Mesa clásica de 28 fichas', bgTint: '#eef2ff', iconColor: '#6366f1' },
+  { id: 'uno', label: 'UNO', icon: 'flame', description: 'Colores, +2, +4 y comodines', bgTint: '#fef2f2', iconColor: '#ef4444' },
 ];
 
 // HANGMAN_DICTIONARY se importa desde '../components/games/hangmanDictionary'
@@ -107,18 +138,47 @@ const BASE_SUDOKU = [
   [3, 4, 5, 2, 8, 6, 1, 7, 9],
 ];
 
-interface SavedSudokuSession {
-  difficulty: 'easy' | 'medium' | 'hard';
-  board: number[][];
-  fixed: boolean[][];
-  solution: number[][];
-  notes: Record<string, number[]>;
-  score: number;
-  mistakes: number;
-  completed: boolean;
+type SavedSudokuSession = SudokuSessionState;
+
+function createGameUid(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-const SUDOKU_STORAGE_KEY = '@kmrg_saved_sudoku_session_v1';
+/**
+ * Elimina de forma automática el número colocado de todas las notas candidatas
+ * de su misma fila, columna y bloque 3x3.
+ */
+function clearSudokuPeerNotes(
+  notes: Record<string, number[]>,
+  r: number,
+  c: number,
+  val: number
+): Record<string, number[]> {
+  const nextNotes: Record<string, number[]> = { ...notes };
+  delete nextNotes[`${r}-${c}`];
+  const boxRow = Math.floor(r / 3);
+  const boxCol = Math.floor(c / 3);
+
+  Object.keys(nextNotes).forEach((key) => {
+    const [krStr, kcStr] = key.split('-');
+    const kr = Number(krStr);
+    const kc = Number(kcStr);
+    const samePeer =
+      kr === r ||
+      kc === c ||
+      (Math.floor(kr / 3) === boxRow && Math.floor(kc / 3) === boxCol);
+    if (samePeer && Array.isArray(nextNotes[key])) {
+      const filtered = nextNotes[key].filter((n) => n !== val);
+      if (filtered.length > 0) {
+        nextNotes[key] = filtered;
+      } else {
+        delete nextNotes[key];
+      }
+    }
+  });
+
+  return nextNotes;
+}
 
 function createSudokuSession(difficulty: 'easy' | 'medium' | 'hard'): SavedSudokuSession {
   const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -148,6 +208,7 @@ function createSudokuSession(difficulty: 'easy' | 'medium' | 'hard'): SavedSudok
   }
 
   return {
+    sessionId: createGameUid('sud'),
     difficulty,
     board,
     fixed,
@@ -156,6 +217,10 @@ function createSudokuSession(difficulty: 'easy' | 'medium' | 'hard'): SavedSudok
     score: 0,
     mistakes: 0,
     completed: false,
+    completedBy: null,
+    placedBy: {},
+    updatedAt: Date.now(),
+    version: 1,
   };
 }
 
@@ -193,6 +258,12 @@ export const GamesScreen: React.FC = () => {
   const [pendingGameToLaunch, setPendingGameToLaunch] = useState<GameTab | null>(null);
   const [isDraggingShip, setIsDraggingShip] = useState<boolean>(false);
   const [gamesState, setGamesState] = useState<GamesState>(DEFAULT_GAMES_STATE);
+  const gamesStateRef = useRef<GamesState>(gamesState);
+  gamesStateRef.current = gamesState;
+  const [petMeta, setPetMeta] = useState<{ name: string; accessory: PetAccessoryType }>({
+    name: DEFAULT_HOME_STATE.couplePet?.name || 'Pochito',
+    accessory: DEFAULT_HOME_STATE.couplePet?.accessory || 'none',
+  });
   const [isFullScreenGame, setIsFullScreenGame] = useState<boolean>(false);
 
   // Modal de desglose de puntos por juego y torneo semanal
@@ -209,9 +280,14 @@ export const GamesScreen: React.FC = () => {
   const [victoryCelebration, setVictoryCelebration] = useState<VictoryCelebration | null>(null);
   const victoryScale = useRef(new Animated.Value(0.5)).current;
 
-  // --- Estado de Sudoku (3 Vidas + Teclado Numérico Nativo) ---
+  // --- Estado de Sudoku Cooperativo (compartido en tiempo real) ---
   const MAX_SUDOKU_MISTAKES = 3;
-  const [sudoku, setSudoku] = useState<SavedSudokuSession>(() => createSudokuSession('easy'));
+  const fallbackSudokuRef = useRef<SavedSudokuSession | null>(null);
+  if (!fallbackSudokuRef.current) {
+    fallbackSudokuRef.current = createSudokuSession('easy');
+  }
+  const sudoku: SavedSudokuSession = gamesState.sudoku?.session || fallbackSudokuRef.current;
+  const isSudokuSyncedRef = useRef<boolean>(false);
   const [selectedSudokuCell, setSelectedSudokuCell] = useState<[number, number] | null>(null);
   const [isNoteMode, setIsNoteMode] = useState(false);
   const sudokuInputRef = useRef<any>(null);
@@ -281,32 +357,45 @@ export const GamesScreen: React.FC = () => {
     [victoryScale]
   );
 
-  const loadAll = useCallback(async () => {
-    const loaded = await getGamesState();
-    setGamesState({
-      ...DEFAULT_GAMES_STATE,
-      ...loaded,
-      leaderboard: { ...DEFAULT_GAMES_STATE.leaderboard, ...(loaded.leaderboard || {}) },
-      ticTacToe: { ...DEFAULT_GAMES_STATE.ticTacToe, ...(loaded.ticTacToe || {}) },
-      sudoku: { ...DEFAULT_GAMES_STATE.sudoku, ...(loaded.sudoku || {}) },
-      hangman: { ...DEFAULT_GAMES_STATE.hangman, ...(loaded.hangman || {}) },
-      chess: { ...DEFAULT_GAMES_STATE.chess, ...(loaded.chess || {}) },
-      battleship: { ...DEFAULT_GAMES_STATE.battleship, ...(loaded.battleship || {}) },
-      drawGuess: { ...DEFAULT_GAMES_STATE.drawGuess, ...(loaded.drawGuess || {}) },
-    });
+  const hasLoadedGamesRef = useRef<boolean>(false);
 
-    try {
-      const savedSudoku = await AsyncStorage.getItem(SUDOKU_STORAGE_KEY);
-      if (savedSudoku) {
-        setSudoku(JSON.parse(savedSudoku));
-      }
-    } catch {
-      // Ignorar
-    }
+  const loadAll = useCallback(async (forceRefresh: boolean = false) => {
+    const loaded = await getGamesState(forceRefresh);
+    hasLoadedGamesRef.current = true;
+    gamesStateRef.current = loaded;
+    setGamesState(loaded);
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      void loadAll(true);
+    }, [loadAll])
+  );
+
   useEffect(() => {
-    void loadAll();
+    if (activeGame) {
+      void loadAll(true);
+    }
+  }, [activeGame, loadAll]);
+
+  useEffect(() => {
+    void loadAll(true);
+    void getHomeState().then((home) => {
+      if (home?.couplePet) {
+        setPetMeta({
+          name: home.couplePet.name || 'Pochito',
+          accessory: home.couplePet.accessory || 'none',
+        });
+      }
+    });
+    const unsubHome = subscribeHomeState((home) => {
+      if (home?.couplePet) {
+        setPetMeta({
+          name: home.couplePet.name || 'Pochito',
+          accessory: home.couplePet.accessory || 'none',
+        });
+      }
+    });
 
     const channel = supabase
       .channel('kmrg-games-sync')
@@ -319,30 +408,55 @@ export const GamesScreen: React.FC = () => {
             payload.new?.payload &&
             payload.new?.sender !== currentProfile
           ) {
-            setGamesState((prev) => mergeGamesStates(prev, payload.new.payload as GamesState));
+            void applyIncomingRealtimeGamesState(
+              gamesStateRef.current,
+              payload.new.payload as GamesState
+            ).then((merged) => {
+              gamesStateRef.current = merged;
+              setGamesState(merged);
+            });
           }
         }
       )
       .subscribe();
 
     return () => {
+      unsubHome();
       void supabase.removeChannel(channel);
     };
   }, [loadAll, currentProfile]);
 
-  const persistSudoku = async (nextSudoku: SavedSudokuSession) => {
-    setSudoku(nextSudoku);
-    try {
-      await AsyncStorage.setItem(SUDOKU_STORAGE_KEY, JSON.stringify(nextSudoku));
-    } catch {
-      // Ignorar
-    }
-  };
+  const updateAndSyncGames = useCallback(
+    async (nextOrUpdater: GamesState | ((prev: GamesState) => GamesState)) => {
+      const base = gamesStateRef.current;
+      const next =
+        typeof nextOrUpdater === 'function' ? nextOrUpdater(base) : nextOrUpdater;
+      gamesStateRef.current = next;
+      setGamesState(next);
+      const saved = await saveGamesState(currentProfile, next);
+      gamesStateRef.current = saved;
+      setGamesState(saved);
+    },
+    [currentProfile]
+  );
 
-  const updateAndSyncGames = async (next: GamesState) => {
-    setGamesState(next);
-    await saveGamesState(currentProfile, next);
-  };
+  const persistSudoku = useCallback(
+    async (nextSudoku: SavedSudokuSession) => {
+      const stamped: SavedSudokuSession = {
+        ...nextSudoku,
+        updatedAt: Date.now(),
+        version: (nextSudoku.version || 0) + 1,
+      };
+      await updateAndSyncGames((curr) => ({
+        ...curr,
+        sudoku: {
+          ...curr.sudoku,
+          session: stamped,
+        },
+      }));
+    },
+    [updateAndSyncGames]
+  );
 
   const addLeaderboardReward = (
     baseState: GamesState,
@@ -415,26 +529,101 @@ export const GamesScreen: React.FC = () => {
   // =========================================================================
   // 1. TRES EN RAYA
   // =========================================================================
-  const handleNewTicTacToeRound = async () => {
-    const ttt = gamesState.ticTacToe;
-    await updateAndSyncGames({
-      ...gamesState,
-      ticTacToe: {
-        ...ttt,
-        board: Array(9).fill(null),
-        winningLine: null,
-        winner: null,
-        turn: ttt.round % 2 === 0 ? 'Karla' : 'Javier',
-        round: (ttt.round || 1) + 1,
-      },
+  const handleNewTicTacToeRound = useCallback(async () => {
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const ttt = curr.ticTacToe;
+      return {
+        ...curr,
+        ticTacToe: {
+          ...ttt,
+          board: Array(9).fill(null),
+          winningLine: null,
+          winner: null,
+          moveOrder: [],
+          turn: ttt.round % 2 === 0 ? 'Karla' : 'Javier',
+          round: (ttt.round || 1) + 1,
+          version: (ttt.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
+    });
+  }, [updateAndSyncGames]);
+
+  const handleToggleTicTacToeMode = async () => {
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const ttt = curr.ticTacToe;
+      return {
+        ...curr,
+        ticTacToe: {
+          ...ttt,
+          infiniteMode: !ttt.infiniteMode,
+          board: Array(9).fill(null),
+          winningLine: null,
+          winner: null,
+          moveOrder: [],
+          turn: ttt.round % 2 === 0 ? 'Karla' : 'Javier',
+          version: (ttt.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
   };
 
-  const handleTicTacToePress = async (index: number) => {
+  const prevTttStateRef = useRef<{ round: number; winner: 'Javier' | 'Karla' | 'Empate' | null }>({
+    round: gamesState.ticTacToe.round || 1,
+    winner: gamesState.ticTacToe.winner || null,
+  });
+
+  useEffect(() => {
     const ttt = gamesState.ticTacToe;
+    const prev = prevTttStateRef.current;
+    const winner = ttt.winner || null;
+
+    if (!winner && prev.winner !== null) {
+      setVictoryCelebration(null);
+    } else if (
+      (winner === 'Karla' || winner === 'Javier') &&
+      (prev.winner !== winner || prev.round !== ttt.round) &&
+      activeGame === 'tictactoe'
+    ) {
+      triggerVictoryCelebration({
+        winnerName: winner === 'Karla' ? 'Karlita' : 'Javier',
+        gameTitle: 'Tres en Raya',
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        subtitle: 'Tres en línea impecables. ¡Qué gran jugada!',
+        color: winner === 'Karla' ? '#9333ea' : '#0284c7',
+        onPlayAgain: () => void handleNewTicTacToeRound(),
+      });
+    }
+
+    prevTttStateRef.current = { round: ttt.round || 1, winner };
+  }, [gamesState.ticTacToe.winner, gamesState.ticTacToe.round, activeGame, handleNewTicTacToeRound, triggerVictoryCelebration]);
+
+  const handleTicTacToePress = async (index: number) => {
+    const curr = gamesStateRef.current;
+    const ttt = curr.ticTacToe;
     if (ttt.board[index] || ttt.winner) return;
+    if (ttt.turn !== currentProfile) {
+      Alert.alert(
+        'Espera tu turno',
+        `Ahora le toca mover a ${getDisplayName(ttt.turn)}.`
+      );
+      return;
+    }
 
     const newBoard = [...ttt.board];
+    let nextMoveOrder = [...(ttt.moveOrder || [])];
+    if (ttt.infiniteMode) {
+      const playerOrder = nextMoveOrder.filter((pos) => newBoard[pos] === ttt.turn);
+      if (playerOrder.length >= 3) {
+        const oldestIdx = playerOrder[0];
+        newBoard[oldestIdx] = null;
+        nextMoveOrder = nextMoveOrder.filter((pos) => pos !== oldestIdx);
+      }
+      nextMoveOrder.push(index);
+    }
     newBoard[index] = ttt.turn;
 
     const lines = [
@@ -468,53 +657,103 @@ export const GamesScreen: React.FC = () => {
     const nextScoreKarla = winner === 'Karla' ? ttt.scoreKarla + 1 : ttt.scoreKarla;
     const nextScoreJavier = winner === 'Javier' ? ttt.scoreJavier + 1 : ttt.scoreJavier;
 
-    let nextLeaderboard = gamesState.leaderboard;
+    let nextLeaderboard = curr.leaderboard;
     if (winner === 'Karla' || winner === 'Javier') {
       nextLeaderboard = addLeaderboardReward(
-        gamesState,
+        curr,
         winner,
         UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
         UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
         'tictactoe'
       );
     } else if (winner === 'Empate') {
-      nextLeaderboard = addLeaderboardTie(gamesState, 'tictactoe');
+      nextLeaderboard = addLeaderboardTie(curr, 'tictactoe');
     }
 
     await updateAndSyncGames({
-      ...gamesState,
+      ...curr,
       leaderboard: nextLeaderboard,
       ticTacToe: {
         ...ttt,
         board: newBoard,
         winningLine,
+        moveOrder: nextMoveOrder,
         turn: nextTurn,
         winner,
         scoreKarla: nextScoreKarla,
         scoreJavier: nextScoreJavier,
+        version: (ttt.version || 0) + 1,
+        updatedAt: Date.now(),
       },
     });
-
-    if (winner === 'Karla' || winner === 'Javier') {
-      triggerVictoryCelebration({
-        winnerName: winner === 'Karla' ? 'Karlita' : 'Javier',
-        gameTitle: 'Tres en Raya',
-        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-        subtitle: 'Tres en línea impecables. ¡Qué gran jugada!',
-        color: winner === 'Karla' ? '#9333ea' : '#0284c7',
-        onPlayAgain: () => void handleNewTicTacToeRound(),
-      });
-    }
   };
 
   // =========================================================================
   // 2. SUDOKU
   // =========================================================================
-  const handleNewSudokuGame = async (diff: 'easy' | 'medium' | 'hard') => {
-    const fresh = createSudokuSession(diff);
-    setSelectedSudokuCell(null);
-    await persistSudoku(fresh);
-  };
+  const handleNewSudokuGame = useCallback(
+    async (diff: 'easy' | 'medium' | 'hard') => {
+      const fresh = createSudokuSession(diff);
+      setSelectedSudokuCell(null);
+      setVictoryCelebration(null);
+      await persistSudoku(fresh);
+    },
+    [persistSudoku]
+  );
+
+  // Publicar tablero cooperativo inicial si todavía no existe uno en la nube
+  useEffect(() => {
+    if (
+      activeGame === 'sudoku' &&
+      hasLoadedGamesRef.current &&
+      !gamesState.sudoku?.session &&
+      !isSudokuSyncedRef.current
+    ) {
+      isSudokuSyncedRef.current = true;
+      void persistSudoku(fallbackSudokuRef.current!);
+    }
+  }, [activeGame, gamesState.sudoku?.session, persistSudoku]);
+
+  const prevSudokuCompletionRef = useRef<{ sessionId?: string; completed: boolean }>({
+    sessionId: sudoku.sessionId,
+    completed: sudoku.completed,
+  });
+
+  useEffect(() => {
+    const prev = prevSudokuCompletionRef.current;
+    if (!sudoku.completed && prev.completed) {
+      setVictoryCelebration(null);
+    } else if (
+      sudoku.completed &&
+      (!prev.completed || prev.sessionId !== sudoku.sessionId) &&
+      activeGame === 'sudoku'
+    ) {
+      const finisher = sudoku.completedBy || currentProfile;
+      triggerVictoryCelebration({
+        winnerName: getDisplayName(finisher),
+        gameTitle: 'Sudoku Cooperativo',
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        subtitle: 'Completaron juntos todo el tablero con maestría.',
+        color: primaryColor,
+        onPlayAgain: () => void handleNewSudokuGame(sudoku.difficulty),
+      });
+    }
+    prevSudokuCompletionRef.current = {
+      sessionId: sudoku.sessionId,
+      completed: sudoku.completed,
+    };
+  }, [
+    sudoku.completed,
+    sudoku.sessionId,
+    sudoku.completedBy,
+    sudoku.difficulty,
+    activeGame,
+    currentProfile,
+    getDisplayName,
+    primaryColor,
+    handleNewSudokuGame,
+    triggerVictoryCelebration,
+  ]);
 
   const isSudokuGameOver = sudoku.mistakes >= MAX_SUDOKU_MISTAKES && !sudoku.completed;
 
@@ -528,45 +767,59 @@ export const GamesScreen: React.FC = () => {
   };
 
   const handleSudokuNumberPress = async (num: number) => {
-    if (!selectedSudokuCell || sudoku.completed || sudoku.mistakes >= MAX_SUDOKU_MISTAKES) return;
+    const latestSudoku = gamesStateRef.current.sudoku?.session || sudoku;
+    if (!selectedSudokuCell || latestSudoku.completed || latestSudoku.mistakes >= MAX_SUDOKU_MISTAKES) return;
     const [r, c] = selectedSudokuCell;
-    if (sudoku.fixed[r][c]) return;
+    if (latestSudoku.fixed[r][c]) return;
 
     const cellKey = `${r}-${c}`;
 
     if (num === 0) {
-      const nextBoard = sudoku.board.map((row) => [...row]);
+      const nextBoard = latestSudoku.board.map((row) => [...row]);
       nextBoard[r][c] = 0;
-      const nextNotes = { ...sudoku.notes };
+      const nextNotes = { ...latestSudoku.notes };
       delete nextNotes[cellKey];
-      await persistSudoku({ ...sudoku, board: nextBoard, notes: nextNotes });
-      return;
-    }
-
-    if (isNoteMode && sudoku.board[r][c] === 0) {
-      const currentNotes = sudoku.notes[cellKey] || [];
-      const nextCellNotes = currentNotes.includes(num)
-        ? currentNotes.filter((n) => n !== num)
-        : [...currentNotes, num].sort();
+      const nextPlacedBy = { ...(latestSudoku.placedBy || {}) };
+      delete nextPlacedBy[cellKey];
       await persistSudoku({
-        ...sudoku,
-        notes: { ...sudoku.notes, [cellKey]: nextCellNotes },
+        ...latestSudoku,
+        board: nextBoard,
+        notes: nextNotes,
+        placedBy: nextPlacedBy,
       });
       return;
     }
 
-    const correctVal = sudoku.solution[r][c];
-    const nextBoard = sudoku.board.map((row) => [...row]);
-    const wasAlreadyCorrect = sudoku.board[r][c] === correctVal;
+    if (isNoteMode && latestSudoku.board[r][c] === 0) {
+      const currentNotes = latestSudoku.notes[cellKey] || [];
+      const nextCellNotes = currentNotes.includes(num)
+        ? currentNotes.filter((n) => n !== num)
+        : [...currentNotes, num].sort();
+      await persistSudoku({
+        ...latestSudoku,
+        notes: { ...latestSudoku.notes, [cellKey]: nextCellNotes },
+      });
+      return;
+    }
+
+    const correctVal = latestSudoku.solution[r][c];
+    const nextBoard = latestSudoku.board.map((row) => [...row]);
+    const wasAlreadyCorrect = latestSudoku.board[r][c] === correctVal;
     nextBoard[r][c] = num;
 
-    let nextScore = sudoku.score;
-    let nextMistakes = sudoku.mistakes;
-    const mult = sudoku.difficulty === 'easy' ? 1 : sudoku.difficulty === 'medium' ? 1.5 : 2;
+    let nextScore = latestSudoku.score;
+    let nextMistakes = latestSudoku.mistakes;
+    let nextNotes = latestSudoku.notes;
+    const nextPlacedBy = { ...(latestSudoku.placedBy || {}) };
+    const mult = latestSudoku.difficulty === 'easy' ? 1 : latestSudoku.difficulty === 'medium' ? 1.5 : 2;
 
-    if (num === correctVal && !wasAlreadyCorrect) {
-      nextScore += Math.round(50 * mult);
-    } else if (num !== correctVal) {
+    if (num === correctVal) {
+      if (!wasAlreadyCorrect) {
+        nextScore += Math.round(50 * mult);
+      }
+      nextPlacedBy[cellKey] = currentProfile;
+      nextNotes = clearSudokuPeerNotes(latestSudoku.notes, r, c, num);
+    } else {
       nextMistakes += 1;
       nextScore = Math.max(0, nextScore - 20);
       if (nextMistakes >= MAX_SUDOKU_MISTAKES) {
@@ -575,81 +828,137 @@ export const GamesScreen: React.FC = () => {
     }
 
     const isComplete = nextBoard.every((row, ri) =>
-      row.every((cell, ci) => cell === sudoku.solution[ri][ci])
+      row.every((cell, ci) => cell === latestSudoku.solution[ri][ci])
     );
 
     if (isComplete) {
       sudokuInputRef.current?.blur();
       const bonus = Math.round(500 * mult);
       const finalScore = nextScore + bonus;
-      await persistSudoku({
-        ...sudoku,
+      const completedSession: SavedSudokuSession = {
+        ...latestSudoku,
         board: nextBoard,
+        notes: nextNotes,
+        placedBy: nextPlacedBy,
         score: finalScore,
         mistakes: nextMistakes,
         completed: true,
-      });
+        completedBy: currentProfile,
+        updatedAt: Date.now(),
+        version: (latestSudoku.version || 0) + 1,
+      };
 
-      const bestK =
-        currentProfile === 'Karla'
-          ? Math.max(gamesState.sudoku.bestScoreKarla, finalScore)
-          : gamesState.sudoku.bestScoreKarla;
-      const bestJ =
-        currentProfile === 'Javier'
-          ? Math.max(gamesState.sudoku.bestScoreJavier, finalScore)
-          : gamesState.sudoku.bestScoreJavier;
+      await updateAndSyncGames((curr) => {
+        const bestK =
+          currentProfile === 'Karla'
+            ? Math.max(curr.sudoku.bestScoreKarla, finalScore)
+            : curr.sudoku.bestScoreKarla;
+        const bestJ =
+          currentProfile === 'Javier'
+            ? Math.max(curr.sudoku.bestScoreJavier, finalScore)
+            : curr.sudoku.bestScoreJavier;
+        const nextLb = addLeaderboardReward(
+          curr,
+          currentProfile,
+          UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+          UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+          'sudoku'
+        );
 
-      const nextLb = addLeaderboardReward(
-        gamesState,
-        currentProfile,
-        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
-        'sudoku'
-      );
-
-      await updateAndSyncGames({
-        ...gamesState,
-        leaderboard: nextLb,
-        sudoku: {
-          bestScoreKarla: bestK,
-          bestScoreJavier: bestJ,
-          completedCount: (gamesState.sudoku.completedCount || 0) + 1,
-        },
-      });
-
-      triggerVictoryCelebration({
-        winnerName: getDisplayName(currentProfile),
-        gameTitle: 'Sudoku Completado',
-        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-        subtitle: 'Resolviste el tablero completo con maestría absoluta.',
-        color: primaryColor,
-        onPlayAgain: () => void handleNewSudokuGame(sudoku.difficulty),
+        return {
+          ...curr,
+          leaderboard: nextLb,
+          sudoku: {
+            bestScoreKarla: bestK,
+            bestScoreJavier: bestJ,
+            completedCount: (curr.sudoku.completedCount || 0) + 1,
+            session: completedSession,
+          },
+        };
       });
       return;
     }
 
     await persistSudoku({
-      ...sudoku,
+      ...latestSudoku,
       board: nextBoard,
+      notes: nextNotes,
+      placedBy: nextPlacedBy,
       score: nextScore,
       mistakes: nextMistakes,
     });
   };
 
   const handleSudokuHint = async () => {
-    if (!selectedSudokuCell || sudoku.completed) {
+    const latestSudoku = gamesStateRef.current.sudoku?.session || sudoku;
+    if (!selectedSudokuCell || latestSudoku.completed) {
       Alert.alert('Selecciona una casilla', 'Toca una casilla vacía del tablero para revelar su número.');
       return;
     }
     const [r, c] = selectedSudokuCell;
-    if (sudoku.fixed[r][c] || sudoku.board[r][c] === sudoku.solution[r][c]) return;
+    if (latestSudoku.fixed[r][c] || latestSudoku.board[r][c] === latestSudoku.solution[r][c]) return;
 
-    const nextBoard = sudoku.board.map((row) => [...row]);
-    nextBoard[r][c] = sudoku.solution[r][c];
+    const val = latestSudoku.solution[r][c];
+    const nextBoard = latestSudoku.board.map((row) => [...row]);
+    nextBoard[r][c] = val;
+    const nextNotes = clearSudokuPeerNotes(latestSudoku.notes, r, c, val);
+    const nextPlacedBy = { ...(latestSudoku.placedBy || {}), [`${r}-${c}`]: currentProfile };
+    const isComplete = nextBoard.every((row, ri) =>
+      row.every((cell, ci) => cell === latestSudoku.solution[ri][ci])
+    );
+
+    if (isComplete) {
+      sudokuInputRef.current?.blur();
+      const mult = latestSudoku.difficulty === 'easy' ? 1 : latestSudoku.difficulty === 'medium' ? 1.5 : 2;
+      const bonus = Math.round(500 * mult);
+      const finalScore = Math.max(0, latestSudoku.score - 15) + bonus;
+      const completedSession: SavedSudokuSession = {
+        ...latestSudoku,
+        board: nextBoard,
+        notes: nextNotes,
+        placedBy: nextPlacedBy,
+        score: finalScore,
+        completed: true,
+        completedBy: currentProfile,
+        updatedAt: Date.now(),
+        version: (latestSudoku.version || 0) + 1,
+      };
+      await updateAndSyncGames((curr) => {
+        const bestK =
+          currentProfile === 'Karla'
+            ? Math.max(curr.sudoku.bestScoreKarla, finalScore)
+            : curr.sudoku.bestScoreKarla;
+        const bestJ =
+          currentProfile === 'Javier'
+            ? Math.max(curr.sudoku.bestScoreJavier, finalScore)
+            : curr.sudoku.bestScoreJavier;
+        const nextLb = addLeaderboardReward(
+          curr,
+          currentProfile,
+          UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+          UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+          'sudoku'
+        );
+        return {
+          ...curr,
+          leaderboard: nextLb,
+          sudoku: {
+            bestScoreKarla: bestK,
+            bestScoreJavier: bestJ,
+            completedCount: (curr.sudoku.completedCount || 0) + 1,
+            session: completedSession,
+          },
+        };
+      });
+      return;
+    }
+
     await persistSudoku({
-      ...sudoku,
+      ...latestSudoku,
       board: nextBoard,
-      score: Math.max(0, sudoku.score - 15),
+      notes: nextNotes,
+      placedBy: nextPlacedBy,
+      score: Math.max(0, latestSudoku.score - 15),
     });
   };
 
@@ -793,47 +1102,102 @@ export const GamesScreen: React.FC = () => {
     return getValidChessMoves(gamesState.chess.board, selectedChessPos[0], selectedChessPos[1]);
   }, [selectedChessPos, gamesState.chess.board, getValidChessMoves]);
 
-  const handleResetChess = (skipConfirm = false) => {
-    const doReset = async () => {
-      setSelectedChessPos(null);
-      setChessHistory([]);
-      await updateAndSyncGames({
-        ...gamesState,
-        chess: {
-          ...gamesState.chess,
-          board: createInitialChessBoard(),
-          turn: 'w',
-          capturedByW: [],
-          capturedByB: [],
-          lastMove: null,
-          winner: null,
-        },
-      });
-    };
+  const handleResetChess = useCallback(
+    (skipConfirm = false) => {
+      const doReset = async () => {
+        setSelectedChessPos(null);
+        setChessHistory([]);
+        setVictoryCelebration(null);
+        await updateAndSyncGames((curr) => ({
+          ...curr,
+          chess: {
+            ...curr.chess,
+            matchId: createGameUid('chess'),
+            board: createInitialChessBoard(),
+            turn: 'w',
+            capturedByW: [],
+            capturedByB: [],
+            lastMove: null,
+            winner: null,
+            moveHistory: [],
+            version: (curr.chess.version || 0) + 1,
+            updatedAt: Date.now(),
+          },
+        }));
+      };
 
-    if (skipConfirm) {
-      void doReset();
+      if (skipConfirm) {
+        void doReset();
+        return;
+      }
+
+      Alert.alert(
+        '¿Reiniciar partida de ajedrez?',
+        'Se borrará el tablero actual y se comenzará una partida nueva con Blancas (Karlita).',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Reiniciar', style: 'destructive', onPress: () => void doReset() },
+        ]
+      );
+    },
+    [updateAndSyncGames]
+  );
+
+  const prevChessStateRef = useRef<{ matchId?: string; winner: 'w' | 'b' | 'draw' | null }>({
+    matchId: gamesState.chess.matchId,
+    winner: gamesState.chess.winner || null,
+  });
+
+  useEffect(() => {
+    const chess = gamesState.chess;
+    const prev = prevChessStateRef.current;
+    const winner = chess.winner || null;
+
+    if (!winner && prev.winner !== null) {
+      setVictoryCelebration(null);
+    } else if (
+      (winner === 'w' || winner === 'b') &&
+      (prev.winner !== winner || prev.matchId !== chess.matchId) &&
+      activeGame === 'chess'
+    ) {
+      triggerVictoryCelebration({
+        winnerName: winner === 'w' ? 'Karlita' : 'Javier',
+        gameTitle: '¡Jaque Mate en Ajedrez!',
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        subtitle: 'Victoria magistral en el tablero real.',
+        color: winner === 'w' ? '#9333ea' : '#0284c7',
+        onPlayAgain: () => handleResetChess(true),
+      });
+    }
+
+    prevChessStateRef.current = { matchId: chess.matchId, winner };
+  }, [gamesState.chess.winner, gamesState.chess.matchId, activeGame, handleResetChess, triggerVictoryCelebration]);
+
+  const handleChessCellPress = async (
+    r: number,
+    c: number,
+    promoteTo?: 'q' | 'r' | 'b' | 'n'
+  ) => {
+    const curr = gamesStateRef.current;
+    const chess = curr.chess;
+    if (chess.winner) return;
+
+    const myColor = currentProfile === 'Karla' ? 'w' : 'b';
+    const clickedPiece = chess.board[r][c];
+    if (chess.turn !== myColor) {
+      if (clickedPiece || selectedChessPos) {
+        setSelectedChessPos(null);
+        Alert.alert(
+          'Espera tu turno',
+          `Es turno de ${getDisplayName(chess.turn === 'w' ? 'Karla' : 'Javier')}.`
+        );
+      }
       return;
     }
 
-    Alert.alert(
-      '¿Reiniciar partida de ajedrez?',
-      'Se borrará el tablero actual y se comenzará una partida nueva con Blancas (Karlita).',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Reiniciar', style: 'destructive', onPress: () => void doReset() },
-      ]
-    );
-  };
-
-  const handleChessCellPress = async (r: number, c: number) => {
-    const chess = gamesState.chess;
-    if (chess.winner) return;
-
-    const clickedPiece = chess.board[r][c];
-
     if (selectedChessPos) {
-      const isValidTarget = validChessTargets.some(([tr, tc]) => tr === r && tc === c);
+      const validTargets = getValidChessMoves(chess.board, selectedChessPos[0], selectedChessPos[1]);
+      const isValidTarget = validTargets.some(([tr, tc]) => tr === r && tc === c);
       if (isValidTarget) {
         const [sr, sc] = selectedChessPos;
         const movingPiece = chess.board[sr][sc];
@@ -844,13 +1208,27 @@ export const GamesScreen: React.FC = () => {
         const nextBoard = chess.board.map((row) => [...row]);
         const targetPiece = nextBoard[r][c];
 
-        const promotedPiece: ChessPiece =
-          movingPiece.type === 'p' && (r === 0 || r === 7)
-            ? { type: 'q', color: movingPiece.color }
-            : movingPiece;
+        const isPromoMove = movingPiece.type === 'p' && (r === 0 || r === 7);
+        const promotedType = isPromoMove ? (promoteTo || 'q') : movingPiece.type;
+        const promotedPiece: ChessPiece = { type: promotedType, color: movingPiece.color };
 
         nextBoard[r][c] = promotedPiece;
         nextBoard[sr][sc] = null;
+
+        const COLS_LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        const PIECE_PREFIX: Record<ChessPiece['type'], string> = {
+          k: 'R',
+          q: 'D',
+          r: 'T',
+          b: 'A',
+          n: 'C',
+          p: '',
+        };
+        const fromSq = `${COLS_LETTERS[sc]}${8 - sr}`;
+        const toSq = `${COLS_LETTERS[c]}${8 - r}`;
+        const promoSuffix = isPromoMove ? `=${PIECE_PREFIX[promotedType]}` : '';
+        const moveLabel = `${PIECE_PREFIX[movingPiece.type]}${fromSq}${targetPiece ? '×' : '→'}${toSq}${promoSuffix}`;
+        const nextMoveHistory = [...(chess.moveHistory || []), moveLabel];
 
         const capturedSymbol = targetPiece
           ? CHESS_SYMBOLS[`${targetPiece.color}-${targetPiece.type}`]
@@ -869,10 +1247,10 @@ export const GamesScreen: React.FC = () => {
         const nextWinsKarla = nextWinner === 'w' ? (chess.winsKarla || 0) + 1 : chess.winsKarla || 0;
         const nextWinsJavier = nextWinner === 'b' ? (chess.winsJavier || 0) + 1 : chess.winsJavier || 0;
 
-        let nextLb = gamesState.leaderboard;
+        let nextLb = curr.leaderboard;
         if (nextWinner === 'w') {
           nextLb = addLeaderboardReward(
-            gamesState,
+            curr,
             'Karla',
             UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
             UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
@@ -880,7 +1258,7 @@ export const GamesScreen: React.FC = () => {
           );
         } else if (nextWinner === 'b') {
           nextLb = addLeaderboardReward(
-            gamesState,
+            curr,
             'Javier',
             UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
             UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
@@ -890,9 +1268,11 @@ export const GamesScreen: React.FC = () => {
 
         setSelectedChessPos(null);
         await updateAndSyncGames({
-          ...gamesState,
+          ...curr,
           leaderboard: nextLb,
           chess: {
+            ...chess,
+            matchId: chess.matchId || createGameUid('chess'),
             board: nextBoard,
             turn: chess.turn === 'w' ? 'b' : 'w',
             capturedByW: nextCapturedW,
@@ -901,19 +1281,11 @@ export const GamesScreen: React.FC = () => {
             winner: nextWinner,
             winsKarla: nextWinsKarla,
             winsJavier: nextWinsJavier,
+            moveHistory: nextMoveHistory,
+            version: (chess.version || 0) + 1,
+            updatedAt: Date.now(),
           },
         });
-
-        if (nextWinner === 'w' || nextWinner === 'b') {
-          triggerVictoryCelebration({
-            winnerName: nextWinner === 'w' ? 'Karlita' : 'Javier',
-            gameTitle: '¡Jaque Mate en Ajedrez!',
-            pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-            subtitle: 'Victoria magistral en el tablero real.',
-            color: nextWinner === 'w' ? '#9333ea' : '#0284c7',
-            onPlayAgain: () => handleResetChess(true),
-          });
-        }
         return;
       }
     }
@@ -930,10 +1302,15 @@ export const GamesScreen: React.FC = () => {
     const prevChess = chessHistory[chessHistory.length - 1];
     setChessHistory((h) => h.slice(0, -1));
     setSelectedChessPos(null);
-    await updateAndSyncGames({
-      ...gamesState,
-      chess: prevChess,
-    });
+    await updateAndSyncGames((curr) => ({
+      ...curr,
+      chess: {
+        ...prevChess,
+        matchId: prevChess.matchId || curr.chess.matchId || createGameUid('chess'),
+        version: (curr.chess.version || 0) + 1,
+        updatedAt: Date.now(),
+      },
+    }));
   };
 
   // =========================================================================
@@ -943,40 +1320,103 @@ export const GamesScreen: React.FC = () => {
   const wrongGuessesCount = hangman.guessed.filter((l) => !hangman.word.includes(l)).length;
   const maxWrong = 6;
 
-  const handleRandomHangmanWord = async () => {
-    const available = HANGMAN_DICTIONARY.filter((d) => d.word !== hangman.word);
-    const pick = available[Math.floor(Math.random() * available.length)] || HANGMAN_DICTIONARY[0];
-    await updateAndSyncGames({
-      ...gamesState,
-      hangman: {
-        ...hangman,
-        word: pick.word.toUpperCase(),
-        hint: pick.hint,
-        category: pick.category,
-        author: 'Diccionario',
-        isPartnerChallenge: false,
-        guessed: [],
-        status: 'playing',
-      },
+  const handleRandomHangmanWord = useCallback(async () => {
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const hm = curr.hangman;
+      const available = HANGMAN_DICTIONARY.filter((d) => d.word !== hm.word);
+      const pick = available[Math.floor(Math.random() * available.length)] || HANGMAN_DICTIONARY[0];
+      return {
+        ...curr,
+        hangman: {
+          ...hm,
+          roundId: createGameUid('hm'),
+          word: pick.word.toUpperCase(),
+          hint: pick.hint,
+          category: pick.category,
+          author: 'Diccionario',
+          isPartnerChallenge: false,
+          guessed: [],
+          hintUsed: false,
+          status: 'playing',
+          winner: null,
+          version: (hm.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
-  };
+  }, [updateAndSyncGames]);
 
-  const handleGuessLetter = async (letter: string) => {
-    if (hangman.status !== 'playing' || hangman.guessed.includes(letter)) return;
+  const prevHangmanStateRef = useRef<{ roundId?: string; status: 'playing' | 'won' | 'lost' }>({
+    roundId: hangman.roundId,
+    status: hangman.status,
+  });
 
-    const nextGuessed = [...hangman.guessed, letter];
-    const isHit = hangman.word.includes(letter);
-    const nextWrong = nextGuessed.filter((l) => !hangman.word.includes(l)).length;
+  useEffect(() => {
+    const prev = prevHangmanStateRef.current;
+    if (hangman.status === 'playing' && (prev.status !== 'playing' || prev.roundId !== hangman.roundId)) {
+      setVictoryCelebration(null);
+    } else if (
+      hangman.status === 'won' &&
+      (prev.status !== 'won' || prev.roundId !== hangman.roundId) &&
+      activeGame === 'hangman'
+    ) {
+      const winnerProfile = hangman.winner || currentProfile;
+      const winnerLabel = getDisplayName(winnerProfile);
+      triggerVictoryCelebration({
+        winnerName: winnerLabel,
+        gameTitle: '¡Palabra Descifrada!',
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        subtitle:
+          winnerProfile === currentProfile
+            ? `Adivinaste "${hangman.word}" y sumaron racha de ${hangman.streak || 1}.`
+            : `${winnerLabel} adivinó "${hangman.word}" (racha de ${hangman.streak || 1}).`,
+        color: primaryColor,
+        onPlayAgain: () => void handleRandomHangmanWord(),
+      });
+    }
+    prevHangmanStateRef.current = {
+      roundId: hangman.roundId,
+      status: hangman.status,
+    };
+  }, [
+    hangman.status,
+    hangman.winner,
+    hangman.roundId,
+    hangman.word,
+    hangman.streak,
+    activeGame,
+    currentProfile,
+    getDisplayName,
+    primaryColor,
+    handleRandomHangmanWord,
+    triggerVictoryCelebration,
+  ]);
 
-    const allRevealed = hangman.word
+  const handleRevealHangmanLetter = async () => {
+    const curr = gamesStateRef.current;
+    const hm = curr.hangman;
+    if (hm.status !== 'playing' || hm.hintUsed) return;
+    const unguessedLetters = Array.from(
+      new Set(
+        hm.word
+          .split('')
+          .filter((ch) => ch !== ' ' && !hm.guessed.includes(ch))
+      )
+    );
+    if (unguessedLetters.length === 0) return;
+
+    const pick = unguessedLetters[Math.floor(Math.random() * unguessedLetters.length)];
+    const nextGuessed = [...hm.guessed, pick];
+    const allRevealed = hm.word
       .split('')
       .every((ch) => ch === ' ' || nextGuessed.includes(ch));
 
     let nextStatus: 'playing' | 'won' | 'lost' = 'playing';
-    let nextScoreKarla = hangman.scoreKarla || 0;
-    let nextScoreJavier = hangman.scoreJavier || 0;
-    let nextStreak = hangman.streak || 0;
-    let nextLb = gamesState.leaderboard;
+    let nextScoreKarla = hm.scoreKarla || 0;
+    let nextScoreJavier = hm.scoreJavier || 0;
+    let nextStreak = hm.streak || 0;
+    let nextLb = curr.leaderboard;
 
     if (allRevealed) {
       nextStatus = 'won';
@@ -984,7 +1424,58 @@ export const GamesScreen: React.FC = () => {
       if (currentProfile === 'Karla') nextScoreKarla += 1;
       else nextScoreJavier += 1;
       nextLb = addLeaderboardReward(
-        gamesState,
+        curr,
+        currentProfile,
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'hangman'
+      );
+    }
+
+    await updateAndSyncGames({
+      ...curr,
+      leaderboard: nextLb,
+      hangman: {
+        ...hm,
+        roundId: hm.roundId || createGameUid('hm'),
+        guessed: nextGuessed,
+        hintUsed: true,
+        status: nextStatus,
+        winner: nextStatus === 'won' ? currentProfile : null,
+        scoreKarla: nextScoreKarla,
+        scoreJavier: nextScoreJavier,
+        streak: nextStreak,
+        version: (hm.version || 0) + 1,
+        updatedAt: Date.now(),
+      },
+    });
+  };
+
+  const handleGuessLetter = async (letter: string) => {
+    const curr = gamesStateRef.current;
+    const hm = curr.hangman;
+    if (hm.status !== 'playing' || hm.guessed.includes(letter)) return;
+
+    const nextGuessed = [...hm.guessed, letter];
+    const nextWrong = nextGuessed.filter((l) => !hm.word.includes(l)).length;
+
+    const allRevealed = hm.word
+      .split('')
+      .every((ch) => ch === ' ' || nextGuessed.includes(ch));
+
+    let nextStatus: 'playing' | 'won' | 'lost' = 'playing';
+    let nextScoreKarla = hm.scoreKarla || 0;
+    let nextScoreJavier = hm.scoreJavier || 0;
+    let nextStreak = hm.streak || 0;
+    let nextLb = curr.leaderboard;
+
+    if (allRevealed) {
+      nextStatus = 'won';
+      nextStreak += 1;
+      if (currentProfile === 'Karla') nextScoreKarla += 1;
+      else nextScoreJavier += 1;
+      nextLb = addLeaderboardReward(
+        curr,
         currentProfile,
         UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
         UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
@@ -996,28 +1487,21 @@ export const GamesScreen: React.FC = () => {
     }
 
     await updateAndSyncGames({
-      ...gamesState,
+      ...curr,
       leaderboard: nextLb,
       hangman: {
-        ...hangman,
+        ...hm,
+        roundId: hm.roundId || createGameUid('hm'),
         guessed: nextGuessed,
         status: nextStatus,
+        winner: nextStatus === 'won' ? currentProfile : null,
         scoreKarla: nextScoreKarla,
         scoreJavier: nextScoreJavier,
         streak: nextStreak,
+        version: (hm.version || 0) + 1,
+        updatedAt: Date.now(),
       },
     });
-
-    if (nextStatus === 'won') {
-      triggerVictoryCelebration({
-        winnerName: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
-        gameTitle: '¡Palabra Descifrada!',
-        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-        subtitle: `Adivinaste "${hangman.word}" y sumaste racha de ${nextStreak}.`,
-        color: primaryColor,
-        onPlayAgain: () => void handleRandomHangmanWord(),
-      });
-    }
   };
 
   const handleSaveCustomHangman = async () => {
@@ -1033,18 +1517,27 @@ export const GamesScreen: React.FC = () => {
       return;
     }
 
-    await updateAndSyncGames({
-      ...gamesState,
-      hangman: {
-        ...hangman,
-        word: cleaned,
-        hint: customHintInput.trim() || 'Reto especial de tu pareja',
-        category: customCatInput.trim() || 'Reto de Pareja',
-        author: currentProfile === 'Karla' ? 'Karlita' : 'Javier',
-        isPartnerChallenge: true,
-        guessed: [],
-        status: 'playing',
-      },
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const hm = curr.hangman;
+      return {
+        ...curr,
+        hangman: {
+          ...hm,
+          roundId: createGameUid('hm'),
+          word: cleaned,
+          hint: customHintInput.trim() || 'Reto especial de tu pareja',
+          category: customCatInput.trim() || 'Reto de Pareja',
+          author: getDisplayName(currentProfile),
+          isPartnerChallenge: true,
+          guessed: [],
+          hintUsed: false,
+          status: 'playing',
+          winner: null,
+          version: (hm.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
 
     setCustomWordInput('');
@@ -1088,11 +1581,22 @@ export const GamesScreen: React.FC = () => {
     }
   }, [bs.phase, currentProfile, bs.fleetKarla, bs.fleetJavier]);
 
-  const prevBsWinnerRef = useRef<'Karla' | 'Javier' | null>(bs.winner || null);
+  const prevBsStateRef = useRef<{ matchId?: string; winner: 'Karla' | 'Javier' | null }>({
+    matchId: bs.matchId,
+    winner: bs.winner || null,
+  });
 
   useEffect(() => {
+    const prev = prevBsStateRef.current;
     const currentWinner = bs.winner || null;
-    if (currentWinner && prevBsWinnerRef.current === null && activeGame === 'battleship') {
+
+    if (!currentWinner && prev.winner !== null) {
+      setVictoryCelebration(null);
+    } else if (
+      currentWinner &&
+      (prev.winner === null || prev.matchId !== bs.matchId) &&
+      activeGame === 'battleship'
+    ) {
       const didIWin = currentWinner === currentProfile;
       triggerVictoryCelebration({
         winnerName: getDisplayName(currentWinner),
@@ -1105,8 +1609,8 @@ export const GamesScreen: React.FC = () => {
         onPlayAgain: () => void handleResetBattleship(),
       });
     }
-    prevBsWinnerRef.current = currentWinner;
-  }, [bs.winner, activeGame, currentProfile, getDisplayName]);
+    prevBsStateRef.current = { matchId: bs.matchId, winner: currentWinner };
+  }, [bs.winner, bs.matchId, activeGame, currentProfile, getDisplayName, triggerVictoryCelebration]);
 
   // Helper inteligente sin colisiones ni errores: busca la casilla libre más cercana en el tablero 10x10
   const findNearestValidCellsForShip = (
@@ -1208,45 +1712,62 @@ export const GamesScreen: React.FC = () => {
 
   // 1) Enviar invitación de partida en vivo
   const handleSendBattleshipInvite = async () => {
+    setVictoryCelebration(null);
     setBattleshipRadarMode('fleet');
     const freshK = createRandomBattleshipFleet();
     const freshJ = createRandomBattleshipFleet();
     setLocalSetupFleet(currentProfile === 'Karla' ? freshK : freshJ);
-    await updateAndSyncGames({
-      ...gamesState,
-      battleship: {
-        ...bs,
-        phase: 'invited',
-        invitedBy: currentProfile,
-        readyKarla: false,
-        readyJavier: false,
-        fleetKarla: freshK,
-        fleetJavier: freshJ,
-        shotsByKarla: [],
-        shotsByJavier: [],
-        turn: currentProfile,
-        lastShot: null,
-        winner: null,
-      },
+    await updateAndSyncGames((curr) => {
+      const currBs = curr.battleship;
+      return {
+        ...curr,
+        battleship: {
+          ...currBs,
+          matchId: createGameUid('bs'),
+          phase: 'invited',
+          invitedBy: currentProfile,
+          lastUpdatedBy: currentProfile,
+          readyKarla: false,
+          readyJavier: false,
+          fleetKarla: freshK,
+          fleetJavier: freshJ,
+          shotsByKarla: [],
+          shotsByJavier: [],
+          turn: currentProfile,
+          lastShot: null,
+          winner: null,
+          version: (currBs.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
   };
 
   // 2) Aceptar la invitación e ir a la fase de acomodar barcos en 10x10
   const handleAcceptBattleshipInvite = async () => {
+    setVictoryCelebration(null);
     setBattleshipRadarMode('fleet');
-    setLocalSetupFleet(currentProfile === 'Karla' ? bs.fleetKarla : bs.fleetJavier);
-    await updateAndSyncGames({
-      ...gamesState,
-      battleship: {
-        ...bs,
-        phase: 'setup',
-        readyKarla: false,
-        readyJavier: false,
-        shotsByKarla: [],
-        shotsByJavier: [],
-        lastShot: null,
-        winner: null,
-      },
+    const latestBs = gamesStateRef.current.battleship;
+    setLocalSetupFleet(currentProfile === 'Karla' ? latestBs.fleetKarla : latestBs.fleetJavier);
+    await updateAndSyncGames((curr) => {
+      const currBs = curr.battleship;
+      return {
+        ...curr,
+        battleship: {
+          ...currBs,
+          matchId: currBs.matchId || createGameUid('bs'),
+          phase: 'setup',
+          lastUpdatedBy: currentProfile,
+          readyKarla: false,
+          readyJavier: false,
+          shotsByKarla: [],
+          shotsByJavier: [],
+          lastShot: null,
+          winner: null,
+          version: (currBs.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
   };
 
@@ -1260,75 +1781,93 @@ export const GamesScreen: React.FC = () => {
   // 5) Confirmar "¡Flota Lista!" o desbloquear para modificar flota y pasar a batalla cuando ambos estén listos
   const handleConfirmFleetReady = async (fleetToSave?: BattleshipShip[], readyState = true) => {
     const isK = currentProfile === 'Karla';
-    const myFleetToPersist = (fleetToSave && fleetToSave.length === 5)
-      ? fleetToSave
-      : (localSetupFleet && localSetupFleet.length === 5)
-      ? localSetupFleet
-      : syncedMyFleet;
+    await updateAndSyncGames((curr) => {
+      const currBs = curr.battleship;
+      const latestMyFleet = isK ? currBs.fleetKarla : currBs.fleetJavier;
+      const myFleetToPersist =
+        fleetToSave && fleetToSave.length === 5
+          ? fleetToSave
+          : localSetupFleet && localSetupFleet.length === 5
+          ? localSetupFleet
+          : latestMyFleet;
 
-    const nextReadyK = isK ? readyState : bs.readyKarla;
-    const nextReadyJ = !isK ? readyState : bs.readyJavier;
-    const bothReady = nextReadyK && nextReadyJ;
+      const nextReadyK = isK ? readyState : currBs.readyKarla;
+      const nextReadyJ = !isK ? readyState : currBs.readyJavier;
+      const bothReady = nextReadyK && nextReadyJ;
 
-    if (bothReady) {
-      setBattleshipRadarMode('attack');
-    }
+      if (bothReady) {
+        setBattleshipRadarMode('attack');
+      }
 
-    await updateAndSyncGames({
-      ...gamesState,
-      battleship: {
-        ...bs,
-        phase: bothReady ? 'battle' : 'setup',
-        lastUpdatedBy: currentProfile,
-        readyKarla: nextReadyK,
-        readyJavier: nextReadyJ,
-        fleetKarla: isK ? myFleetToPersist : bs.fleetKarla,
-        fleetJavier: !isK ? myFleetToPersist : bs.fleetJavier,
-      },
+      return {
+        ...curr,
+        battleship: {
+          ...currBs,
+          matchId: currBs.matchId || createGameUid('bs'),
+          phase: bothReady ? 'battle' : 'setup',
+          lastUpdatedBy: currentProfile,
+          readyKarla: nextReadyK,
+          readyJavier: nextReadyJ,
+          fleetKarla: isK ? myFleetToPersist : currBs.fleetKarla,
+          fleetJavier: !isK ? myFleetToPersist : currBs.fleetJavier,
+          version: (currBs.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
   };
 
   // 6) Reiniciar a nueva sala de preparación 10x10
   const handleResetBattleship = async () => {
+    setVictoryCelebration(null);
     setBattleshipRadarMode('fleet');
     const freshK = createRandomBattleshipFleet();
     const freshJ = createRandomBattleshipFleet();
     setLocalSetupFleet(currentProfile === 'Karla' ? freshK : freshJ);
-    await updateAndSyncGames({
-      ...gamesState,
-      battleship: {
-        ...bs,
-        phase: 'setup',
-        invitedBy: currentProfile,
-        readyKarla: false,
-        readyJavier: false,
-        fleetKarla: freshK,
-        fleetJavier: freshJ,
-        shotsByKarla: [],
-        shotsByJavier: [],
-        turn: bs.turn === 'Karla' ? 'Javier' : 'Karla',
-        lastShot: null,
-        winner: null,
-      },
+    await updateAndSyncGames((curr) => {
+      const currBs = curr.battleship;
+      return {
+        ...curr,
+        battleship: {
+          ...currBs,
+          matchId: createGameUid('bs'),
+          phase: 'setup',
+          invitedBy: currentProfile,
+          lastUpdatedBy: currentProfile,
+          readyKarla: false,
+          readyJavier: false,
+          fleetKarla: freshK,
+          fleetJavier: freshJ,
+          shotsByKarla: [],
+          shotsByJavier: [],
+          turn: currBs.turn === 'Karla' ? 'Javier' : 'Karla',
+          lastShot: null,
+          winner: null,
+          version: (currBs.version || 0) + 1,
+          updatedAt: Date.now(),
+        },
+      };
     });
   };
 
   // 7) Disparar proyectil animado (bala/torpedo) en cuadrícula 10x10
   const handleBattleshipFire = async (cellIdx: number) => {
-    if (bs.winner || bs.phase !== 'battle' || firingBullet) return;
+    const startBs = gamesStateRef.current.battleship;
+    if (startBs.winner || startBs.phase !== 'battle' || firingBullet) return;
 
-    if (bs.turn !== currentProfile) {
+    if (startBs.turn !== currentProfile) {
       Alert.alert(
-        `Turno de ${getDisplayName(bs.turn)}`,
-        `Espera a que ${getDisplayName(bs.turn)} realice su disparo naval.`
+        `Turno de ${getDisplayName(startBs.turn)}`,
+        `Espera a que ${getDisplayName(startBs.turn)} realice su disparo naval.`
       );
       return;
     }
 
     const shooter = currentProfile;
     const isShooterKarla = shooter === 'Karla';
-    const currentShots = isShooterKarla ? bs.shotsByKarla : bs.shotsByJavier;
-    const targetFleet = isShooterKarla ? bs.fleetJavier : bs.fleetKarla;
+    const currentShots = isShooterKarla ? startBs.shotsByKarla : startBs.shotsByJavier;
+    const targetFleet = isShooterKarla ? startBs.fleetJavier : startBs.fleetKarla;
+    const firingMatchId = startBs.matchId;
 
     if (currentShots.includes(cellIdx)) return;
 
@@ -1357,9 +1896,6 @@ export const GamesScreen: React.FC = () => {
 
     setFiringBullet(null);
 
-    const nextShots = [...currentShots, cellIdx];
-    const justSunk = hitShip ? hitShip.cells.every((c) => nextShots.includes(c)) : false;
-
     if (isHit) {
       hitBannerScale.setValue(1.22);
       Animated.spring(hitBannerScale, {
@@ -1369,48 +1905,71 @@ export const GamesScreen: React.FC = () => {
       }).start();
     }
 
-    const allEnemySunk = targetFleet.every((s) => s.cells.every((c) => nextShots.includes(c)));
-    const nextWinner: 'Karla' | 'Javier' | null = allEnemySunk ? shooter : null;
+    await updateAndSyncGames((latestState) => {
+      const latestBs = latestState.battleship;
+      // Si la partida se reinició durante la animación, no aplicar el disparo viejo
+      if (latestBs.phase !== 'battle' || latestBs.matchId !== firingMatchId || latestBs.winner) {
+        return latestState;
+      }
 
-    const nextTurn: 'Karla' | 'Javier' = isHit
-      ? shooter
-      : shooter === 'Karla'
-      ? 'Javier'
-      : 'Karla';
+      const latestShots = isShooterKarla ? latestBs.shotsByKarla : latestBs.shotsByJavier;
+      if (latestShots.includes(cellIdx)) {
+        return latestState;
+      }
 
-    let nextLb = gamesState.leaderboard;
-    if (nextWinner) {
-      nextLb = addLeaderboardReward(
-        gamesState,
-        nextWinner,
-        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
-        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
-        'battleship'
+      const latestTargetFleet = isShooterKarla ? latestBs.fleetJavier : latestBs.fleetKarla;
+      const nextShots = [...latestShots, cellIdx];
+      const latestHitShip = latestTargetFleet.find((s) => s.cells.includes(cellIdx));
+      const justSunk = latestHitShip
+        ? latestHitShip.cells.every((c) => nextShots.includes(c))
+        : false;
+      const allEnemySunk = latestTargetFleet.every((s) =>
+        s.cells.every((c) => nextShots.includes(c))
       );
-    }
+      const nextWinner: 'Karla' | 'Javier' | null = allEnemySunk ? shooter : null;
 
-    await updateAndSyncGames({
-      ...gamesState,
-      leaderboard: nextLb,
-      battleship: {
-        ...bs,
-        phase: nextWinner ? 'finished' : 'battle',
-        shotsByKarla: isShooterKarla ? nextShots : bs.shotsByKarla,
-        shotsByJavier: !isShooterKarla ? nextShots : bs.shotsByJavier,
-        turn: nextTurn,
-        lastShot: {
-          shooter,
-          cell: cellIdx,
-          hit: isHit,
-          sunkShipName: justSunk && hitShip ? hitShip.name : undefined,
+      const nextTurn: 'Karla' | 'Javier' = isHit
+        ? shooter
+        : shooter === 'Karla'
+        ? 'Javier'
+        : 'Karla';
+
+      let nextLb = latestState.leaderboard;
+      if (nextWinner) {
+        nextLb = addLeaderboardReward(
+          latestState,
+          nextWinner,
+          UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+          UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+          'battleship'
+        );
+      }
+
+      return {
+        ...latestState,
+        leaderboard: nextLb,
+        battleship: {
+          ...latestBs,
+          matchId: latestBs.matchId || createGameUid('bs'),
+          lastUpdatedBy: shooter,
+          phase: nextWinner ? 'finished' : 'battle',
+          shotsByKarla: isShooterKarla ? nextShots : latestBs.shotsByKarla,
+          shotsByJavier: !isShooterKarla ? nextShots : latestBs.shotsByJavier,
+          turn: nextTurn,
+          lastShot: {
+            shooter,
+            cell: cellIdx,
+            hit: isHit,
+            sunkShipName: justSunk && latestHitShip ? latestHitShip.name : undefined,
+          },
+          winner: nextWinner,
+          winsKarla: nextWinner === 'Karla' ? (latestBs.winsKarla || 0) + 1 : latestBs.winsKarla || 0,
+          winsJavier: nextWinner === 'Javier' ? (latestBs.winsJavier || 0) + 1 : latestBs.winsJavier || 0,
+          version: (latestBs.version || 0) + 1,
+          updatedAt: Date.now(),
         },
-        winner: nextWinner,
-        winsKarla: nextWinner === 'Karla' ? (bs.winsKarla || 0) + 1 : bs.winsKarla || 0,
-        winsJavier: nextWinner === 'Javier' ? (bs.winsJavier || 0) + 1 : bs.winsJavier || 0,
-      },
+      };
     });
-
-
   };
 
   // Renderizador de un segmento conectado de barco (Proa, Cubierta con Torreta, Popa)
@@ -1483,59 +2042,617 @@ export const GamesScreen: React.FC = () => {
   const ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
   const lb = gamesState.leaderboard || DEFAULT_GAMES_STATE.leaderboard;
 
-  const handleUpdateDrawGuessState = async (nextDg: any) => {
-    await updateAndSyncGames({
-      ...gamesState,
-      drawGuess: nextDg,
-    });
-  };
+  const handleUpdateDrawGuessState = useCallback(
+    async (nextDg: any) => {
+      await updateAndSyncGames((curr) => {
+        const currentVersion = curr.drawGuess?.version || 0;
+        return {
+          ...curr,
+          drawGuess: {
+            ...nextDg,
+            version: Math.max(nextDg?.version || 0, currentVersion + 1),
+          },
+        };
+      });
+    },
+    [updateAndSyncGames]
+  );
 
-  const handleDrawGuessReward = async (winner: 'Karla' | 'Javier' | 'Empate', points: number) => {
-    let nextLb: GamesState['leaderboard'];
-    if (winner === 'Empate') {
-      nextLb = addLeaderboardTie(gamesState, 'drawguess');
-    } else {
-      nextLb = addLeaderboardReward(
-        gamesState,
-        winner,
-        points,
-        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
-        'drawguess'
-      );
+  const handleDrawGuessReward = useCallback(
+    async (winner: 'Karla' | 'Javier' | 'Empate', points: number) => {
+      await updateAndSyncGames((curr) => {
+        let nextLb: GamesState['leaderboard'];
+        if (winner === 'Empate') {
+          nextLb = addLeaderboardTie(curr, 'drawguess');
+        } else {
+          nextLb = addLeaderboardReward(
+            curr,
+            winner,
+            points,
+            UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+            'drawguess'
+          );
+        }
+        return {
+          ...curr,
+          leaderboard: nextLb,
+        };
+      });
+    },
+    [updateAndSyncGames]
+  );
+
+  const handleResetDrawGuess = useCallback(async () => {
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const currentVersion = curr.drawGuess?.version || 0;
+      const nextDg: GamesState['drawGuess'] = {
+        ...DEFAULT_GAMES_STATE.drawGuess,
+        phase: 'choosing_word',
+        currentRound: 1,
+        drawer: 'Karla',
+        guesser: 'Javier',
+        wordChoices: null,
+        selectedWord: null,
+        drawerWord: null,
+        strokes: [],
+        strokesUpdatedAt: Date.now(),
+        attempts: [],
+        revealedIndices: [],
+        usedHint: false,
+        scoreKarla: 0,
+        scoreJavier: 0,
+        guesserScoreKarla: 0,
+        guesserScoreJavier: 0,
+        correctGuessesKarla: 0,
+        correctGuessesJavier: 0,
+        roundsHistory: [],
+        updatedAt: Date.now(),
+        version: currentVersion + 1,
+      };
+      return {
+        ...curr,
+        drawGuess: nextDg,
+      };
+    });
+  }, [updateAndSyncGames]);
+
+  // =========================================================================
+  // 7. DOMINÓ CLÁSICO (DUELO DE 28 FICHAS)
+  // =========================================================================
+  const handleResetDomino = useCallback(async () => {
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const winsK = curr.domino?.winsKarla || 0;
+      const winsJ = curr.domino?.winsJavier || 0;
+      const prevScoreK = curr.domino?.scoreKarla || 0;
+      const prevScoreJ = curr.domino?.scoreJavier || 0;
+      // Reiniciar acumulado si alguno ya alcanzó la meta de 100 puntos
+      const resetScores = prevScoreK >= DOMINO_TARGET_SCORE || prevScoreJ >= DOMINO_TARGET_SCORE;
+      const currentVersion = curr.domino?.version || 0;
+      const customNames = {
+        Karla: getDisplayName('Karla'),
+        Javier: getDisplayName('Javier'),
+      };
+      // Comienza quien tenga el doble más alto (regla oficial de dominó)
+      const nextDom = startNewDominoGame(undefined, customNames);
+      return {
+        ...curr,
+        domino: {
+          ...nextDom,
+          winsKarla: winsK,
+          winsJavier: winsJ,
+          scoreKarla: resetScores ? 0 : prevScoreK,
+          scoreJavier: resetScores ? 0 : prevScoreJ,
+          updatedAt: Date.now(),
+          version: currentVersion + 1,
+        },
+      };
+    });
+  }, [getDisplayName, updateAndSyncGames]);
+
+  const prevDominoStateRef = useRef<{ phase?: DominoState['phase']; winner?: UserProfile | 'Empate' | null }>({
+    phase: gamesState.domino?.phase,
+    winner: gamesState.domino?.winner || null,
+  });
+
+  useEffect(() => {
+    const dom = gamesState.domino;
+    const prev = prevDominoStateRef.current;
+    if (!dom) return;
+
+    if (dom.phase === 'playing' && prev.phase === 'round_over') {
+      setVictoryCelebration(null);
+    } else if (
+      dom.phase === 'round_over' &&
+      dom.winner &&
+      prev.phase !== 'round_over' &&
+      activeGame === 'domino'
+    ) {
+      const winnerProfile = dom.winner === 'Empate' ? null : dom.winner;
+      triggerVictoryCelebration({
+        winnerName: winnerProfile ? getDisplayName(winnerProfile) : '¡Empate!',
+        gameTitle: winnerProfile ? '¡Dominó!' : '¡Juego Trancado!',
+        pointsEarned: winnerProfile
+          ? UNIFIED_GAME_REWARDS.POINTS_PER_WIN
+          : UNIFIED_GAME_REWARDS.POINTS_PER_TIE,
+        subtitle:
+          dom.lastAction ||
+          (winnerProfile
+            ? `${getDisplayName(winnerProfile)} ganó la ronda de dominó.`
+            : 'La mesa se cerró en empate.'),
+        color: '#6366f1',
+        onPlayAgain: () => void handleResetDomino(),
+      });
     }
+
+    prevDominoStateRef.current = { phase: dom.phase, winner: dom.winner || null };
+  }, [
+    gamesState.domino?.phase,
+    gamesState.domino?.winner,
+    gamesState.domino?.lastAction,
+    activeGame,
+    getDisplayName,
+    handleResetDomino,
+    triggerVictoryCelebration,
+  ]);
+
+  const handlePlayDominoTile = async (tile: DominoTile, side: 'left' | 'right') => {
+    const curr = gamesStateRef.current;
+    const dom = curr.domino;
+    if (!dom || dom.turn !== currentProfile || dom.phase !== 'playing') return;
+
+    const myHand = currentProfile === 'Karla' ? dom.handKarla : dom.handJavier;
+    if (!myHand.some((t) => t.id === tile.id)) return;
+
+    const playCheck = canPlayTile(tile, dom.openLeft, dom.openRight);
+    if (side === 'left' && !playCheck.canPlayLeft) return;
+    if (side === 'right' && !playCheck.canPlayRight) return;
+
+    const result = placeTileOnBoard(dom.board, tile, side, dom.openLeft, dom.openRight);
+    if (!result.isValid) return;
+
+    const nextHandKarla =
+      currentProfile === 'Karla' ? dom.handKarla.filter((t) => t.id !== tile.id) : dom.handKarla;
+    const nextHandJavier =
+      currentProfile === 'Javier' ? dom.handJavier.filter((t) => t.id !== tile.id) : dom.handJavier;
+
+    const currentHandAfter = currentProfile === 'Karla' ? nextHandKarla : nextHandJavier;
+    const opponentHandAfter = currentProfile === 'Karla' ? nextHandJavier : nextHandKarla;
+    let nextPhase: DominoState['phase'] = dom.phase;
+    let nextWinner = dom.winner;
+    let nextWinsKarla = dom.winsKarla || 0;
+    let nextWinsJavier = dom.winsJavier || 0;
+    let nextScoreKarla = dom.scoreKarla || 0;
+    let nextScoreJavier = dom.scoreJavier || 0;
+    let nextLeaderboard = curr.leaderboard;
+    let actionLabel = `${getDisplayName(currentProfile)} colocó ${tile.left}-${tile.right}`;
+
+    if (currentHandAfter.length === 0) {
+      nextPhase = 'round_over';
+      nextWinner = currentProfile;
+      const roundPips = calculateHandPips(opponentHandAfter);
+      if (currentProfile === 'Karla') {
+        nextWinsKarla++;
+        nextScoreKarla += roundPips;
+      } else {
+        nextWinsJavier++;
+        nextScoreJavier += roundPips;
+      }
+
+      nextLeaderboard = addLeaderboardReward(
+        curr,
+        currentProfile,
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'domino'
+      );
+      actionLabel = `${getDisplayName(currentProfile)} colocó su última ficha (+${roundPips} pts).`;
+    }
+
+    const nextTurn: UserProfile = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+
     await updateAndSyncGames({
-      ...gamesState,
-      leaderboard: nextLb,
+      ...curr,
+      leaderboard: nextLeaderboard,
+      domino: {
+        ...dom,
+        phase: nextPhase,
+        board: result.nextBoard,
+        openLeft: result.nextOpenLeft,
+        openRight: result.nextOpenRight,
+        handKarla: nextHandKarla,
+        handJavier: nextHandJavier,
+        turn: nextTurn,
+        winner: nextWinner,
+        winsKarla: nextWinsKarla,
+        winsJavier: nextWinsJavier,
+        scoreKarla: nextScoreKarla,
+        scoreJavier: nextScoreJavier,
+        consecutivePasses: 0,
+        lastAction: actionLabel,
+        updatedAt: Date.now(),
+        version: (dom.version || 0) + 1,
+      },
     });
   };
 
-  const handleResetDrawGuess = async () => {
-    const nextDg: GamesState['drawGuess'] = {
-      ...DEFAULT_GAMES_STATE.drawGuess,
-      phase: 'choosing_word',
-      currentRound: 1,
-      drawer: 'Karla',
-      guesser: 'Javier',
-      wordChoices: null,
-      selectedWord: null,
-      drawerWord: null,
-      strokes: [],
-      attempts: [],
-      revealedIndices: [],
-      usedHint: false,
-      scoreKarla: 0,
-      scoreJavier: 0,
-      guesserScoreKarla: 0,
-      guesserScoreJavier: 0,
-      correctGuessesKarla: 0,
-      correctGuessesJavier: 0,
-      roundsHistory: [],
-      updatedAt: Date.now(),
-    };
+  const handleDrawDominoBoneyard = async () => {
+    const curr = gamesStateRef.current;
+    const dom = curr.domino;
+    if (!dom || dom.turn !== currentProfile || dom.phase !== 'playing' || dom.boneyard.length === 0) return;
+
+    // Validar que el jugador no tenga jugadas válidas antes de robar del pozo
+    const myHand = currentProfile === 'Karla' ? dom.handKarla : dom.handJavier;
+    if (getPlayableTiles(myHand, dom.openLeft, dom.openRight).length > 0) return;
+
+    const nextBoneyard = [...dom.boneyard];
+    const drawnTile = nextBoneyard.pop()!;
+
+    const nextHandKarla =
+      currentProfile === 'Karla' ? [...dom.handKarla, drawnTile] : dom.handKarla;
+    const nextHandJavier =
+      currentProfile === 'Javier' ? [...dom.handJavier, drawnTile] : dom.handJavier;
+
     await updateAndSyncGames({
-      ...gamesState,
-      drawGuess: nextDg,
+      ...curr,
+      domino: {
+        ...dom,
+        boneyard: nextBoneyard,
+        handKarla: nextHandKarla,
+        handJavier: nextHandJavier,
+        lastAction: `${getDisplayName(currentProfile)} robó una ficha del pozo`,
+        updatedAt: Date.now(),
+        version: (dom.version || 0) + 1,
+      },
     });
+  };
+
+  const handlePassDominoTurn = async () => {
+    const curr = gamesStateRef.current;
+    const dom = curr.domino;
+    if (!dom || dom.turn !== currentProfile || dom.phase !== 'playing') return;
+
+    // Validar que el pozo esté vacío y no tenga jugadas antes de pasar
+    const myHand = currentProfile === 'Karla' ? dom.handKarla : dom.handJavier;
+    if (dom.boneyard.length > 0 || getPlayableTiles(myHand, dom.openLeft, dom.openRight).length > 0) {
+      return;
+    }
+
+    const consecutive = (dom.consecutivePasses || 0) + 1;
+    const nextTurn: UserProfile = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+
+    if (consecutive >= 2) {
+      const pipsKarla = calculateHandPips(dom.handKarla);
+      const pipsJavier = calculateHandPips(dom.handJavier);
+
+      let winner: UserProfile | 'Empate' = 'Empate';
+      let nextLeaderboard = curr.leaderboard;
+      let nextWinsK = dom.winsKarla || 0;
+      let nextWinsJ = dom.winsJavier || 0;
+      let nextScoreK = dom.scoreKarla || 0;
+      let nextScoreJ = dom.scoreJavier || 0;
+
+      if (pipsKarla < pipsJavier) {
+        winner = 'Karla';
+        nextWinsK++;
+        nextScoreK += pipsJavier;
+        nextLeaderboard = addLeaderboardReward(
+          curr,
+          'Karla',
+          UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+          UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+          'domino'
+        );
+      } else if (pipsJavier < pipsKarla) {
+        winner = 'Javier';
+        nextWinsJ++;
+        nextScoreJ += pipsKarla;
+        nextLeaderboard = addLeaderboardReward(
+          curr,
+          'Javier',
+          UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+          UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+          'domino'
+        );
+      } else {
+        winner = 'Empate';
+        nextLeaderboard = addLeaderboardTie(curr, 'domino');
+      }
+
+      await updateAndSyncGames({
+        ...curr,
+        leaderboard: nextLeaderboard,
+        domino: {
+          ...dom,
+          phase: 'round_over',
+          winner,
+          winsKarla: nextWinsK,
+          winsJavier: nextWinsJ,
+          scoreKarla: nextScoreK,
+          scoreJavier: nextScoreJ,
+          consecutivePasses: consecutive,
+          lastAction: `¡Tranca! ${getDisplayName('Karla')}: ${pipsKarla} pts vs ${getDisplayName('Javier')}: ${pipsJavier} pts.`,
+          updatedAt: Date.now(),
+          version: (dom.version || 0) + 1,
+        },
+      });
+      return;
+    }
+
+    await updateAndSyncGames({
+      ...curr,
+      domino: {
+        ...dom,
+        turn: nextTurn,
+        consecutivePasses: consecutive,
+        lastAction: `${getDisplayName(currentProfile)} pasó turno`,
+        updatedAt: Date.now(),
+        version: (dom.version || 0) + 1,
+      },
+    });
+  };
+
+  // =========================================================================
+  // 8. UNO (JUEGO DE CARTAS EN PAREJA)
+  // =========================================================================
+  const handleResetUno = useCallback(async () => {
+    setVictoryCelebration(null);
+    await updateAndSyncGames((curr) => {
+      const winsK = curr.uno?.winsKarla || 0;
+      const winsJ = curr.uno?.winsJavier || 0;
+      const prevScoreK = curr.uno?.scoreKarla || 0;
+      const prevScoreJ = curr.uno?.scoreJavier || 0;
+      const resetScores = prevScoreK >= UNO_TARGET_SCORE || prevScoreJ >= UNO_TARGET_SCORE;
+      const currentVersion = curr.uno?.version || 0;
+      const starter: UserProfile = (winsK + winsJ) % 2 === 0 ? 'Karla' : 'Javier';
+      const customNames = {
+        Karla: getDisplayName('Karla'),
+        Javier: getDisplayName('Javier'),
+      };
+      const nextUno = startNewUnoGame(starter, customNames);
+      return {
+        ...curr,
+        uno: {
+          ...nextUno,
+          winsKarla: winsK,
+          winsJavier: winsJ,
+          scoreKarla: resetScores ? 0 : prevScoreK,
+          scoreJavier: resetScores ? 0 : prevScoreJ,
+          updatedAt: Date.now(),
+          version: currentVersion + 1,
+        },
+      };
+    });
+  }, [getDisplayName, updateAndSyncGames]);
+
+  const prevUnoStateRef = useRef<{ phase?: UnoState['phase']; winner?: UserProfile | null }>({
+    phase: gamesState.uno?.phase,
+    winner: gamesState.uno?.winner || null,
+  });
+
+  useEffect(() => {
+    const un = gamesState.uno;
+    const prev = prevUnoStateRef.current;
+    if (!un) return;
+
+    if (un.phase === 'playing' && prev.phase === 'round_over') {
+      setVictoryCelebration(null);
+    } else if (
+      un.phase === 'round_over' &&
+      un.winner &&
+      prev.phase !== 'round_over' &&
+      activeGame === 'uno'
+    ) {
+      triggerVictoryCelebration({
+        winnerName: getDisplayName(un.winner),
+        gameTitle: '¡VICTORIA EN UNO!',
+        pointsEarned: UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        subtitle: un.lastAction || `¡${getDisplayName(un.winner)} se quedó sin cartas!`,
+        color: '#ef4444',
+        onPlayAgain: () => void handleResetUno(),
+      });
+    }
+
+    prevUnoStateRef.current = { phase: un.phase, winner: un.winner || null };
+  }, [
+    gamesState.uno?.phase,
+    gamesState.uno?.winner,
+    gamesState.uno?.lastAction,
+    activeGame,
+    getDisplayName,
+    handleResetUno,
+    triggerVictoryCelebration,
+  ]);
+
+  const handlePlayUnoCard = async (
+    card: UnoCard,
+    chosenColor?: 'red' | 'yellow' | 'green' | 'blue'
+  ) => {
+    const curr = gamesStateRef.current;
+    const un = curr.uno;
+    if (!un || un.turn !== currentProfile || un.phase !== 'playing') return;
+
+    const myHand = currentProfile === 'Karla' ? un.handKarla : un.handJavier;
+    if (!canPlayUnoCard(card, un.currentCard, un.currentColor, myHand)) return;
+
+    const customNames = {
+      Karla: getDisplayName('Karla'),
+      Javier: getDisplayName('Javier'),
+    };
+    const effect = processCardEffect(un, card, chosenColor, customNames);
+
+    const currentHandAfter =
+      currentProfile === 'Karla' ? effect.nextHandKarla : effect.nextHandJavier;
+    const opponentHandAfter =
+      currentProfile === 'Karla' ? effect.nextHandJavier : effect.nextHandKarla;
+    let nextPhase: UnoState['phase'] = un.phase;
+    let nextWinner = un.winner;
+    let nextWinsKarla = un.winsKarla || 0;
+    let nextWinsJavier = un.winsJavier || 0;
+    let nextScoreKarla = un.scoreKarla || 0;
+    let nextScoreJavier = un.scoreJavier || 0;
+    let nextLeaderboard = curr.leaderboard;
+    let finalActionMessage = effect.actionMessage;
+
+    if (currentHandAfter.length === 0) {
+      nextPhase = 'round_over';
+      nextWinner = currentProfile;
+      const roundPoints = calculateUnoHandPoints(opponentHandAfter);
+      if (currentProfile === 'Karla') {
+        nextWinsKarla++;
+        nextScoreKarla += roundPoints;
+      } else {
+        nextWinsJavier++;
+        nextScoreJavier += roundPoints;
+      }
+
+      nextLeaderboard = addLeaderboardReward(
+        curr,
+        currentProfile,
+        UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        'uno'
+      );
+      finalActionMessage = `¡${getDisplayName(currentProfile)} se quedó sin cartas (+${roundPoints} pts de mano rival)!`;
+    }
+
+    await updateAndSyncGames({
+      ...curr,
+      leaderboard: nextLeaderboard,
+      uno: {
+        ...un,
+        phase: nextPhase,
+        deck: effect.nextDeck,
+        discardPile: effect.nextDiscardPile,
+        currentCard: card,
+        currentColor: effect.nextCurrentColor,
+        handKarla: effect.nextHandKarla,
+        handJavier: effect.nextHandJavier,
+        turn: effect.nextTurn,
+        hasDrawnThisTurn: false,
+        calledUnoKarla: effect.nextCalledUnoKarla,
+        calledUnoJavier: effect.nextCalledUnoJavier,
+        winner: nextWinner,
+        winsKarla: nextWinsKarla,
+        winsJavier: nextWinsJavier,
+        scoreKarla: nextScoreKarla,
+        scoreJavier: nextScoreJavier,
+        lastAction: finalActionMessage,
+        updatedAt: Date.now(),
+        version: (un.version || 0) + 1,
+      },
+    });
+  };
+
+  const handleDrawUnoCard = async () => {
+    const curr = gamesStateRef.current;
+    const un = curr.uno;
+    if (!un || un.turn !== currentProfile || un.phase !== 'playing' || un.hasDrawnThisTurn) return;
+
+    const drawResult = drawCardsWithRecycle(un.deck, un.discardPile, un.currentCard, 1);
+    if (drawResult.drawn.length === 0) return;
+
+    const drawnCard = drawResult.drawn[0];
+    const nextHandKarla =
+      currentProfile === 'Karla' ? [...un.handKarla, drawnCard] : un.handKarla;
+    const nextHandJavier =
+      currentProfile === 'Javier' ? [...un.handJavier, drawnCard] : un.handJavier;
+
+    const myNextHand = currentProfile === 'Karla' ? nextHandKarla : nextHandJavier;
+    const canPlayDrawn = canPlayUnoCard(drawnCard, un.currentCard, un.currentColor, myNextHand);
+    const nextTurn = canPlayDrawn
+      ? currentProfile
+      : currentProfile === 'Karla'
+      ? 'Javier'
+      : 'Karla';
+
+    await updateAndSyncGames({
+      ...curr,
+      uno: {
+        ...un,
+        deck: drawResult.nextDeck,
+        discardPile: drawResult.nextDiscardPile,
+        handKarla: nextHandKarla,
+        handJavier: nextHandJavier,
+        turn: nextTurn,
+        hasDrawnThisTurn: canPlayDrawn,
+        calledUnoKarla: nextHandKarla.length <= 1 ? un.calledUnoKarla : false,
+        calledUnoJavier: nextHandJavier.length <= 1 ? un.calledUnoJavier : false,
+        lastAction: `${getDisplayName(currentProfile)} robó 1 carta`,
+        updatedAt: Date.now(),
+        version: (un.version || 0) + 1,
+      },
+    });
+  };
+
+  const handlePassUnoTurn = async () => {
+    const curr = gamesStateRef.current;
+    const un = curr.uno;
+    if (!un || un.turn !== currentProfile || un.phase !== 'playing' || !un.hasDrawnThisTurn) return;
+
+    const nextTurn: UserProfile = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+    await updateAndSyncGames({
+      ...curr,
+      uno: {
+        ...un,
+        turn: nextTurn,
+        hasDrawnThisTurn: false,
+        lastAction: `${getDisplayName(currentProfile)} pasó turno tras robar`,
+        updatedAt: Date.now(),
+        version: (un.version || 0) + 1,
+      },
+    });
+  };
+
+  const handleCallUno = async () => {
+    const curr = gamesStateRef.current;
+    const un = curr.uno;
+    if (!un) return;
+
+    await updateAndSyncGames({
+      ...curr,
+      uno: {
+        ...un,
+        calledUnoKarla: currentProfile === 'Karla' ? true : un.calledUnoKarla,
+        calledUnoJavier: currentProfile === 'Javier' ? true : un.calledUnoJavier,
+        lastAction: `¡${getDisplayName(currentProfile)} cantó UNO!`,
+        updatedAt: Date.now(),
+        version: (un.version || 0) + 1,
+      },
+    });
+  };
+
+  const handleCatchUnoMiss = async () => {
+    const curr = gamesStateRef.current;
+    const un = curr.uno;
+    if (!un || un.phase !== 'playing') return;
+    const partnerProfile: UserProfile = currentProfile === 'Karla' ? 'Javier' : 'Karla';
+    const partnerHand = partnerProfile === 'Karla' ? un.handKarla : un.handJavier;
+    const partnerCalledUno = partnerProfile === 'Karla' ? un.calledUnoKarla : un.calledUnoJavier;
+
+    if (partnerHand.length === 1 && !partnerCalledUno) {
+      const customNames = {
+        Karla: getDisplayName('Karla'),
+        Javier: getDisplayName('Javier'),
+      };
+      const pen = penalizeMissedUno(un, partnerProfile, customNames);
+      await updateAndSyncGames({
+        ...curr,
+        uno: {
+          ...un,
+          deck: pen.nextDeck,
+          discardPile: pen.nextDiscardPile,
+          handKarla: pen.nextHandKarla,
+          handJavier: pen.nextHandJavier,
+          calledUnoKarla: pen.nextCalledUnoKarla,
+          calledUnoJavier: pen.nextCalledUnoJavier,
+          lastAction: pen.actionMessage,
+          updatedAt: Date.now(),
+          version: (un.version || 0) + 1,
+        },
+      });
+    }
   };
 
   // Renderizador adaptable del juego activo (En Pantalla Completa se transforma en Consola Pro Independiente)
@@ -1554,7 +2671,12 @@ export const GamesScreen: React.FC = () => {
           { width: '100%', alignItems: 'center' },
           isFull && { backgroundColor: 'transparent', borderWidth: 0, padding: 0 },
           !isFull && { backgroundColor: colors.surface, borderColor: colors.border },
-          activeGame === 'drawguess' && { flex: 1, width: '100%', padding: 0, margin: 0 },
+          (activeGame === 'drawguess' || activeGame === 'domino' || activeGame === 'uno') && {
+            flex: 1,
+            width: '100%',
+            padding: 0,
+            margin: 0,
+          },
         ]}
       >
 
@@ -1567,6 +2689,7 @@ export const GamesScreen: React.FC = () => {
             ticTacToeState={gamesState.ticTacToe}
             onCellPress={(idx) => void handleTicTacToePress(idx)}
             onNewRound={() => void handleNewTicTacToeRound()}
+            onToggleInfiniteMode={() => void handleToggleTicTacToeMode()}
           />
         )}
 
@@ -1600,7 +2723,7 @@ export const GamesScreen: React.FC = () => {
             selectedChessPos={selectedChessPos}
             validChessTargets={validChessTargets}
             chessHistoryLength={chessHistory.length}
-            onCellPress={(r, c) => void handleChessCellPress(r, c)}
+            onCellPress={(r, c, promoteTo) => void handleChessCellPress(r, c, promoteTo)}
             onUndo={() => void handleUndoChessMove()}
             onReset={() => handleResetChess(false)}
           />
@@ -1614,9 +2737,11 @@ export const GamesScreen: React.FC = () => {
             primaryColor={primaryColor}
             wrongGuessesCount={wrongGuessesCount}
             maxWrong={maxWrong}
+            petAccessory={petMeta.accessory}
             onGuessLetter={(letter) => void handleGuessLetter(letter)}
             onRandomWord={() => void handleRandomHangmanWord()}
             onChallengePartner={() => setIsCustomWordModalOpen(true)}
+            onRevealLetter={() => void handleRevealHangmanLetter()}
           />
         )}
 
@@ -1652,6 +2777,75 @@ export const GamesScreen: React.FC = () => {
             onOpenScoreBreakdown={(p) => handleOpenScoreBreakdown(p || 'all')}
           />
         )}
+
+        {/* ================= 7. DOMINÓ (MODULAR) ================= */}
+        {activeGame === 'domino' && (() => {
+          const dom = gamesState.domino || DEFAULT_GAMES_STATE.domino;
+          const myHand = currentProfile === 'Karla' ? dom.handKarla : dom.handJavier;
+          const partnerTileCount = currentProfile === 'Karla' ? dom.handJavier.length : dom.handKarla.length;
+          const myScore = currentProfile === 'Karla' ? (dom.scoreKarla || 0) : (dom.scoreJavier || 0);
+          const partnerScore = currentProfile === 'Karla' ? (dom.scoreJavier || 0) : (dom.scoreKarla || 0);
+
+          return (
+            <DominoArena
+              myHand={myHand}
+              partnerTileCount={partnerTileCount}
+              boneyardCount={dom.boneyard.length}
+              board={dom.board}
+              openLeft={dom.openLeft}
+              openRight={dom.openRight}
+              openingTileId={dom.openingTileId}
+              myScore={myScore}
+              partnerScore={partnerScore}
+              partnerName={getDisplayName(currentProfile === 'Karla' ? 'Javier' : 'Karla')}
+              isMyTurn={dom.turn === currentProfile}
+              isPlaying={dom.phase === 'playing'}
+              lastAction={dom.lastAction}
+              primaryColor="#6366f1"
+              onPlayTile={(tile, side) => void handlePlayDominoTile(tile, side)}
+              onDrawBoneyard={() => void handleDrawDominoBoneyard()}
+              onPassTurn={() => void handlePassDominoTurn()}
+              onNewRound={() => void handleResetDomino()}
+            />
+          );
+        })()}
+
+        {/* ================= 8. UNO (MODULAR) ================= */}
+        {activeGame === 'uno' && (() => {
+          const un = gamesState.uno || DEFAULT_GAMES_STATE.uno;
+          const myHand = currentProfile === 'Karla' ? un.handKarla : un.handJavier;
+          const partnerCardCount = currentProfile === 'Karla' ? un.handJavier.length : un.handKarla.length;
+          const calledPartner = currentProfile === 'Karla' ? un.calledUnoJavier : un.calledUnoKarla;
+          const calledSelf = currentProfile === 'Karla' ? un.calledUnoKarla : un.calledUnoJavier;
+          const myScore = currentProfile === 'Karla' ? (un.scoreKarla || 0) : (un.scoreJavier || 0);
+          const partnerScore = currentProfile === 'Karla' ? (un.scoreJavier || 0) : (un.scoreKarla || 0);
+
+          return (
+            <UnoArena
+              myHand={myHand}
+              partnerCardCount={partnerCardCount}
+              deckCount={un.deck.length}
+              currentCard={un.currentCard}
+              currentColor={un.currentColor}
+              partnerName={getDisplayName(currentProfile === 'Karla' ? 'Javier' : 'Karla')}
+              isMyTurn={un.turn === currentProfile}
+              isPlaying={un.phase === 'playing'}
+              hasDrawnThisTurn={Boolean(un.hasDrawnThisTurn)}
+              myScore={myScore}
+              partnerScore={partnerScore}
+              calledUnoPartner={calledPartner}
+              calledUnoSelf={calledSelf}
+              lastAction={un.lastAction}
+              primaryColor="#ef4444"
+              onPlayCard={(card, color) => void handlePlayUnoCard(card, color)}
+              onDrawCard={() => void handleDrawUnoCard()}
+              onPassTurn={() => void handlePassUnoTurn()}
+              onCallUno={() => void handleCallUno()}
+              onCatchUnoMiss={() => void handleCatchUnoMiss()}
+              onNewRound={() => void handleResetUno()}
+            />
+          );
+        })()}
       </View>
     );
   };
@@ -1697,7 +2891,7 @@ export const GamesScreen: React.FC = () => {
 
     // Chess
     if (!gamesState.chess.winner && (gamesState.chess.lastMove !== null || gamesState.chess.capturedByW.length > 0 || gamesState.chess.capturedByB.length > 0)) {
-      const isWhite = currentProfile === 'Javier';
+      const isWhite = currentProfile === 'Karla';
       const isMyTurn =
         (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
       list.push({
@@ -1743,7 +2937,11 @@ export const GamesScreen: React.FC = () => {
     }
 
     // Draw & Guess
-    if (gamesState.drawGuess && gamesState.drawGuess.phase !== 'game_over') {
+    if (
+      gamesState.drawGuess &&
+      gamesState.drawGuess.phase !== 'game_over' &&
+      gamesState.drawGuess.phase !== 'idle'
+    ) {
       const isMeDrawer = gamesState.drawGuess.drawer === currentProfile;
       const drawerName = getDisplayName(gamesState.drawGuess.drawer);
       const isChoosing = gamesState.drawGuess.phase === 'choosing_word';
@@ -1759,6 +2957,32 @@ export const GamesScreen: React.FC = () => {
       });
     }
 
+    // Dominó
+    if (gamesState.domino && gamesState.domino.phase === 'playing' && gamesState.domino.board.length > 0) {
+      const isMyTurn = gamesState.domino.turn === currentProfile;
+      list.push({
+        id: 'domino',
+        name: 'Dominó',
+        icon: 'apps',
+        statusText: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.domino.turn)}`,
+        detail: isMyTurn ? 'Coloca una ficha en la mesa' : 'Esperando ficha',
+        isMyTurn,
+      });
+    }
+
+    // UNO
+    if (gamesState.uno && gamesState.uno.phase === 'playing') {
+      const isMyTurn = gamesState.uno.turn === currentProfile;
+      list.push({
+        id: 'uno',
+        name: 'UNO',
+        icon: 'flame',
+        statusText: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(gamesState.uno.turn)}`,
+        detail: isMyTurn ? 'Juega carta o roba del mazo' : 'Esperando jugada',
+        isMyTurn,
+      });
+    }
+
     return list;
   }, [gamesState, currentProfile, sudoku, getDisplayName]);
 
@@ -1766,69 +2990,110 @@ export const GamesScreen: React.FC = () => {
     (id: GameTab) => {
       switch (id) {
         case 'tictactoe': {
-          if (gamesState.ticTacToe.winner) return { text: 'Terminado', isMyTurn: false };
+          if (gamesState.ticTacToe.winner) return { text: 'Nueva partida', isMyTurn: false };
+          const hasBoardMoves = gamesState.ticTacToe.board.some((c) => c !== null);
+          const hasScores = (gamesState.ticTacToe.scoreKarla || 0) > 0 || (gamesState.ticTacToe.scoreJavier || 0) > 0;
+          if (!hasBoardMoves && !hasScores) {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
           const isMyTurn = gamesState.ticTacToe.turn === currentProfile;
-          const turnPlayer = gamesState.ticTacToe.turn;
           return {
-            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(turnPlayer)}`,
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
             isMyTurn,
           };
         }
         case 'battleship': {
-          if (gamesState.battleship.winner) return { text: 'Terminado', isMyTurn: false };
-          if (gamesState.battleship.phase === 'setup')
-            return { text: 'Acomodar', isMyTurn: true };
+          if (gamesState.battleship.phase === 'idle' || gamesState.battleship.phase === 'finished' || gamesState.battleship.winner) {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
+          if (gamesState.battleship.phase === 'setup') {
+            const hasWins = (gamesState.battleship.winsKarla || 0) > 0 || (gamesState.battleship.winsJavier || 0) > 0;
+            if (!gamesState.battleship.readyKarla && !gamesState.battleship.readyJavier && !hasWins) {
+              return { text: 'Nueva partida', isMyTurn: false };
+            }
+            const isMyTurn = currentProfile === 'Karla' ? !gamesState.battleship.readyKarla : !gamesState.battleship.readyJavier;
+            return { text: isMyTurn ? 'Tu turno' : 'Su turno', isMyTurn };
+          }
           const isMyTurn = gamesState.battleship.turn === currentProfile;
-          const turnPlayer = gamesState.battleship.turn;
           return {
-            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(turnPlayer)}`,
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
             isMyTurn,
           };
         }
         case 'chess': {
-          if (gamesState.chess.winner) return { text: 'Jaque Mate', isMyTurn: false };
+          if (gamesState.chess.winner) return { text: 'Nueva partida', isMyTurn: false };
+          const hasMoves = chessHistory.length > 0 || gamesState.chess.lastMove !== null;
+          const hasScores = (gamesState.chess.winsKarla || 0) > 0 || (gamesState.chess.winsJavier || 0) > 0;
+          if (!hasMoves && !hasScores) {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
           const isWhite = currentProfile === 'Karla';
           const isMyTurn =
             (gamesState.chess.turn === 'w' && isWhite) || (gamesState.chess.turn === 'b' && !isWhite);
-          const activePlayer = gamesState.chess.turn === 'w' ? 'Karla' : 'Javier';
           return {
-            text: isMyTurn ? 'Tu turno' : `Turno de ${getDisplayName(activePlayer)}`,
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
             isMyTurn,
           };
         }
         case 'sudoku': {
-          if (sudoku.completed) return { text: 'Completado', isMyTurn: false };
-          return { text: 'Colaborativo', isMyTurn: true };
+          const hasUserInput = sudoku.board.some((row, r) =>
+            row.some((v, c) => v !== 0 && !sudoku.fixed[r][c])
+          );
+          if (sudoku.completed || !hasUserInput) return { text: 'Nueva partida', isMyTurn: false };
+          return { text: 'Tu turno', isMyTurn: true };
         }
         case 'hangman': {
-          if (gamesState.hangman.status !== 'playing')
-            return {
-              text: gamesState.hangman.status === 'won' ? '¡Ganado!' : 'Terminado',
-              isMyTurn: false,
-            };
-          return { text: 'Adivinar', isMyTurn: true };
+          const hasActivity = gamesState.hangman.guessed.length > 0 || Boolean(gamesState.hangman.isPartnerChallenge);
+          if (gamesState.hangman.status !== 'playing' || !hasActivity) {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
+          return { text: 'Tu turno', isMyTurn: true };
         }
         case 'drawguess': {
           const dg = gamesState.drawGuess;
-          if (!dg || dg.phase === 'game_over') return { text: 'Terminado', isMyTurn: false };
+          if (!dg || dg.phase === 'game_over' || dg.phase === 'idle') return { text: 'Nueva partida', isMyTurn: false };
           const isDrawer = (dg.drawer || 'Karla') === currentProfile;
           if (dg.phase === 'choosing_word') {
             return {
-              text: isDrawer ? 'Elige palabra' : 'Eligiendo...',
+              text: isDrawer ? 'Tu turno' : 'Su turno',
               isMyTurn: isDrawer,
             };
           }
-          if (dg.phase === 'drawing') {
-            return {
-              text: isDrawer ? 'Tú dibujas' : `${getDisplayName(dg.drawer || 'Karla')} dibuja`,
-              isMyTurn: isDrawer,
-            };
+          return { text: 'Tu turno', isMyTurn: true };
+        }
+        case 'domino': {
+          const dom = gamesState.domino;
+          if (!dom || dom.phase === 'round_over' || dom.winner || dom.phase === 'idle') {
+            return { text: 'Nueva partida', isMyTurn: false };
           }
-          return { text: 'Siguiente ronda', isMyTurn: true };
+          const hasWins = (dom.winsKarla || 0) > 0 || (dom.winsJavier || 0) > 0;
+          if ((dom.board?.length || 0) === 0 && !dom.lastAction && !hasWins) {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
+          const isMyTurn = dom.turn === currentProfile;
+          return {
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
+            isMyTurn,
+          };
+        }
+        case 'uno': {
+          const un = gamesState.uno;
+          if (!un || un.phase === 'round_over' || un.winner || un.phase === 'idle') {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
+          const hasWins = (un.winsKarla || 0) > 0 || (un.winsJavier || 0) > 0;
+          if ((un.discardPile?.length || 0) <= 1 && !un.lastAction && !hasWins) {
+            return { text: 'Nueva partida', isMyTurn: false };
+          }
+          const isMyTurn = un.turn === currentProfile;
+          return {
+            text: isMyTurn ? 'Tu turno' : 'Su turno',
+            isMyTurn,
+          };
         }
       }
     },
-    [gamesState, currentProfile, sudoku]
+    [gamesState, currentProfile, sudoku, chessHistory.length]
   );
 
   const getGameNaturalStatus = useCallback(
@@ -1908,6 +3173,32 @@ export const GamesScreen: React.FC = () => {
           }
           return `Ronda ${dg.currentRound} de 6 finalizada`;
         }
+        case 'domino': {
+          const dom = gamesState.domino;
+          if (!dom || dom.phase === 'idle') return 'Mesa clásica de 28 fichas';
+          if (dom.winner) {
+            return dom.winner === currentProfile
+              ? '¡Ganaste la mano de dominó!'
+              : dom.winner === 'Empate'
+              ? 'Mano trancada en empate'
+              : `${partnerName} ganó la mano`;
+          }
+          return dom.turn === currentProfile
+            ? '¡Te toca colocar ficha en la mesa!'
+            : `Esperando ficha de ${partnerName}`;
+        }
+        case 'uno': {
+          const un = gamesState.uno;
+          if (!un || un.phase === 'idle') return 'Colores, números y comodines';
+          if (un.winner) {
+            return un.winner === currentProfile
+              ? '¡Ganaste la partida de UNO!'
+              : `${partnerName} ganó la partida`;
+          }
+          return un.turn === currentProfile
+            ? '¡Tu turno de tirar o robar carta!'
+            : `Turno de ${partnerName}`;
+        }
       }
     },
     [gamesState, currentProfile, sudoku, wrongGuessesCount]
@@ -1953,6 +3244,16 @@ export const GamesScreen: React.FC = () => {
         }
         return 'Dibuja y Adivina';
       }
+      case 'domino': {
+        const dom = gamesState.domino;
+        const turn = dom?.turn || 'Karla';
+        return turn === currentProfile ? 'Tu turno de tirar' : `Turno de ${getDisplayName(turn)}`;
+      }
+      case 'uno': {
+        const un = gamesState.uno;
+        const turn = un?.turn || 'Karla';
+        return turn === currentProfile ? 'Tu turno de tirar' : `Turno de ${getDisplayName(turn)}`;
+      }
     }
   };
 
@@ -1987,6 +3288,12 @@ export const GamesScreen: React.FC = () => {
               case 'drawguess':
                 void handleResetDrawGuess();
                 break;
+              case 'domino':
+                void handleResetDomino();
+                break;
+              case 'uno':
+                void handleResetUno();
+                break;
             }
           },
         },
@@ -1995,70 +3302,157 @@ export const GamesScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 
-      {/* ================= VISTA LOBBY ZERO-SCROLL: MARCADOR + GRID 2x2 + 1 FULL WIDTH ================= */}
+      {/* ================= VISTA LOBBY ZERO-SCROLL: MARCADOR + GRID 2x4 SIN SCROLL ================= */}
       <View style={styles.lobbyZeroScrollContainer}>
-        {/* 1. Marcador Compacto Karlita vs Javier */}
-        <View style={[styles.lobbyScoreboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TouchableOpacity
-            style={styles.lobbyPlayer}
-            onPress={() => handleOpenScoreBreakdown('Karla')}
-            activeOpacity={0.7}
-            accessibilityLabel={`Ver desglose de puntos de ${getDisplayName('Karla')}`}
-          >
-            <View style={[styles.lobbyAvatarCircle, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]}>
-              <Text style={[styles.lobbyAvatarText, { color: '#9333ea' }]}>
-                {getDisplayName('Karla').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <View>
-              <Text style={[styles.lobbyPlayerName, { color: colors.text }]} numberOfLines={1}>
-                {getDisplayName('Karla')}
-              </Text>
-              <View style={styles.lobbyScorePills}>
-                <Text style={[styles.lobbyPoints, { color: '#9333ea' }]}>{lb.pointsKarla} pts</Text>
-                <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>• {lb.trophiesKarla} ★</Text>
+        {/* 1. Marcador Editorial Bento Karlita vs Javier con Pochito ("Panzón") */}
+        {(() => {
+          const karlaAvatarUri = getAvatarUri('Karla');
+          const javierAvatarUri = getAvatarUri('Javier');
+          const karlaName = getDisplayName('Karla');
+          const javierName = getDisplayName('Javier');
+          const karlaLeading = lb.pointsKarla > lb.pointsJavier;
+          const javierLeading = lb.pointsJavier > lb.pointsKarla;
+          const totalPts = lb.pointsKarla + lb.pointsJavier;
+          const karlaRatio = totalPts > 0 ? Math.max(12, Math.min(88, Math.round((lb.pointsKarla / totalPts) * 100))) : 50;
+          const javierRatio = 100 - karlaRatio;
+
+          return (
+            <LinearGradient
+              colors={isDark ? [colors.surface, colors.surfaceAlt] : [colors.primaryLight, colors.surface]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.lobbyScoreboard, { borderColor: colors.border }]}
+            >
+              <View style={styles.lobbyScoreTopRow}>
+                {/* Karlita */}
+                <TouchableOpacity
+                  style={styles.lobbyPlayer}
+                  onPress={() => handleOpenScoreBreakdown('Karla')}
+                  activeOpacity={0.75}
+                  accessibilityLabel={`Ver desglose de puntos de ${karlaName}`}
+                >
+                  <View style={styles.lobbyAvatarWrap}>
+                    <View
+                      style={[
+                        styles.lobbyAvatarCircle,
+                        {
+                          backgroundColor: '#fdf2f8',
+                          borderColor: karlaLeading ? '#ec4899' : '#f472b6',
+                          borderWidth: karlaLeading ? 2.2 : 1.5,
+                        },
+                      ]}
+                    >
+                      {karlaAvatarUri ? (
+                        <Image source={{ uri: karlaAvatarUri }} style={styles.lobbyAvatarImg} />
+                      ) : (
+                        <Text style={[styles.lobbyAvatarText, { color: '#be185d' }]}>
+                          {karlaName.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    {karlaLeading && (
+                      <View style={styles.leaderCrownBadge}>
+                        <Text style={styles.leaderCrownEmoji}>👑</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.lobbyPlayerName, { color: colors.text }]} numberOfLines={1}>
+                      {karlaName}
+                    </Text>
+                    <View style={styles.lobbyScorePills}>
+                      <Text style={[styles.lobbyPoints, { color: '#be185d' }]}>{lb.pointsKarla} pts</Text>
+                      <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>• {lb.trophiesKarla}★</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Árbitro Pochito + Pill Duelo de Pareja */}
+                <TouchableOpacity
+                  style={styles.lobbyCenterMascotBtn}
+                  onPress={() => handleOpenScoreBreakdown('all')}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Ver desglose comparativo de todos los juegos"
+                >
+                  <View style={styles.lobbyPochitoMiniWrap}>
+                    <View style={{ transform: [{ scale: 0.78 }] }}>
+                      <PochitoBear mood="feliz" size="sm" accessory={petMeta.accessory} />
+                    </View>
+                  </View>
+                  <View style={[styles.lobbyVsPill, { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}35` }]}>
+                    <Text style={[styles.lobbyVsPillText, { color: colors.primary }]}>DUELO</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Javier */}
+                <TouchableOpacity
+                  style={[styles.lobbyPlayer, { justifyContent: 'flex-end', flexDirection: 'row-reverse' }]}
+                  onPress={() => handleOpenScoreBreakdown('Javier')}
+                  activeOpacity={0.75}
+                  accessibilityLabel={`Ver desglose de puntos de ${javierName}`}
+                >
+                  <View style={styles.lobbyAvatarWrap}>
+                    <View
+                      style={[
+                        styles.lobbyAvatarCircle,
+                        {
+                          backgroundColor: '#f0f9ff',
+                          borderColor: javierLeading ? '#0ea5e9' : '#7dd3fc',
+                          borderWidth: javierLeading ? 2.2 : 1.5,
+                        },
+                      ]}
+                    >
+                      {javierAvatarUri ? (
+                        <Image source={{ uri: javierAvatarUri }} style={styles.lobbyAvatarImg} />
+                      ) : (
+                        <Text style={[styles.lobbyAvatarText, { color: '#0369a1' }]}>
+                          {javierName.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    {javierLeading && (
+                      <View style={styles.leaderCrownBadge}>
+                        <Text style={styles.leaderCrownEmoji}>👑</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={[styles.lobbyPlayerName, { color: colors.text }]} numberOfLines={1}>
+                      {javierName}
+                    </Text>
+                    <View style={styles.lobbyScorePills}>
+                      <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>{lb.trophiesJavier}★ •</Text>
+                      <Text style={[styles.lobbyPoints, { color: '#0284c7' }]}>{lb.pointsJavier} pts</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
               </View>
-            </View>
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.lobbyVsBadge, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
-            onPress={() => handleOpenScoreBreakdown('all')}
-            activeOpacity={0.7}
-            accessibilityLabel="Ver desglose comparativo de todos los juegos"
-          >
-            <Text style={[styles.lobbyVsText, { color: colors.primary }]}>VS</Text>
-            <Ionicons name="bar-chart-outline" size={10} color={colors.primary} style={{ marginTop: 1 }} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.lobbyPlayer, { justifyContent: 'flex-end', flexDirection: 'row-reverse' }]}
-            onPress={() => handleOpenScoreBreakdown('Javier')}
-            activeOpacity={0.7}
-            accessibilityLabel={`Ver desglose de puntos de ${getDisplayName('Javier')}`}
-          >
-            <View style={[styles.lobbyAvatarCircle, { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }]}>
-              <Text style={[styles.lobbyAvatarText, { color: '#0284c7' }]}>
-                {getDisplayName('Javier').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[styles.lobbyPlayerName, { color: colors.text }]} numberOfLines={1}>
-                {getDisplayName('Javier')}
-              </Text>
-              <View style={styles.lobbyScorePills}>
-                <Text style={[styles.lobbyStars, { color: colors.textMuted }]}>{lb.trophiesJavier} ★ •</Text>
-                <Text style={[styles.lobbyPoints, { color: '#0284c7' }]}>{lb.pointsJavier} pts</Text>
+              {/* Barra Visual del Duelo */}
+              <View style={[styles.duelTrack, { backgroundColor: isDark ? '#1e293b' : '#f1f5f9' }]}>
+                <LinearGradient
+                  colors={['#f472b6', '#ec4899']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.duelFillLeft, { flex: karlaRatio }]}
+                />
+                <View style={{ width: 2, backgroundColor: isDark ? colors.surface : '#ffffff' }} />
+                <LinearGradient
+                  colors={['#38bdf8', '#0284c7']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.duelFillRight, { flex: javierRatio }]}
+                />
               </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+            </LinearGradient>
+          );
+        })()}
 
-        {/* 2. Grid de 5 Juegos: 2 Columnas x 3 Filas (Misma altura para todas mediante flex) */}
+        {/* 2. Grid Bento 2x4 Zero-Scroll */}
         {(() => {
           // Ordenar juegos: donde es el turno del usuario van PRIMERO
           const sortedGames = [...ALL_GAMES].sort((a, b) => {
@@ -2078,111 +3472,135 @@ export const GamesScreen: React.FC = () => {
             if (g.id === 'tictactoe') {
               const winsK = gamesState.ticTacToe.scoreKarla || 0;
               const winsJ = gamesState.ticTacToe.scoreJavier || 0;
-              miniStats = `${winsK} - ${winsJ} rondas`;
+              miniStats = winsK > 0 || winsJ > 0 ? `${winsK} - ${winsJ}` : 'Nueva partida';
             } else if (g.id === 'chess') {
-              miniStats = `${chessHistory.length} movimientos`;
+              const winsK = gamesState.chess?.winsKarla || 0;
+              const winsJ = gamesState.chess?.winsJavier || 0;
+              miniStats = winsK > 0 || winsJ > 0 ? `${winsK} - ${winsJ}` : chessHistory.length > 0 ? `${chessHistory.length} jugadas` : 'Nueva partida';
             } else if (g.id === 'battleship') {
-              miniStats = 'Combate naval 10x10';
+              const winsK = gamesState.battleship?.winsKarla || 0;
+              const winsJ = gamesState.battleship?.winsJavier || 0;
+              miniStats = winsK > 0 || winsJ > 0 ? `${winsK} - ${winsJ}` : 'Nueva partida';
             } else if (g.id === 'sudoku') {
               const diffMap: Record<string, string> = { easy: 'fácil', medium: 'medio', hard: 'difícil' };
-              miniStats = `Nivel ${diffMap[sudoku.difficulty] || sudoku.difficulty}`;
+              miniStats = sudoku.completed ? 'Completado' : `Nivel ${diffMap[sudoku.difficulty] || sudoku.difficulty}`;
             } else if (g.id === 'hangman') {
               miniStats = `${6 - wrongGuessesCount} vidas`;
             } else if (g.id === 'drawguess') {
               const round = gamesState.drawGuess?.currentRound || 1;
               const phase = gamesState.drawGuess?.phase;
-              miniStats = phase === 'game_over' ? 'Partida terminada' : `Ronda ${round} de 6`;
+              miniStats = phase === 'game_over' ? 'Terminada' : `Ronda ${round}/6`;
+            } else if (g.id === 'domino') {
+              const winsK = gamesState.domino?.winsKarla || 0;
+              const winsJ = gamesState.domino?.winsJavier || 0;
+              miniStats = winsK > 0 || winsJ > 0 ? `${winsK} - ${winsJ}` : 'Nueva partida';
+            } else if (g.id === 'uno') {
+              const winsK = gamesState.uno?.winsKarla || 0;
+              const winsJ = gamesState.uno?.winsJavier || 0;
+              miniStats = winsK > 0 || winsJ > 0 ? `${winsK} - ${winsJ}` : 'Nueva partida';
             }
+
+            const cardGradient: readonly [string, string] = isDark
+              ? [`${color}2E`, colors.surface]
+              : [`${color}1C`, '#ffffff'];
 
             return (
               <PressableScale
                 key={g.id}
                 onPress={() => setPendingGameToLaunch(g.id)}
                 style={[
-                  styles.lobbyCardCompact,
+                  styles.lobbyCardOuter,
                   {
-                    backgroundColor: isDark ? colors.surface : '#ffffff',
-                    borderColor: `${color}50`,
-                    borderWidth: 1.5,
+                    borderColor: isMyTurn ? color : (isDark ? `${color}80` : `${color}66`),
+                    borderWidth: isMyTurn ? 2 : 1.5,
                     shadowColor: color,
+                    shadowOpacity: isMyTurn ? 0.24 : 0.14,
                   },
                 ]}
                 scaleTo={0.96}
                 accessibilityLabel={`Jugar ${g.label}`}
               >
-                {/* Ícono en círculo pastel del color del juego */}
-                <View style={[styles.lobbyCardIconCircle, { backgroundColor: g.bgTint }]}>
-                  <Ionicons name={g.icon as any} size={24} color={color} />
-                </View>
-
-                {/* Nombre del juego centrado */}
-                <Text
-                  style={[styles.lobbyCardTitle, { color: colors.text }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
+                <LinearGradient
+                  colors={cardGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.lobbyCardCompact}
                 >
-                  {g.label}
-                </Text>
-
-                {/* Mini estado y descripción */}
-                <Text style={[styles.lobbyCardMiniStats, { color }]} numberOfLines={1}>
-                  {miniStats}
-                </Text>
-
-                <Text
-                  style={[styles.lobbyCardDesc, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                >
-                  {g.description}
-                </Text>
-
-                {/* Badge de estado centrado abajo */}
-                <View
-                  style={[
-                    styles.turnBadgePill,
-                    isMyTurn
-                      ? { backgroundColor: color, borderColor: color }
-                      : { backgroundColor: `${color}18`, borderColor: `${color}40` },
-                  ]}
-                >
-                  {isMyTurn && (
-                    <Ionicons name="sparkles" size={10} color="#ffffff" style={{ marginRight: 3 }} />
-                  )}
-                  <Text
+                  {/* Ícono SVG ilustrado dentro de halo iluminado */}
+                  <View
                     style={[
-                      styles.lobbyBadgeText,
-                      { color: isMyTurn ? '#ffffff' : color },
+                      styles.lobbyCardIconCircle,
+                      {
+                        backgroundColor: isDark ? `${color}30` : g.bgTint,
+                        borderColor: `${color}55`,
+                        borderWidth: 1.2,
+                        shadowColor: color,
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.18,
+                        shadowRadius: 5,
+                      },
                     ]}
-                    numberOfLines={1}
                   >
-                    {status.text}
+                    <GameVectorIcon gameId={g.id} size={27} color={color} />
+                  </View>
+
+                  {/* Nombre del juego con tipografía editorial */}
+                  <Text
+                    style={[styles.lobbyCardTitle, { color: colors.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {g.label}
                   </Text>
-                </View>
+
+                  {/* Fila compacta de estadística y badge de turno */}
+                  <View style={styles.lobbyCardFooter}>
+                    <Text style={[styles.lobbyCardMiniStats, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {miniStats}
+                    </Text>
+                    <View
+                      style={[
+                        styles.turnBadgePill,
+                        isMyTurn
+                          ? { backgroundColor: color, borderColor: color }
+                          : { backgroundColor: `${color}15`, borderColor: `${color}35` },
+                      ]}
+                    >
+                      {isMyTurn && (
+                        <Ionicons name="sparkles" size={9.5} color="#ffffff" style={{ marginRight: 3 }} />
+                      )}
+                      <Text
+                        style={[
+                          styles.lobbyBadgeText,
+                          { color: isMyTurn ? '#ffffff' : color },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {isMyTurn ? '¡Tu turno!' : status.text}
+                      </Text>
+                    </View>
+                  </View>
+                </LinearGradient>
               </PressableScale>
             );
           };
 
+          // Emparejar en 4 filas de 2 columnas fijas (Zero-Scroll)
+          const gameRows: Array<[typeof ALL_GAMES[0], typeof ALL_GAMES[0] | undefined]> = [];
+          for (let i = 0; i < sortedGames.length; i += 2) {
+            gameRows.push([sortedGames[i], sortedGames[i + 1]]);
+          }
+
           return (
             <View style={styles.lobbyGamesGridArea}>
-              <View style={styles.lobbyGridRowsContainer}>
-                {/* Fila 1 */}
-                <View style={styles.lobbyGridRow}>
-                  {sortedGames[0] && <View style={styles.lobbyCol}>{renderCard(sortedGames[0])}</View>}
-                  {sortedGames[1] && <View style={styles.lobbyCol}>{renderCard(sortedGames[1])}</View>}
+              {gameRows.map((row, idx) => (
+                <View key={`lobby-row-${idx}`} style={styles.lobbyGridRow}>
+                  <View style={styles.lobbyCol}>{renderCard(row[0])}</View>
+                  <View style={styles.lobbyCol}>
+                    {row[1] ? renderCard(row[1]) : <View style={{ flex: 1 }} />}
+                  </View>
                 </View>
-
-                {/* Fila 2 */}
-                <View style={styles.lobbyGridRow}>
-                  {sortedGames[2] && <View style={styles.lobbyCol}>{renderCard(sortedGames[2])}</View>}
-                  {sortedGames[3] && <View style={styles.lobbyCol}>{renderCard(sortedGames[3])}</View>}
-                </View>
-
-                {/* Fila 3 */}
-                <View style={styles.lobbyGridRow}>
-                  {sortedGames[4] && <View style={styles.lobbyCol}>{renderCard(sortedGames[4])}</View>}
-                  {sortedGames[5] && <View style={styles.lobbyCol}>{renderCard(sortedGames[5])}</View>}
-                </View>
-              </View>
+              ))}
             </View>
           );
         })()}
@@ -2216,15 +3634,15 @@ export const GamesScreen: React.FC = () => {
                 {/* Tirador sutil superior del Bottom Sheet */}
                 <View style={[styles.sheetHandle, { backgroundColor: isDark ? '#334155' : '#cbd5e1' }]} />
 
-                {/* Ícono Grande con Degradado Temático */}
+                {/* Ícono Grande Ilustrado con Degradado Temático */}
                 <View style={styles.launchModalIconWrap}>
                   <LinearGradient
-                    colors={[gameInfo.iconColor, `${gameInfo.iconColor}dd`]}
+                    colors={[gameInfo.iconColor, `${gameInfo.iconColor}cc`]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.launchModalIconBox}
                   >
-                    <Ionicons name={gameInfo.icon as any} size={34} color="#ffffff" />
+                    <GameVectorIcon gameId={gameInfo.id} size={38} color="#ffffff" />
                   </LinearGradient>
                 </View>
 
@@ -2235,7 +3653,7 @@ export const GamesScreen: React.FC = () => {
                   {gameInfo.description}
                 </Text>
 
-                {/* Resumen del Marcador de la Pareja en este Juego */}
+                {/* Resumen del Marcador de la Pareja en este Juego con Fotos Reales */}
                 {(() => {
                   const bdKey = pendingGameToLaunch as keyof GameScoreBreakdown;
                   const item = gamesState.leaderboard?.breakdown?.[bdKey];
@@ -2243,42 +3661,73 @@ export const GamesScreen: React.FC = () => {
                   const winsJ = item?.winsJavier ?? 0;
                   const ptsK = item?.pointsKarla ?? 0;
                   const ptsJ = item?.pointsJavier ?? 0;
+                  const karlaAvatarUri = getAvatarUri('Karla');
+                  const javierAvatarUri = getAvatarUri('Javier');
+                  const karlaName = getDisplayName('Karla');
+                  const javierName = getDisplayName('Javier');
+                  const totalWins = winsK + winsJ;
+                  const karlaWinRatio = totalWins > 0 ? Math.max(12, Math.min(88, Math.round((winsK / totalWins) * 100))) : 50;
 
                   return (
-                    <View style={[styles.launchModalScoreBox, { backgroundColor: isDark ? colors.surfaceAlt : '#f8fafc', borderColor: colors.border }]}>
-                      <View style={styles.launchModalPlayerScore}>
-                        <View style={[styles.launchMiniAvatar, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
-                          <Text style={[styles.launchMiniAvatarText, { color: '#be185d' }]}>K</Text>
+                    <LinearGradient
+                      colors={isDark ? [colors.surfaceAlt, colors.surface] : [colors.primaryLight, '#f8fafc']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[styles.launchModalScoreBox, { borderColor: colors.border }]}
+                    >
+                      <View style={styles.launchModalScoreTopRow}>
+                        <View style={styles.launchModalPlayerScore}>
+                          <View style={[styles.launchMiniAvatar, { backgroundColor: '#fdf2f8', borderColor: '#f472b6' }]}>
+                            {karlaAvatarUri ? (
+                              <Image source={{ uri: karlaAvatarUri }} style={styles.launchMiniAvatarImg} />
+                            ) : (
+                              <Text style={[styles.launchMiniAvatarText, { color: '#be185d' }]}>
+                                {karlaName.charAt(0).toUpperCase()}
+                              </Text>
+                            )}
+                          </View>
+                          <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
+                            {karlaName}
+                          </Text>
+                          <Text style={[styles.launchModalPlayerWins, { color: colors.textSecondary }]}>
+                            {winsK === 1 ? '1 victoria' : `${winsK} victorias`}
+                          </Text>
+                          <Text style={styles.launchModalPlayerPts}>{ptsK} pts</Text>
                         </View>
-                        <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
-                          Karlita
-                        </Text>
-                        <Text style={styles.launchModalPlayerWins}>
-                          {winsK === 1 ? '1 victoria' : `${winsK} victorias`}
-                        </Text>
-                        <Text style={styles.launchModalPlayerPts}>{ptsK} pts</Text>
+
+                        <View style={styles.launchModalVsDivider}>
+                          <View style={[styles.launchModalVsCircle, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
+                            <Text style={[styles.launchModalVsText, { color: colors.primary }]}>VS</Text>
+                          </View>
+                          <Ionicons name="trophy" size={13} color="#f59e0b" style={{ marginTop: 3 }} />
+                        </View>
+
+                        <View style={[styles.launchModalPlayerScore, { alignItems: 'flex-end' }]}>
+                          <View style={[styles.launchMiniAvatar, { backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }]}>
+                            {javierAvatarUri ? (
+                              <Image source={{ uri: javierAvatarUri }} style={styles.launchMiniAvatarImg} />
+                            ) : (
+                              <Text style={[styles.launchMiniAvatarText, { color: '#0369a1' }]}>
+                                {javierName.charAt(0).toUpperCase()}
+                              </Text>
+                            )}
+                          </View>
+                          <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
+                            {javierName}
+                          </Text>
+                          <Text style={[styles.launchModalPlayerWins, { color: colors.textSecondary }]}>
+                            {winsJ === 1 ? '1 victoria' : `${winsJ} victorias`}
+                          </Text>
+                          <Text style={styles.launchModalPlayerPts}>{ptsJ} pts</Text>
+                        </View>
                       </View>
 
-                      <View style={styles.launchModalVsDivider}>
-                        <View style={styles.launchModalVsCircle}>
-                          <Text style={styles.launchModalVsText}>VS</Text>
-                        </View>
-                        <Ionicons name="trophy" size={12} color="#f59e0b" style={{ marginTop: 2 }} />
+                      <View style={[styles.duelTrack, { backgroundColor: isDark ? '#1e293b' : '#e2e8f0', marginTop: 8 }]}>
+                        <View style={[styles.duelFillLeft, { flex: karlaWinRatio, backgroundColor: '#ec4899' }]} />
+                        <View style={{ width: 2, backgroundColor: colors.surface }} />
+                        <View style={[styles.duelFillRight, { flex: 100 - karlaWinRatio, backgroundColor: '#0ea5e9' }]} />
                       </View>
-
-                      <View style={[styles.launchModalPlayerScore, { alignItems: 'flex-end' }]}>
-                        <View style={[styles.launchMiniAvatar, { backgroundColor: '#f0f9ff', borderColor: '#38bdf8' }]}>
-                          <Text style={[styles.launchMiniAvatarText, { color: '#0369a1' }]}>J</Text>
-                        </View>
-                        <Text style={[styles.launchModalPlayerName, { color: colors.text }]} numberOfLines={1}>
-                          Javier
-                        </Text>
-                        <Text style={styles.launchModalPlayerWins}>
-                          {winsJ === 1 ? '1 victoria' : `${winsJ} victorias`}
-                        </Text>
-                        <Text style={styles.launchModalPlayerPts}>{ptsJ} pts</Text>
-                      </View>
-                    </View>
+                    </LinearGradient>
                   );
                 })()}
 
@@ -2322,6 +3771,16 @@ export const GamesScreen: React.FC = () => {
                         if (!dg || !dg.phase || dg.phase === 'idle' || dg.phase === 'game_over') {
                           void handleResetDrawGuess();
                         }
+                      } else if (toLaunch === 'domino') {
+                        const dom = gamesState.domino;
+                        if (!dom || !dom.phase || dom.phase === 'idle' || dom.phase === 'round_over') {
+                          void handleResetDomino();
+                        }
+                      } else if (toLaunch === 'uno') {
+                        const un = gamesState.uno;
+                        if (!un || !un.phase || un.phase === 'idle' || un.phase === 'round_over') {
+                          void handleResetUno();
+                        }
                       }
                       setActiveGame(toLaunch);
                     }}
@@ -2348,12 +3807,13 @@ export const GamesScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => setActiveGame(null)}
       >
-        <SafeAreaView style={[styles.gameFullScreenContainer, { backgroundColor: isDark ? colors.background : '#fff5f7' }]}>
+        <SafeAreaView style={[styles.gameFullScreenContainer, { backgroundColor: colors.background }]}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
 
           {/* Header Unificado Premium del Juego */}
           {activeGame && (
             <GameHeader
+              gameId={activeGame}
               title={ALL_GAMES.find((g) => g.id === activeGame)?.label || 'Juego'}
               icon={(ALL_GAMES.find((g) => g.id === activeGame)?.icon as any) || 'game-controller'}
               turnLabel={getGameTurnLabel(activeGame)}
@@ -2367,6 +3827,10 @@ export const GamesScreen: React.FC = () => {
                   ? bs.turn
                   : activeGame === 'drawguess'
                   ? (gamesState.drawGuess?.drawer || 'Karla')
+                  : activeGame === 'domino'
+                  ? gamesState.domino?.turn
+                  : activeGame === 'uno'
+                  ? gamesState.uno?.turn
                   : null
               }
               onBack={() => setActiveGame(null)}
@@ -2377,7 +3841,7 @@ export const GamesScreen: React.FC = () => {
           )}
 
           {/* Arena del Juego Montada con Scroll Adaptable que Centra Verticalmente */}
-          {activeGame === 'drawguess' ? (
+          {activeGame === 'drawguess' || activeGame === 'domino' || activeGame === 'uno' ? (
             <View style={{ flex: 1, width: '100%' }}>
               {renderActiveGameArena(true)}
             </View>
@@ -2401,6 +3865,8 @@ export const GamesScreen: React.FC = () => {
         gameTitle={victoryCelebration?.gameTitle || ''}
         pointsEarned={victoryCelebration?.pointsEarned || 100}
         subtitle={victoryCelebration?.subtitle || ''}
+        petName={petMeta.name}
+        petAccessory={petMeta.accessory}
         onPlayAgain={() => {
           if (victoryCelebration) {
             const cb = victoryCelebration.onPlayAgain;
@@ -2422,8 +3888,11 @@ export const GamesScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setIsCustomWordModalOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Retar a mi Pareja</Text>
               <TouchableOpacity onPress={() => setIsCustomWordModalOpen(false)}>
@@ -2431,43 +3900,48 @@ export const GamesScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Palabra Secreta</Text>
-            <TextInput
-              value={customWordInput}
-              onChangeText={setCustomWordInput}
-              placeholder="Ej. GUITARRA, DINOSAURIO, PIZZA..."
-              placeholderTextColor="#adb5bd"
-              autoCapitalize="characters"
-              style={styles.modalInput}
-            />
-
-            <Text style={styles.inputLabel}>Categoría</Text>
-            <TextInput
-              value={customCatInput}
-              onChangeText={setCustomCatInput}
-              placeholder="Ej. Películas, Comida, Objetos..."
-              placeholderTextColor="#adb5bd"
-              style={styles.modalInput}
-            />
-
-            <Text style={styles.inputLabel}>Pista para que la adivine</Text>
-            <TextInput
-              value={customHintInput}
-              onChangeText={setCustomHintInput}
-              placeholder="Ej. Instrumento de seis cuerdas..."
-              placeholderTextColor="#adb5bd"
-              style={styles.modalInput}
-            />
-
-            <TouchableOpacity
-              onPress={() => void handleSaveCustomHangman()}
-              style={[styles.primaryGameBtn, { backgroundColor: primaryColor, marginTop: 16 }]}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <Ionicons name="send" size={16} color="#ffffff" />
-              <Text style={styles.primaryGameBtnText}>Lanzar Reto (+100 pts)</Text>
-            </TouchableOpacity>
+              <Text style={styles.inputLabel}>Palabra Secreta</Text>
+              <TextInput
+                value={customWordInput}
+                onChangeText={setCustomWordInput}
+                placeholder="Ej. GUITARRA, DINOSAURIO, PIZZA..."
+                placeholderTextColor="#adb5bd"
+                autoCapitalize="characters"
+                style={styles.modalInput}
+              />
+
+              <Text style={styles.inputLabel}>Categoría</Text>
+              <TextInput
+                value={customCatInput}
+                onChangeText={setCustomCatInput}
+                placeholder="Ej. Películas, Comida, Objetos..."
+                placeholderTextColor="#adb5bd"
+                style={styles.modalInput}
+              />
+
+              <Text style={styles.inputLabel}>Pista para que la adivine</Text>
+              <TextInput
+                value={customHintInput}
+                onChangeText={setCustomHintInput}
+                placeholder="Ej. Instrumento de seis cuerdas..."
+                placeholderTextColor="#adb5bd"
+                style={styles.modalInput}
+              />
+
+              <TouchableOpacity
+                onPress={() => void handleSaveCustomHangman()}
+                style={[styles.primaryGameBtn, { backgroundColor: primaryColor, marginTop: 16 }]}
+              >
+                <Ionicons name="send" size={16} color="#ffffff" />
+                <Text style={styles.primaryGameBtnText}>Lanzar Reto (+100 pts)</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ================= MODAL DE DESGLOSE DE PUNTOS Y TORNEO SEMANAL ================= */}
@@ -2477,6 +3951,7 @@ export const GamesScreen: React.FC = () => {
         leaderboard={gamesState.leaderboard}
         initialPlayer={breakdownPlayer}
         primaryColor={primaryColor}
+        petAccessory={petMeta.accessory}
       />
     </SafeAreaView>
   );
@@ -2494,19 +3969,32 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
   },
   lobbyZeroScrollContainer: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 20,
+    paddingHorizontal: 14,
+    paddingTop: 2,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  lobbyScrollArea: {
+    flex: 1,
+  },
+  lobbyScrollContentArea: {
+    paddingTop: 2,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  lobbyGridRowDynamic: {
+    flex: 1,
+    flexDirection: 'row',
     gap: 8,
   },
   lobbyGamesGridArea: {
     flex: 1,
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 6,
   },
   lobbyGridRowsContainer: {
     flex: 1,
-    gap: 8,
+    gap: 6,
   },
   lobbyGridRow: {
     flex: 1,
@@ -2563,7 +4051,7 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontSize: 11.5,
   },
   lobbyCardMiniStats: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
@@ -2575,51 +4063,59 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     paddingVertical: 8,
     paddingBottom: 24,
   },
-  lobbyCardCompact: {
+  lobbyCardOuter: {
     flex: 1,
     width: '100%',
     borderRadius: 18,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3, // Reduce aire vertical innecesario para un balance compacto
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
     elevation: 2,
   },
+  lobbyCardCompact: {
+    flex: 1,
+    width: '100%' as const,
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    overflow: 'hidden' as const,
+  },
   lobbyCardIconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   lobbyCardTitle: {
-    fontSize: 16,
+    fontSize: 13.5,
     fontWeight: '700',
     fontFamily: SERIF_FONT,
     textAlign: 'center',
   },
+  lobbyCardFooter: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 3,
+  },
   lobbyCardDesc: {
-    fontSize: 11.5,
+    fontSize: 10,
     textAlign: 'center',
-    lineHeight: 14,
-    paddingHorizontal: 4,
+    lineHeight: 12,
+    paddingHorizontal: 2,
   },
   turnBadgePill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 999,
     borderWidth: 1,
   },
   lobbyBadgeText: {
-    fontSize: 11.5,
+    fontSize: 10,
     fontWeight: '700',
   },
   sheetHandle: {
@@ -2684,28 +4180,36 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     marginBottom: 12,
   },
   launchModalScoreBox: {
+    width: '100%' as const,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  launchModalScoreTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
   },
   launchModalPlayerScore: {
     flex: 1,
     gap: 1,
   },
   launchMiniAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 3,
+    overflow: 'hidden',
+  },
+  launchMiniAvatarImg: {
+    width: '100%',
+    height: '100%',
   },
   launchMiniAvatarText: {
     fontSize: 11,
@@ -2772,55 +4276,121 @@ const makeStyles = (c: ThemePalette) => StyleSheet.create({
     fontWeight: '700',
   },
   lobbyScoreboard: {
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    shadowColor: c.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
+    marginTop: 2,
+  },
+  lobbyScoreTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    shadowColor: c.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    marginTop: 6,
+    gap: 6,
   },
   lobbyPlayer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flex: 1,
   },
+  lobbyAvatarWrap: {
+    position: 'relative',
+  },
   lobbyAvatarCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  lobbyAvatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  leaderCrownBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#fef3c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  leaderCrownEmoji: {
+    fontSize: 9,
+    lineHeight: 11,
   },
   lobbyAvatarText: {
     fontSize: 15,
     fontWeight: '800',
   },
   lobbyPlayerName: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
+    fontFamily: SERIF_FONT,
   },
   lobbyScorePills: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
+    marginTop: 1,
   },
   lobbyPoints: {
     fontSize: 11,
     fontWeight: '800',
   },
   lobbyStars: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '600',
+  },
+  lobbyCenterMascotBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  lobbyPochitoMiniWrap: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: -2,
+  },
+  lobbyVsPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  lobbyVsPillText: {
+    fontSize: 8.5,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  duelTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    marginTop: 6,
+  },
+  duelFillLeft: {
+    height: '100%' as const,
+  },
+  duelFillRight: {
+    height: '100%' as const,
   },
   lobbyVsBadge: {
     paddingHorizontal: 8,

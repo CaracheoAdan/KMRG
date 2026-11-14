@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { HomeState } from '../types';
 import {
   getHomeState,
+  applyIncomingRealtimeHomeState,
   subscribeHomeState,
-  notifyHomeState,
   DEFAULT_HOME_STATE,
 } from '../services/CoupleSyncService';
 import { supabase } from '../config/supabase';
@@ -21,7 +21,7 @@ function ensureSharedHomeRealtimeChannel(): void {
       { event: 'INSERT', schema: 'public', table: 'interactions' },
       (payload: { new?: { type?: string; payload?: Partial<HomeState> } }) => {
         if (payload.new?.type === 'sync_home_state' && payload.new?.payload) {
-          notifyHomeState({ ...DEFAULT_HOME_STATE, ...payload.new.payload });
+          void applyIncomingRealtimeHomeState(payload.new.payload);
         }
       }
     )

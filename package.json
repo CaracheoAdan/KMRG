@@ -2,21 +2,18 @@
   "name": "kmrg-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "Monorepo KMRG: Backend (Node.js + PostgreSQL), Admin Web (React + Vite) y Mobile App (React Native + Expo)",
+  "description": "Monorepo KMRG: Backend (Node.js + PostgreSQL) y Mobile App (React Native + Expo)",
   "workspaces": [
     "backend",
-    "admin-web",
     "mobile-app"
   ],
   "scripts": {
     "dev:backend": "npm --workspace=backend run dev",
-    "dev:admin": "npm --workspace=admin-web run dev",
     "dev:mobile": "npm --workspace=mobile-app run start",
     "build:backend": "npm --workspace=backend run build",
-    "build:admin": "npm --workspace=admin-web run build",
     "build:apk": "npm --prefix mobile-app exec -- eas build -p android --profile preview",
     "test": "npm --workspace=backend test",
-    "typecheck": "npx tsc --noEmit -p backend && npx tsc --noEmit -p admin-web && npx tsc --noEmit -p mobile-app",
+    "typecheck": "npx tsc --noEmit -p backend && npx tsc --noEmit -p mobile-app",
     "postinstall": "node scripts/patch-expo-notifications.js"
   },
   "keywords": [],

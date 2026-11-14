@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
 import {
   BucketItem,
+  DominoState,
   DrawGuessState,
   HomeState,
   LetterExtraData,
@@ -11,6 +12,7 @@ import {
   QuickNoteMessage,
   SpecialPlace,
   TimeCapsuleItem,
+  UnoState,
   UserProfile,
   VoiceNoteData,
 } from '../types';
@@ -56,26 +58,27 @@ export const DEFAULT_HOME_STATE: HomeState = {
   nextEventTitle: '',
   nextEventDate: '',
   nextEventTime: '',
+  nextEventUpdatedAt: '1970-01-01T00:00:00.000Z',
   streakCount: 1,
-  lastInteractionDate: toLocalDateString(new Date()),
+  lastInteractionDate: '1970-01-01',
   moods: {
     Javier: {
       emoji: 'Enamorado/a',
       status: '',
       song: '',
-      updatedAt: new Date().toISOString(),
+      updatedAt: '1970-01-01T00:00:00.000Z',
     },
     Karla: {
       emoji: 'Enamorado/a',
       status: '',
       song: '',
-      updatedAt: new Date().toISOString(),
+      updatedAt: '1970-01-01T00:00:00.000Z',
     },
   },
   stickyNote: {
     author: 'Javier',
     text: '',
-    updatedAt: new Date().toISOString(),
+    updatedAt: '1970-01-01T00:00:00.000Z',
   },
   loveReasons: [],
   voiceNotes: [],
@@ -88,7 +91,7 @@ export const DEFAULT_HOME_STATE: HomeState = {
     heartsFedTotal: 0,
     heartsFedKarla: 0,
     heartsFedJavier: 0,
-    lastFedAt: new Date().toISOString(),
+    lastFedAt: '1970-01-01T00:00:00.000Z',
     lastFedBy: 'Javier',
   },
   partnerProfiles: {
@@ -203,6 +206,8 @@ export interface GameScoreBreakdown {
   hangman: GameScoreItem;
   battleship: GameScoreItem;
   drawguess: GameScoreItem;
+  domino: GameScoreItem;
+  uno: GameScoreItem;
 }
 
 export interface WeeklyChampionSummary {
@@ -267,7 +272,25 @@ export const createDefaultBreakdown = (): GameScoreBreakdown => ({
   hangman: createDefaultGameScoreItem(),
   battleship: createDefaultGameScoreItem(),
   drawguess: createDefaultGameScoreItem(),
+  domino: createDefaultGameScoreItem(),
+  uno: createDefaultGameScoreItem(),
 });
+
+export interface SudokuSessionState {
+  sessionId: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  board: number[][];
+  fixed: boolean[][];
+  solution: number[][];
+  notes: Record<string, number[]>;
+  score: number;
+  mistakes: number;
+  completed: boolean;
+  completedBy?: UserProfile | null;
+  placedBy?: Record<string, UserProfile>;
+  updatedAt?: number;
+  version?: number;
+}
 
 export interface GamesState {
   leaderboard: GamesLeaderboard;
@@ -279,13 +302,19 @@ export interface GamesState {
     scoreJavier: number;
     scoreKarla: number;
     round: number;
+    infiniteMode?: boolean;
+    moveOrder?: number[];
+    updatedAt?: number;
+    version?: number;
   };
   sudoku: {
     bestScoreKarla: number;
     bestScoreJavier: number;
     completedCount: number;
+    session?: SudokuSessionState | null;
   };
   hangman: {
+    roundId?: string;
     word: string;
     hint: string;
     category: string;
@@ -293,11 +322,16 @@ export interface GamesState {
     isPartnerChallenge: boolean;
     guessed: string[];
     status: 'playing' | 'won' | 'lost';
+    winner?: UserProfile | null;
     scoreJavier: number;
     scoreKarla: number;
     streak: number;
+    hintUsed?: boolean;
+    updatedAt?: number;
+    version?: number;
   };
   chess: {
+    matchId?: string;
     board: Array<Array<ChessPiece | null>>;
     turn: 'w' | 'b';
     capturedByW: string[];
@@ -306,8 +340,12 @@ export interface GamesState {
     winner: 'w' | 'b' | null;
     winsKarla: number;
     winsJavier: number;
+    moveHistory?: string[];
+    updatedAt?: number;
+    version?: number;
   };
   battleship: {
+    matchId?: string;
     phase: 'idle' | 'invited' | 'setup' | 'battle' | 'finished';
     invitedBy: UserProfile | null;
     lastUpdatedBy?: UserProfile | null;
@@ -327,8 +365,12 @@ export interface GamesState {
     winner: UserProfile | null;
     winsKarla: number;
     winsJavier: number;
+    updatedAt?: number;
+    version?: number;
   };
   drawGuess: DrawGuessState;
+  domino: DominoState;
+  uno: UnoState;
 }
 
 export const createInitialChessBoard = (): Array<Array<ChessPiece | null>> => {
@@ -376,13 +418,17 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     scoreJavier: 0,
     scoreKarla: 0,
     round: 1,
+    updatedAt: 0,
+    version: 0,
   },
   sudoku: {
     bestScoreKarla: 0,
     bestScoreJavier: 0,
     completedCount: 0,
+    session: null,
   },
   hangman: {
+    roundId: 'hm_initial',
     word: 'GUITARRA',
     hint: 'Instrumento musical de seis cuerdas con caja de resonancia',
     category: 'Objetos',
@@ -390,11 +436,15 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     isPartnerChallenge: false,
     guessed: [],
     status: 'playing',
+    winner: null,
     scoreJavier: 0,
     scoreKarla: 0,
     streak: 0,
+    updatedAt: 0,
+    version: 0,
   },
   chess: {
+    matchId: 'chess_initial',
     board: createInitialChessBoard(),
     turn: 'w',
     capturedByW: [],
@@ -403,8 +453,11 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     winner: null,
     winsKarla: 0,
     winsJavier: 0,
+    updatedAt: 0,
+    version: 0,
   },
   battleship: {
+    matchId: 'bs_initial',
     phase: 'idle',
     invitedBy: null,
     readyKarla: false,
@@ -418,9 +471,11 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     winner: null,
     winsKarla: 0,
     winsJavier: 0,
+    updatedAt: 0,
+    version: 0,
   },
   drawGuess: {
-    phase: 'choosing_word',
+    phase: 'idle',
     currentRound: 1,
     drawer: 'Karla',
     guesser: 'Javier',
@@ -452,6 +507,37 @@ export const DEFAULT_GAMES_STATE: GamesState = {
     winsKarla: 0,
     winsJavier: 0,
   },
+  domino: {
+    phase: 'idle',
+    board: [],
+    openLeft: null,
+    openRight: null,
+    handKarla: [],
+    handJavier: [],
+    boneyard: [],
+    turn: 'Karla',
+    winner: null,
+    winsKarla: 0,
+    winsJavier: 0,
+    consecutivePasses: 0,
+    lastAction: null,
+  },
+  uno: {
+    phase: 'idle',
+    deck: [],
+    discardPile: [],
+    currentCard: { id: 'red-7-init', color: 'red', value: '7' },
+    currentColor: 'red',
+    handKarla: [],
+    handJavier: [],
+    turn: 'Karla',
+    calledUnoKarla: false,
+    calledUnoJavier: false,
+    winner: null,
+    winsKarla: 0,
+    winsJavier: 0,
+    lastAction: null,
+  },
 };
 
 function normalizeHomeState(state: HomeState): HomeState {
@@ -465,36 +551,62 @@ function normalizeHomeState(state: HomeState): HomeState {
     nextEventTitle: stripLegacyEmoji(
       sanitizeInput(state.nextEventTitle || DEFAULT_HOME_STATE.nextEventTitle, 100)
     ),
+    nextEventDate: sanitizeInput(state.nextEventDate || '', 20),
     nextEventTime: sanitizeInput(state.nextEventTime || '', 10),
+    nextEventUpdatedAt: state.nextEventUpdatedAt || '1970-01-01T00:00:00.000Z',
     moods: {
       Javier: {
         ...DEFAULT_HOME_STATE.moods.Javier,
         ...(safeMoods.Javier || {}),
+        feeling: safeMoods.Javier?.feeling,
+        emoji: sanitizeInput(safeMoods.Javier?.emoji || DEFAULT_HOME_STATE.moods.Javier.emoji, 40),
         status: sanitizeInput(safeMoods.Javier?.status || '', 120),
+        song: sanitizeInput(safeMoods.Javier?.song || '', 80),
+        updatedAt: safeMoods.Javier?.updatedAt || DEFAULT_HOME_STATE.moods.Javier.updatedAt,
       },
       Karla: {
         ...DEFAULT_HOME_STATE.moods.Karla,
         ...(safeMoods.Karla || {}),
+        feeling: safeMoods.Karla?.feeling,
+        emoji: sanitizeInput(safeMoods.Karla?.emoji || DEFAULT_HOME_STATE.moods.Karla.emoji, 40),
         status: sanitizeInput(safeMoods.Karla?.status || '', 120),
+        song: sanitizeInput(safeMoods.Karla?.song || '', 80),
+        updatedAt: safeMoods.Karla?.updatedAt || DEFAULT_HOME_STATE.moods.Karla.updatedAt,
       },
     },
     stickyNote: {
       author: state.stickyNote?.author === 'Karla' ? 'Karla' : 'Javier',
       text: sanitizeInput(state.stickyNote?.text || '', 500),
-      updatedAt: state.stickyNote?.updatedAt || new Date().toISOString(),
+      updatedAt: state.stickyNote?.updatedAt || '1970-01-01T00:00:00.000Z',
     },
     loveReasons: Array.isArray(state.loveReasons)
-      ? state.loveReasons.map((r) => ({
+      ? state.loveReasons.slice(-60).map((r) => ({
           ...r,
           text: sanitizeInput(r.text || '', 300),
         }))
       : DEFAULT_HOME_STATE.loveReasons,
     voiceNotes: Array.isArray(state.voiceNotes)
-      ? state.voiceNotes
+      ? state.voiceNotes.slice(0, 20)
       : DEFAULT_HOME_STATE.voiceNotes,
     timeCapsules: Array.isArray(state.timeCapsules)
-      ? state.timeCapsules
+      ? state.timeCapsules.slice(0, 30)
       : DEFAULT_HOME_STATE.timeCapsules,
+    quickNotes: Array.isArray(state.quickNotes)
+      ? state.quickNotes.slice(-25)
+      : undefined,
+    letterExtras: state.letterExtras
+      ? Object.fromEntries(
+          Object.entries(state.letterExtras)
+            .slice(-40)
+            .map(([k, v]) => [
+              k,
+              {
+                ...v,
+                photoUrl: v?.photoUrl && !v.photoUrl.startsWith('data:') ? v.photoUrl : undefined,
+              },
+            ])
+        )
+      : undefined,
     todaySong: state.todaySong
       ? {
           ...state.todaySong,
@@ -536,31 +648,72 @@ function normalizeHomeState(state: HomeState): HomeState {
   };
 }
 
+function isDefaultUntouchedMood(m?: { emoji?: string; status?: string; feeling?: string; song?: string; updatedAt?: string }): boolean {
+  if (!m) return true;
+  if (m.updatedAt && m.updatedAt !== '1970-01-01T00:00:00.000Z') {
+    return false;
+  }
+  return !m.status?.trim() && !m.feeling && !m.song?.trim() && (!m.emoji || m.emoji === 'Enamorado/a');
+}
+
+function pickBestMood<T extends { emoji: string; status: string; feeling?: string; song?: string; updatedAt: string }>(
+  baseMood: T,
+  incMood: T
+): T {
+  const baseIsDefault = isDefaultUntouchedMood(baseMood);
+  const incIsDefault = isDefaultUntouchedMood(incMood);
+
+  // Nunca permitir que un estado default vacío sobreescriba un estado de ánimo real personalizado
+  if (incIsDefault && !baseIsDefault) return baseMood;
+  if (baseIsDefault && !incIsDefault) return incMood;
+
+  const baseTime = new Date(baseMood.updatedAt || 0).getTime();
+  const incTime = new Date(incMood.updatedAt || 0).getTime();
+  return incTime >= baseTime ? incMood : baseMood;
+}
+
 export function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState {
   const normBase = normalizeHomeState(base);
   const normIncoming = normalizeHomeState(incoming);
 
-  const javierBaseTime = new Date(normBase.moods.Javier.updatedAt || 0).getTime();
-  const javierIncTime = new Date(normIncoming.moods.Javier.updatedAt || 0).getTime();
-  const karlaBaseTime = new Date(normBase.moods.Karla.updatedAt || 0).getTime();
-  const karlaIncTime = new Date(normIncoming.moods.Karla.updatedAt || 0).getTime();
-
-  // Preservar fecha de aniversario personalizada
+  // Preservar fecha de aniversario personalizada (el default '2024-02-14' nunca pisa una fecha real)
   const anniversaryDate =
     normIncoming.anniversaryDate && normIncoming.anniversaryDate !== DEFAULT_HOME_STATE.anniversaryDate
       ? normIncoming.anniversaryDate
       : normBase.anniversaryDate || DEFAULT_HOME_STATE.anniversaryDate;
 
-  // Preservar próximo evento agendado
-  const nextEventTitle = normIncoming.nextEventTitle || normBase.nextEventTitle || '';
-  const nextEventDate = normIncoming.nextEventDate || normBase.nextEventDate || '';
-  const nextEventTime = normIncoming.nextEventTime !== undefined ? normIncoming.nextEventTime : (normBase.nextEventTime || '');
+  // Preservar próximo evento agendado usando timestamp cuando exista
+  const nextEventBaseTime = new Date(normBase.nextEventUpdatedAt || 0).getTime();
+  const nextEventIncTime = new Date(normIncoming.nextEventUpdatedAt || 0).getTime();
+  let nextEventSource = normIncoming;
+  if (nextEventBaseTime > 0 || nextEventIncTime > 0) {
+    nextEventSource = nextEventIncTime >= nextEventBaseTime ? normIncoming : normBase;
+  } else {
+    nextEventSource = normIncoming.nextEventDate?.trim()
+      ? normIncoming
+      : normBase.nextEventDate?.trim()
+      ? normBase
+      : normIncoming;
+  }
+  const nextEventTitle = nextEventSource.nextEventTitle || '';
+  const nextEventDate = nextEventSource.nextEventDate || '';
+  const nextEventTime = nextEventSource.nextEventTime || '';
+  const nextEventUpdatedAt =
+    nextEventSource.nextEventUpdatedAt || '1970-01-01T00:00:00.000Z';
 
-  // Notita fija: la más reciente gana
+  // Notita fija: una notita vacía por defecto nunca pisa una notita con texto real
+  const stickyBaseHasText = Boolean(normBase.stickyNote?.text?.trim());
+  const stickyIncHasText = Boolean(normIncoming.stickyNote?.text?.trim());
   const stickyBaseTime = new Date(normBase.stickyNote?.updatedAt || 0).getTime();
   const stickyIncTime = new Date(normIncoming.stickyNote?.updatedAt || 0).getTime();
   const stickyNote =
-    stickyIncTime >= stickyBaseTime ? normIncoming.stickyNote : normBase.stickyNote;
+    stickyIncHasText && !stickyBaseHasText
+      ? normIncoming.stickyNote
+      : !stickyIncHasText && stickyBaseHasText
+      ? normBase.stickyNote
+      : stickyIncTime >= stickyBaseTime
+      ? normIncoming.stickyNote
+      : normBase.stickyNote;
 
   // Razones para amar: unión por ID sin perder ninguna
   const reasonsMap = new Map<string, LoveReason>();
@@ -587,23 +740,30 @@ export function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState
     ])
   );
 
+  const basePetTime = new Date(basePet.lastFedAt || 0).getTime();
+  const incPetTime = new Date(incPet.lastFedAt || 0).getTime();
+  const isIncPetDefault =
+    incPetTime <= 0 &&
+    (incPet.heartsFedTotal || 0) === 0 &&
+    (incPet.level || 1) === 1 &&
+    (!incPet.accessory || incPet.accessory === 'none') &&
+    (!incPet.name || incPet.name === 'Pochito');
+
   const couplePet = {
-    name: incPet.name || basePet.name || 'Pochito',
+    name: !isIncPetDefault && incPetTime >= basePetTime
+      ? (incPet.name || basePet.name || 'Pochito')
+      : (basePet.name !== 'Pochito' ? basePet.name : (incPet.name || 'Pochito')),
     level: Math.max(basePet.level || 1, incPet.level || 1),
     xp: Math.max(basePet.xp || 0, incPet.xp || 0),
     happiness: Math.max(basePet.happiness || 50, incPet.happiness || 50),
     heartsFedTotal: Math.max(basePet.heartsFedTotal || 0, incPet.heartsFedTotal || 0),
     heartsFedKarla: Math.max(basePet.heartsFedKarla || 0, incPet.heartsFedKarla || 0),
     heartsFedJavier: Math.max(basePet.heartsFedJavier || 0, incPet.heartsFedJavier || 0),
-    lastFedAt:
-      new Date(incPet.lastFedAt || 0).getTime() >= new Date(basePet.lastFedAt || 0).getTime()
-        ? incPet.lastFedAt
-        : basePet.lastFedAt,
-    lastFedBy: incPet.lastFedBy || basePet.lastFedBy,
-    accessory:
-      incPet.accessory && incPet.accessory !== 'none'
-        ? incPet.accessory
-        : (basePet.accessory || 'none'),
+    lastFedAt: incPetTime >= basePetTime ? incPet.lastFedAt : basePet.lastFedAt,
+    lastFedBy: incPetTime >= basePetTime ? (incPet.lastFedBy || basePet.lastFedBy) : (basePet.lastFedBy || incPet.lastFedBy),
+    accessory: !isIncPetDefault && incPetTime >= basePetTime
+      ? (incPet.accessory || basePet.accessory || 'none')
+      : (basePet.accessory && basePet.accessory !== 'none' ? basePet.accessory : (incPet.accessory || 'none')),
     unlockedAccessories: unlockedAccs,
   };
 
@@ -687,14 +847,15 @@ export function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState
     nextEventTitle,
     nextEventDate,
     nextEventTime,
+    nextEventUpdatedAt,
     streakCount: Math.max(normBase.streakCount || 1, normIncoming.streakCount || 1),
     lastInteractionDate:
-      normIncoming.lastInteractionDate > normBase.lastInteractionDate
+      normIncoming.lastInteractionDate && normIncoming.lastInteractionDate > normBase.lastInteractionDate
         ? normIncoming.lastInteractionDate
-        : normBase.lastInteractionDate,
+        : (normBase.lastInteractionDate || '1970-01-01'),
     moods: {
-      Javier: javierIncTime >= javierBaseTime ? normIncoming.moods.Javier : normBase.moods.Javier,
-      Karla: karlaIncTime >= karlaBaseTime ? normIncoming.moods.Karla : normBase.moods.Karla,
+      Javier: pickBestMood(normBase.moods.Javier, normIncoming.moods.Javier),
+      Karla: pickBestMood(normBase.moods.Karla, normIncoming.moods.Karla),
     },
     stickyNote,
     loveReasons: Array.from(reasonsMap.values()).filter(
@@ -728,10 +889,11 @@ export function mergeHomeStates(base: HomeState, incoming: HomeState): HomeState
           const incT = new Date(incExtra.updatedAt || 0).getTime();
           const winner = incT >= baseT ? incExtra : existing;
           const older = incT >= baseT ? existing : incExtra;
+          const rawPhoto = winner.photoUrl || older.photoUrl;
           mergedExtras[msgId] = {
             ...older,
             ...winner,
-            photoUrl: winner.photoUrl || older.photoUrl,
+            photoUrl: rawPhoto && !rawPhoto.startsWith('data:') ? rawPhoto : undefined,
             reaction: winner.reaction || older.reaction,
             replyText: winner.replyText || older.replyText,
             repliedBy: winner.repliedBy || older.repliedBy,
@@ -862,6 +1024,20 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
     hangman: mergeScoreItem(normBase.leaderboard.breakdown.hangman, normIncoming.leaderboard.breakdown.hangman),
     battleship: mergeScoreItem(normBase.leaderboard.breakdown.battleship, normIncoming.leaderboard.breakdown.battleship),
     drawguess: mergeScoreItem(normBase.leaderboard.breakdown.drawguess, normIncoming.leaderboard.breakdown.drawguess),
+    domino: mergeScoreItem(normBase.leaderboard.breakdown.domino, normIncoming.leaderboard.breakdown.domino),
+    uno: mergeScoreItem(normBase.leaderboard.breakdown.uno, normIncoming.leaderboard.breakdown.uno),
+  };
+
+  const pickFresher = <T extends { version?: number; updatedAt?: number | string }>(
+    baseVal: T,
+    incVal: T
+  ): boolean => {
+    const bVer = typeof baseVal?.version === 'number' ? baseVal.version : 0;
+    const iVer = typeof incVal?.version === 'number' ? incVal.version : 0;
+    if (iVer !== bVer) return iVer > bVer;
+    const bTs = typeof baseVal?.updatedAt === 'number' ? baseVal.updatedAt : 0;
+    const iTs = typeof incVal?.updatedAt === 'number' ? incVal.updatedAt : 0;
+    return iTs >= bTs;
   };
 
   return {
@@ -876,30 +1052,168 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
       breakdown: mergedBreakdown,
       lastWeekSummary: normIncoming.leaderboard.lastWeekSummary || normBase.leaderboard.lastWeekSummary || null,
     },
-    ticTacToe: {
-      ...normIncoming.ticTacToe,
-      scoreKarla: Math.max(normBase.ticTacToe.scoreKarla || 0, normIncoming.ticTacToe.scoreKarla || 0),
-      scoreJavier: Math.max(normBase.ticTacToe.scoreJavier || 0, normIncoming.ticTacToe.scoreJavier || 0),
-    },
-    chess: {
-      ...normIncoming.chess,
-      winsKarla: Math.max(normBase.chess.winsKarla || 0, normIncoming.chess.winsKarla || 0),
-      winsJavier: Math.max(normBase.chess.winsJavier || 0, normIncoming.chess.winsJavier || 0),
-    },
-    hangman: {
-      ...normIncoming.hangman,
-      scoreKarla: Math.max(normBase.hangman.scoreKarla || 0, normIncoming.hangman.scoreKarla || 0),
-      scoreJavier: Math.max(normBase.hangman.scoreJavier || 0, normIncoming.hangman.scoreJavier || 0),
-    },
+    ticTacToe: (() => {
+      const baseTtt = normBase.ticTacToe;
+      const incTtt = normIncoming.ticTacToe;
+      let active = incTtt;
+      if ((incTtt.round || 1) !== (baseTtt.round || 1)) {
+        active = (incTtt.round || 1) > (baseTtt.round || 1) ? incTtt : baseTtt;
+      } else {
+        const bVer = typeof baseTtt.version === 'number' ? baseTtt.version : 0;
+        const iVer = typeof incTtt.version === 'number' ? incTtt.version : 0;
+        if (iVer !== bVer) {
+          active = iVer > bVer ? incTtt : baseTtt;
+        } else {
+          const bTs = typeof baseTtt.updatedAt === 'number' ? baseTtt.updatedAt : 0;
+          const iTs = typeof incTtt.updatedAt === 'number' ? incTtt.updatedAt : 0;
+          if (iTs !== bTs) {
+            active = iTs > bTs ? incTtt : baseTtt;
+          } else {
+            const bMoves = (baseTtt.board || []).filter(Boolean).length;
+            const iMoves = (incTtt.board || []).filter(Boolean).length;
+            active = iMoves >= bMoves ? incTtt : baseTtt;
+          }
+        }
+      }
+      return {
+        ...active,
+        version: Math.max(baseTtt.version || 0, incTtt.version || 0),
+        scoreKarla: Math.max(baseTtt.scoreKarla || 0, incTtt.scoreKarla || 0),
+        scoreJavier: Math.max(baseTtt.scoreJavier || 0, incTtt.scoreJavier || 0),
+      };
+    })(),
+    sudoku: (() => {
+      const baseSud = normBase.sudoku;
+      const incSud = normIncoming.sudoku;
+      const bSess = baseSud.session || null;
+      const iSess = incSud.session || null;
+      let mergedSession = iSess || bSess || null;
+      if (bSess && iSess) {
+        if (bSess.sessionId !== iSess.sessionId) {
+          mergedSession = pickFresher(bSess, iSess) ? iSess : bSess;
+        } else {
+          const useInc =
+            (iSess.version || 0) !== (bSess.version || 0)
+              ? (iSess.version || 0) > (bSess.version || 0)
+              : (iSess.updatedAt || 0) !== (bSess.updatedAt || 0)
+              ? (iSess.updatedAt || 0) > (bSess.updatedAt || 0)
+              : iSess.completed ||
+                iSess.board.flat().filter((n) => n !== 0).length >=
+                  bSess.board.flat().filter((n) => n !== 0).length;
+          mergedSession = useInc ? iSess : bSess;
+        }
+      }
+      return {
+        bestScoreKarla: Math.max(baseSud.bestScoreKarla || 0, incSud.bestScoreKarla || 0),
+        bestScoreJavier: Math.max(baseSud.bestScoreJavier || 0, incSud.bestScoreJavier || 0),
+        completedCount: Math.max(baseSud.completedCount || 0, incSud.completedCount || 0),
+        session: mergedSession,
+      };
+    })(),
+    chess: (() => {
+      const baseCh = normBase.chess;
+      const incCh = normIncoming.chess;
+      const sameMatch = (baseCh.matchId || '') === (incCh.matchId || '');
+      let active = incCh;
+      if (!sameMatch) {
+        active = pickFresher(baseCh, incCh) ? incCh : baseCh;
+      } else {
+        const bVer = typeof baseCh.version === 'number' ? baseCh.version : 0;
+        const iVer = typeof incCh.version === 'number' ? incCh.version : 0;
+        if (iVer !== bVer) {
+          active = iVer > bVer ? incCh : baseCh;
+        } else {
+          const bTs = typeof baseCh.updatedAt === 'number' ? baseCh.updatedAt : 0;
+          const iTs = typeof incCh.updatedAt === 'number' ? incCh.updatedAt : 0;
+          if (iTs !== bTs) {
+            active = iTs > bTs ? incCh : baseCh;
+          } else {
+            const bHist = baseCh.moveHistory?.length || 0;
+            const iHist = incCh.moveHistory?.length || 0;
+            active = iHist >= bHist ? incCh : baseCh;
+          }
+        }
+      }
+      return {
+        ...active,
+        version: Math.max(baseCh.version || 0, incCh.version || 0),
+        winsKarla: Math.max(baseCh.winsKarla || 0, incCh.winsKarla || 0),
+        winsJavier: Math.max(baseCh.winsJavier || 0, incCh.winsJavier || 0),
+      };
+    })(),
+    hangman: (() => {
+      const baseHm = normBase.hangman;
+      const incHm = normIncoming.hangman;
+      const sameRound = (baseHm.roundId || '') === (incHm.roundId || '');
+      if (!sameRound) {
+        const useInc = pickFresher(baseHm, incHm);
+        const active = useInc ? incHm : baseHm;
+        return {
+          ...active,
+          version: Math.max(baseHm.version || 0, incHm.version || 0),
+          scoreKarla: Math.max(baseHm.scoreKarla || 0, incHm.scoreKarla || 0),
+          scoreJavier: Math.max(baseHm.scoreJavier || 0, incHm.scoreJavier || 0),
+        };
+      }
+
+      const useInc = pickFresher(baseHm, incHm);
+      const active = useInc ? incHm : baseHm;
+      const unionGuessed = Array.from(new Set([...(baseHm.guessed || []), ...(incHm.guessed || [])]));
+      const wordUpper = (active.word || '').toUpperCase();
+      const allRevealed =
+        wordUpper.length > 0 && wordUpper.split('').every((ch) => ch === ' ' || unionGuessed.includes(ch));
+      const wrongCount = unionGuessed.filter((l) => !wordUpper.includes(l)).length;
+      const isWon = baseHm.status === 'won' || incHm.status === 'won' || allRevealed;
+      const isLost = !isWon && (baseHm.status === 'lost' || incHm.status === 'lost' || wrongCount >= 6);
+      const nextStatus: 'playing' | 'won' | 'lost' = isWon ? 'won' : isLost ? 'lost' : 'playing';
+
+      return {
+        ...active,
+        guessed: unionGuessed,
+        hintUsed: Boolean(baseHm.hintUsed || incHm.hintUsed),
+        status: nextStatus,
+        winner: isWon ? (active.winner || incHm.winner || baseHm.winner || null) : null,
+        streak: nextStatus === 'lost' ? 0 : Math.max(baseHm.streak || 0, incHm.streak || 0),
+        version: Math.max(baseHm.version || 0, incHm.version || 0),
+        scoreKarla: Math.max(baseHm.scoreKarla || 0, incHm.scoreKarla || 0),
+        scoreJavier: Math.max(baseHm.scoreJavier || 0, incHm.scoreJavier || 0),
+      };
+    })(),
     battleship: (() => {
       const baseBs = normBase.battleship;
       const incBs = normIncoming.battleship;
 
+      const baseMatchId = baseBs.matchId || '';
+      const incMatchId = incBs.matchId || '';
+      // Si pertenecen a partidas distintas (nuevo matchId), NUNCA mezclar ganador ni disparos de la partida previa
+      if ((baseMatchId || incMatchId) && baseMatchId !== incMatchId) {
+        const useInc = pickFresher(baseBs, incBs);
+        const active = useInc ? incBs : baseBs;
+        return {
+          ...active,
+          version: Math.max(baseBs.version || 0, incBs.version || 0),
+          winsKarla: Math.max(baseBs.winsKarla || 0, incBs.winsKarla || 0),
+          winsJavier: Math.max(baseBs.winsJavier || 0, incBs.winsJavier || 0),
+        };
+      }
+
+      const isPhaseEarly = (p: string) => p === 'setup' || p === 'invited' || p === 'idle';
+      const isPhaseLate = (p: string) => p === 'finished' || p === 'battle';
+
+      // Protección contra paquetes viejos de una partida terminada cuando ya se reinició la sala
+      if (isPhaseEarly(baseBs.phase) && isPhaseLate(incBs.phase)) {
+        if ((baseBs.updatedAt || 0) > (incBs.updatedAt || 0) || (baseBs.version || 0) > (incBs.version || 0)) {
+          return {
+            ...baseBs,
+            winsKarla: Math.max(baseBs.winsKarla || 0, incBs.winsKarla || 0),
+            winsJavier: Math.max(baseBs.winsJavier || 0, incBs.winsJavier || 0),
+          };
+        }
+      }
+
       // Si se está reiniciando explícitamente a setup/idle
-      const isReset =
-        (incBs.phase === 'setup' || incBs.phase === 'invited' || incBs.phase === 'idle') &&
-        (baseBs.phase === 'finished' || baseBs.phase === 'battle');
-      const isNewGame = incBs.phase === 'setup' || incBs.phase === 'invited' || incBs.phase === 'idle';
+      const isReset = isPhaseEarly(incBs.phase) && isPhaseLate(baseBs.phase);
+      const isNewGame = isPhaseEarly(incBs.phase);
 
       // Ready flags: respetar cambios explícitos del jugador que emite (confirmar o desbloquear "Modificar Flota")
       // sin sobrescribir el estado de listo del otro jugador
@@ -965,6 +1279,7 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
       return {
         ...baseBs,
         ...incBs,
+        version: Math.max(baseBs.version || 0, incBs.version || 0),
         phase,
         readyKarla: readyK,
         readyJavier: readyJ,
@@ -983,31 +1298,98 @@ export function mergeGamesStates(base: GamesState, incoming: GamesState): GamesS
       const baseDg = normBase.drawGuess || DEFAULT_GAMES_STATE.drawGuess;
       const incDg = normIncoming.drawGuess || DEFAULT_GAMES_STATE.drawGuess;
 
-      const baseTs = baseDg.updatedAt || 0;
-      const incTs = incDg.updatedAt || 0;
+      const baseVer = typeof baseDg.version === 'number' ? baseDg.version : 0;
+      const incVer = typeof incDg.version === 'number' ? incDg.version : 0;
+      const baseTs = typeof baseDg.updatedAt === 'number' ? baseDg.updatedAt : 0;
+      const incTs = typeof incDg.updatedAt === 'number' ? incDg.updatedAt : 0;
 
       const isIncomingFresher =
-        incTs > baseTs ||
-        (incTs === baseTs && (
-          (incDg.currentRound || 1) > (baseDg.currentRound || 1) ||
-          (incDg.roundsHistory?.length || 0) > (baseDg.roundsHistory?.length || 0) ||
-          (incDg.strokes?.length || 0) !== (baseDg.strokes?.length || 0) ||
-          incDg.phase !== baseDg.phase
-        ));
+        incVer !== baseVer
+          ? incVer > baseVer
+          : incTs > baseTs ||
+            (incTs === baseTs && (
+              (incDg.currentRound || 1) > (baseDg.currentRound || 1) ||
+              (incDg.roundsHistory?.length || 0) > (baseDg.roundsHistory?.length || 0) ||
+              (incDg.strokes?.length || 0) !== (baseDg.strokes?.length || 0) ||
+              incDg.phase !== baseDg.phase
+            ));
 
       const activeState = isIncomingFresher ? incDg : baseDg;
       const otherState = isIncomingFresher ? baseDg : incDg;
 
+      const activePhase = activeState.phase || 'idle';
+      const shouldKeepActiveStrokes = activePhase === 'drawing' || activePhase === 'round_end';
+
+      // En una misma ronda de dibujo, un intento del adivinador jamás debe borrar los trazos del dibujante
+      const isSameDrawingRound =
+        (baseDg.currentRound || 1) === (incDg.currentRound || 1) &&
+        baseDg.phase === 'drawing' &&
+        incDg.phase === 'drawing';
+
+      let resolvedStrokes = shouldKeepActiveStrokes ? (activeState.strokes || []) : [];
+      let resolvedStrokesTs = activeState.strokesUpdatedAt || 0;
+      if (isSameDrawingRound) {
+        const bStrokeTs = typeof baseDg.strokesUpdatedAt === 'number' ? baseDg.strokesUpdatedAt : 0;
+        const iStrokeTs = typeof incDg.strokesUpdatedAt === 'number' ? incDg.strokesUpdatedAt : 0;
+        if (bStrokeTs !== iStrokeTs) {
+          const strokeOwner = iStrokeTs > bStrokeTs ? incDg : baseDg;
+          resolvedStrokes = strokeOwner.strokes || [];
+          resolvedStrokesTs = strokeOwner.strokesUpdatedAt || 0;
+        } else if ((baseDg.strokes?.length || 0) > 0 && (incDg.strokes?.length || 0) === 0) {
+          resolvedStrokes = baseDg.strokes || [];
+        } else if ((incDg.strokes?.length || 0) > 0 && (baseDg.strokes?.length || 0) === 0) {
+          resolvedStrokes = incDg.strokes || [];
+        }
+      }
+
       return {
         ...otherState,
         ...activeState,
-        strokes: activeState.strokes || [],
+        version: Math.max(baseVer, incVer),
+        strokes: resolvedStrokes,
+        strokesUpdatedAt: resolvedStrokesTs,
         attempts: activeState.attempts || [],
-        roundsHistory: activeState.roundsHistory || [],
+        roundsHistory: (activeState.roundsHistory || []).slice(-6).map((r) => ({ ...r, strokes: [] })),
         winsKarla: Math.max(baseDg.winsKarla || 0, incDg.winsKarla || 0),
         winsJavier: Math.max(baseDg.winsJavier || 0, incDg.winsJavier || 0),
         scoreKarla: Math.max(baseDg.scoreKarla || 0, incDg.scoreKarla || 0),
         scoreJavier: Math.max(baseDg.scoreJavier || 0, incDg.scoreJavier || 0),
+      };
+    })(),
+    domino: (() => {
+      const baseDom = normBase.domino || DEFAULT_GAMES_STATE.domino;
+      const incDom = normIncoming.domino || DEFAULT_GAMES_STATE.domino;
+      const baseVer = typeof baseDom.version === 'number' ? baseDom.version : 0;
+      const incVer = typeof incDom.version === 'number' ? incDom.version : 0;
+      const baseTs = typeof baseDom.updatedAt === 'number' ? baseDom.updatedAt : 0;
+      const incTs = typeof incDom.updatedAt === 'number' ? incDom.updatedAt : 0;
+      const isIncomingFresher = incVer !== baseVer ? incVer > baseVer : incTs >= baseTs;
+      const active = isIncomingFresher ? incDom : baseDom;
+      return {
+        ...active,
+        version: Math.max(baseVer, incVer),
+        winsKarla: Math.max(baseDom.winsKarla || 0, incDom.winsKarla || 0),
+        winsJavier: Math.max(baseDom.winsJavier || 0, incDom.winsJavier || 0),
+        scoreKarla: Math.max(baseDom.scoreKarla || 0, incDom.scoreKarla || 0),
+        scoreJavier: Math.max(baseDom.scoreJavier || 0, incDom.scoreJavier || 0),
+      };
+    })(),
+    uno: (() => {
+      const baseUno = normBase.uno || DEFAULT_GAMES_STATE.uno;
+      const incUno = normIncoming.uno || DEFAULT_GAMES_STATE.uno;
+      const baseVer = typeof baseUno.version === 'number' ? baseUno.version : 0;
+      const incVer = typeof incUno.version === 'number' ? incUno.version : 0;
+      const baseTs = typeof baseUno.updatedAt === 'number' ? baseUno.updatedAt : 0;
+      const incTs = typeof incUno.updatedAt === 'number' ? incUno.updatedAt : 0;
+      const isIncomingFresher = incVer !== baseVer ? incVer > baseVer : incTs >= baseTs;
+      const active = isIncomingFresher ? incUno : baseUno;
+      return {
+        ...active,
+        version: Math.max(baseVer, incVer),
+        winsKarla: Math.max(baseUno.winsKarla || 0, incUno.winsKarla || 0),
+        winsJavier: Math.max(baseUno.winsJavier || 0, incUno.winsJavier || 0),
+        scoreKarla: Math.max(baseUno.scoreKarla || 0, incUno.scoreKarla || 0),
+        scoreJavier: Math.max(baseUno.scoreJavier || 0, incUno.scoreJavier || 0),
       };
     })(),
   };
@@ -1040,6 +1422,62 @@ function normalizeMoviesState(state: MoviesAndPlansState): MoviesAndPlansState {
     foodOptions: foodOptions.length > 0 ? foodOptions : DEFAULT_MOVIES_STATE.foodOptions,
     deletedIds: Array.isArray(state.deletedIds) ? state.deletedIds : [],
   };
+}
+
+// Sellado de información oculta (manos y mazos) para que los payloads de red no viajen en texto plano
+const SEAL_KEY = 'KMRG_COUPLE_VAULT_2026';
+
+export function sealHiddenData<T>(data: T): string {
+  try {
+    const json = JSON.stringify(data);
+    let out = '';
+    for (let i = 0; i < json.length; i++) {
+      const code = json.charCodeAt(i) ^ SEAL_KEY.charCodeAt(i % SEAL_KEY.length);
+      out += code.toString(16).padStart(4, '0');
+    }
+    return `kmrg_sealed:${out}`;
+  } catch {
+    return '';
+  }
+}
+
+export function unsealHiddenData<T>(raw: unknown, fallback: T): T {
+  if (Array.isArray(raw)) return raw as unknown as T;
+  if (typeof raw === 'string' && raw.startsWith('kmrg_sealed:')) {
+    try {
+      const hex = raw.slice('kmrg_sealed:'.length);
+      let json = '';
+      for (let i = 0; i < hex.length; i += 4) {
+        const code = parseInt(hex.slice(i, i + 4), 16) ^ SEAL_KEY.charCodeAt((i / 4) % SEAL_KEY.length);
+        json += String.fromCharCode(code);
+      }
+      return JSON.parse(json) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+export function sealGamesPayloadForNetwork(state: GamesState): Record<string, unknown> {
+  const copy: any = { ...state };
+  if (state.domino) {
+    copy.domino = {
+      ...state.domino,
+      handKarla: sealHiddenData(state.domino.handKarla),
+      handJavier: sealHiddenData(state.domino.handJavier),
+      boneyard: sealHiddenData(state.domino.boneyard),
+    };
+  }
+  if (state.uno) {
+    copy.uno = {
+      ...state.uno,
+      deck: sealHiddenData(state.uno.deck),
+      handKarla: sealHiddenData(state.uno.handKarla),
+      handJavier: sealHiddenData(state.uno.handJavier),
+    };
+  }
+  return copy;
 }
 
 function normalizeGamesState(state: GamesState): GamesState {
@@ -1139,6 +1577,22 @@ function normalizeGamesState(state: GamesState): GamesState {
         trophiesKarla: (state?.drawGuess?.winsKarla || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
         trophiesJavier: (state?.drawGuess?.winsJavier || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
       },
+      domino: rawBreakdown.domino || {
+        winsKarla: state?.domino?.winsKarla || 0,
+        winsJavier: state?.domino?.winsJavier || 0,
+        pointsKarla: (state?.domino?.winsKarla || 0) * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: (state?.domino?.winsJavier || 0) * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: (state?.domino?.winsKarla || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: (state?.domino?.winsJavier || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
+      uno: rawBreakdown.uno || {
+        winsKarla: state?.uno?.winsKarla || 0,
+        winsJavier: state?.uno?.winsJavier || 0,
+        pointsKarla: (state?.uno?.winsKarla || 0) * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        pointsJavier: (state?.uno?.winsJavier || 0) * UNIFIED_GAME_REWARDS.POINTS_PER_WIN,
+        trophiesKarla: (state?.uno?.winsKarla || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+        trophiesJavier: (state?.uno?.winsJavier || 0) * UNIFIED_GAME_REWARDS.TROPHIES_PER_WIN,
+      },
     };
 
     normalizedLb = {
@@ -1173,6 +1627,14 @@ function normalizeGamesState(state: GamesState): GamesState {
       completedCount: resetGamesForNewWeek ? 0 : baseSudoku.completedCount || 0,
       bestScoreKarla: resetGamesForNewWeek ? 0 : baseSudoku.bestScoreKarla || 0,
       bestScoreJavier: resetGamesForNewWeek ? 0 : baseSudoku.bestScoreJavier || 0,
+      session:
+        baseSudoku.session &&
+        Array.isArray(baseSudoku.session.board) &&
+        baseSudoku.session.board.length === 9 &&
+        Array.isArray(baseSudoku.session.solution) &&
+        baseSudoku.session.solution.length === 9
+          ? baseSudoku.session
+          : null,
     },
     hangman: {
       ...DEFAULT_GAMES_STATE.hangman,
@@ -1213,11 +1675,40 @@ function normalizeGamesState(state: GamesState): GamesState {
     drawGuess: {
       ...DEFAULT_GAMES_STATE.drawGuess,
       ...(state?.drawGuess || {}),
-      phase: (!state?.drawGuess?.phase || state?.drawGuess?.phase === 'idle') ? 'choosing_word' : state.drawGuess.phase,
+      phase: state?.drawGuess?.phase || 'idle',
       drawer: state?.drawGuess?.drawer || 'Karla',
       guesser: state?.drawGuess?.guesser || 'Javier',
+      strokes:
+        state?.drawGuess?.phase === 'drawing' || state?.drawGuess?.phase === 'round_end'
+          ? state?.drawGuess?.strokes || []
+          : [],
+      roundsHistory: Array.isArray(state?.drawGuess?.roundsHistory)
+        ? state.drawGuess.roundsHistory.slice(-6).map((r) => ({ ...r, strokes: [] }))
+        : [],
       winsKarla: resetGamesForNewWeek ? 0 : state?.drawGuess?.winsKarla || 0,
       winsJavier: resetGamesForNewWeek ? 0 : state?.drawGuess?.winsJavier || 0,
+    },
+    domino: {
+      ...DEFAULT_GAMES_STATE.domino,
+      ...(state?.domino || {}),
+      handKarla: unsealHiddenData(state?.domino?.handKarla, DEFAULT_GAMES_STATE.domino.handKarla),
+      handJavier: unsealHiddenData(state?.domino?.handJavier, DEFAULT_GAMES_STATE.domino.handJavier),
+      boneyard: unsealHiddenData(state?.domino?.boneyard, DEFAULT_GAMES_STATE.domino.boneyard),
+      winsKarla: resetGamesForNewWeek ? 0 : state?.domino?.winsKarla || 0,
+      winsJavier: resetGamesForNewWeek ? 0 : state?.domino?.winsJavier || 0,
+      scoreKarla: resetGamesForNewWeek ? 0 : state?.domino?.scoreKarla || 0,
+      scoreJavier: resetGamesForNewWeek ? 0 : state?.domino?.scoreJavier || 0,
+    },
+    uno: {
+      ...DEFAULT_GAMES_STATE.uno,
+      ...(state?.uno || {}),
+      deck: unsealHiddenData(state?.uno?.deck, DEFAULT_GAMES_STATE.uno.deck),
+      handKarla: unsealHiddenData(state?.uno?.handKarla, DEFAULT_GAMES_STATE.uno.handKarla),
+      handJavier: unsealHiddenData(state?.uno?.handJavier, DEFAULT_GAMES_STATE.uno.handJavier),
+      winsKarla: resetGamesForNewWeek ? 0 : state?.uno?.winsKarla || 0,
+      winsJavier: resetGamesForNewWeek ? 0 : state?.uno?.winsJavier || 0,
+      scoreKarla: resetGamesForNewWeek ? 0 : state?.uno?.scoreKarla || 0,
+      scoreJavier: resetGamesForNewWeek ? 0 : state?.uno?.scoreJavier || 0,
     },
   };
 }
@@ -1244,69 +1735,107 @@ function normalizePlacesState(state: SpecialPlacesState): SpecialPlacesState {
   return { places, deletedIds: Array.isArray(state?.deletedIds) ? state.deletedIds : [] };
 }
 
+const lastSyncFetchMs = new Map<string, number>();
+const inFlightSyncPromises = new Map<string, Promise<any>>();
+const STATE_FETCH_COOLDOWN_MS = 15_000;
+
 async function fetchLatestSyncedState<T>(
   syncType: string,
   localKey: string,
   defaultValue: T,
   normalizer?: (val: T) => T,
-  merger?: (localVal: T, remoteVal: T) => T
+  merger?: (localVal: T, remoteVal: T) => T,
+  forceRefresh: boolean = false
 ): Promise<T> {
-  const applyNormalize = (val: T): T => (normalizer ? normalizer(val) : val);
+  // Deduplicar peticiones simultáneas del mismo syncType al arrancar la app
+  const existingPromise = !forceRefresh ? inFlightSyncPromises.get(syncType) : undefined;
+  if (existingPromise) {
+    return existingPromise as Promise<T>;
+  }
 
-  let localCached: T | null = null;
-  try {
-    let raw = await AsyncStorage.getItem(localKey);
+  const runFetch = async (): Promise<T> => {
+    const applyNormalize = (val: T): T => (normalizer ? normalizer(val) : val);
 
-    // Migración automática de claves legadas/anteriores para evitar pérdida de datos en actualizaciones
-    if (!raw) {
-      const legacyCandidates = [
-        localKey.replace('_v2', '_v1'),
-        localKey.replace('_v2', ''),
-        localKey.replace('_v1', ''),
-      ];
-      for (const leg of legacyCandidates) {
-        if (leg !== localKey) {
-          const legRaw = await AsyncStorage.getItem(leg);
-          if (legRaw) {
-            raw = legRaw;
-            // Escribir en la clave actual para futuras lecturas rápidas
-            await AsyncStorage.setItem(localKey, legRaw);
-            break;
+    let localCached: T | null = null;
+    try {
+      let raw = await AsyncStorage.getItem(localKey);
+
+      // Migración automática de claves legadas/anteriores para evitar pérdida de datos en actualizaciones
+      if (!raw) {
+        const legacyCandidates = [
+          localKey.replace('_v2', '_v1'),
+          localKey.replace('_v2', ''),
+          localKey.replace('_v1', ''),
+        ];
+        for (const leg of legacyCandidates) {
+          if (leg !== localKey) {
+            const legRaw = await AsyncStorage.getItem(leg);
+            if (legRaw) {
+              raw = legRaw;
+              // Escribir en la clave actual para futuras lecturas rápidas
+              await AsyncStorage.setItem(localKey, legRaw);
+              break;
+            }
           }
         }
       }
+
+      if (raw) {
+        localCached = applyNormalize({ ...defaultValue, ...(JSON.parse(raw) as T) });
+      }
+    } catch {
+      // Ignorar error de lectura local
     }
 
-    if (raw) {
-      localCached = applyNormalize({ ...defaultValue, ...(JSON.parse(raw) as T) });
+    const lastFetch = lastSyncFetchMs.get(syncType) || 0;
+    if (!forceRefresh && localCached && Date.now() - lastFetch < STATE_FETCH_COOLDOWN_MS) {
+      return localCached;
     }
-  } catch {
-    // Ignorar error de lectura local
-  }
 
-  try {
-    const { data, error } = await supabase
-      .from('interactions')
-      .select('payload, created_at')
-      .eq('type', syncType)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    try {
+      const { data, error } = await supabase
+        .from('interactions')
+        .select('payload, created_at')
+        .eq('type', syncType)
+        .order('created_at', { ascending: false })
+        .limit(2);
 
-    if (!error && data && data.length > 0 && data[0].payload) {
-      const remoteRaw = applyNormalize({ ...defaultValue, ...(data[0].payload as T) });
-      const finalState = localCached
-        ? merger
-          ? merger(localCached, remoteRaw)
-          : { ...remoteRaw, ...localCached }
-        : remoteRaw;
-      await AsyncStorage.setItem(localKey, JSON.stringify(finalState));
-      return finalState;
+      if (!error && data && data.length > 0) {
+        lastSyncFetchMs.set(syncType, Date.now());
+        const validPayloads = data
+          .filter((row: any) => row && row.payload && typeof row.payload === 'object')
+          .map((row: any) => applyNormalize({ ...defaultValue, ...(row.payload as T) }))
+          .reverse(); // Ordenar del más antiguo al más reciente para preservar historial
+
+        if (validPayloads.length > 0) {
+          let remoteMerged = validPayloads[0];
+          for (let i = 1; i < validPayloads.length; i++) {
+            remoteMerged = merger
+              ? merger(remoteMerged, validPayloads[i])
+              : { ...remoteMerged, ...validPayloads[i] };
+          }
+
+          const finalState = localCached
+            ? merger
+              ? merger(localCached, remoteMerged)
+              : { ...remoteMerged, ...localCached }
+            : remoteMerged;
+          await AsyncStorage.setItem(localKey, JSON.stringify(finalState));
+          return finalState;
+        }
+      }
+    } catch {
+      // Usar caché local si no hay red
     }
-  } catch {
-    // Usar caché local si no hay red
-  }
 
-  return localCached ?? applyNormalize(defaultValue);
+    return localCached ?? applyNormalize(defaultValue);
+  };
+
+  const promise = runFetch().finally(() => {
+    inFlightSyncPromises.delete(syncType);
+  });
+  inFlightSyncPromises.set(syncType, promise);
+  return promise;
 }
 
 function collectArrayIds(obj: any): string[] {
@@ -1323,22 +1852,29 @@ function collectArrayIds(obj: any): string[] {
   return ids;
 }
 
+const lastBroadcastSerialized = new Map<string, string>();
+
 async function saveAndBroadcastState<T>(
   sender: UserProfile,
   syncType: string,
   localKey: string,
   newState: T,
-  normalizer?: (val: T) => T
-): Promise<void> {
+  normalizer?: (val: T) => T,
+  merger?: (baseVal: T, incVal: T) => T
+): Promise<T> {
   let cleanState: any = normalizer ? normalizer(newState) : newState;
+  let prevParsedState: any = null;
 
   try {
     const prevRaw = await AsyncStorage.getItem(localKey);
     if (prevRaw && cleanState && typeof cleanState === 'object') {
       const prevParsed = JSON.parse(prevRaw);
+      prevParsedState = prevParsed;
+      const isUninitializedDefault =
+        syncType === 'sync_home_state' && cleanState.lastInteractionDate === '1970-01-01';
       const prevIds = collectArrayIds(prevParsed);
       const currentIds = new Set(collectArrayIds(cleanState));
-      const newlyDeleted = prevIds.filter((id) => !currentIds.has(id));
+      const newlyDeleted = isUninitializedDefault ? [] : prevIds.filter((id) => !currentIds.has(id));
       const existingDeleted: string[] = Array.isArray(cleanState.deletedIds)
         ? cleanState.deletedIds
         : Array.isArray(prevParsed?.deletedIds)
@@ -1350,33 +1886,73 @@ async function saveAndBroadcastState<T>(
           deletedIds: Array.from(new Set([...existingDeleted, ...newlyDeleted])).slice(-200),
         };
       }
+      if (merger) {
+        cleanState = merger(prevParsed as T, cleanState as T);
+      }
     }
     await AsyncStorage.setItem(localKey, JSON.stringify(cleanState));
+    lastSyncFetchMs.set(syncType, Date.now());
   } catch {
     // Ignorar error local
   }
 
+  // Disparar automáticamente notificación Push remota a la pareja si la acción lo amerita
   try {
+    const { dispatchOutgoingSyncPushNotification } = require('./NotificationService');
+    if (typeof dispatchOutgoingSyncPushNotification === 'function') {
+      void dispatchOutgoingSyncPushNotification(sender, syncType, prevParsedState, cleanState);
+    }
+  } catch {
+    // Ignorar si no está disponible en entorno de test
+  }
+
+  try {
+    const networkPayload =
+      syncType === 'sync_games_state'
+        ? sealGamesPayloadForNetwork(cleanState as GamesState)
+        : (cleanState as unknown as Record<string, unknown>);
+    const serialized = JSON.stringify(networkPayload);
+    if (lastBroadcastSerialized.get(syncType) === serialized) {
+      return cleanState as T;
+    }
+    lastBroadcastSerialized.set(syncType, serialized);
     await supabase.from('interactions').insert([
       {
         sender,
         type: syncType,
-        payload: cleanState as unknown as Record<string, unknown>,
+        payload: networkPayload,
       },
     ]);
   } catch {
     // Guardado localmente
   }
+
+  return cleanState as T;
 }
 
-export const getHomeState = (): Promise<HomeState> =>
-  fetchLatestSyncedState<HomeState>(
+export const getCachedHomeState = async (): Promise<HomeState> => {
+  try {
+    const raw = await AsyncStorage.getItem(HOME_STATE_KEY);
+    if (raw) {
+      return normalizeHomeState({ ...DEFAULT_HOME_STATE, ...(JSON.parse(raw) as HomeState) });
+    }
+  } catch {
+    // Ignorar error de lectura local
+  }
+  return DEFAULT_HOME_STATE;
+};
+
+export const getHomeState = async (): Promise<HomeState> => {
+  const synced = await fetchLatestSyncedState<HomeState>(
     'sync_home_state',
     HOME_STATE_KEY,
     DEFAULT_HOME_STATE,
     normalizeHomeState,
     mergeHomeStates
   );
+  notifyHomeState(synced);
+  return synced;
+};
 
 // Fuente única de verdad para el estado de Hoy (racha, mascota, perfiles): los listeners se notifican en cada guardado
 const homeStateListeners = new Set<(s: HomeState) => void>();
@@ -1393,15 +1969,55 @@ export function notifyHomeState(state: HomeState): void {
   homeStateListeners.forEach((l) => l(clean));
 }
 
+export async function applyIncomingRealtimeHomeState(
+  incoming: Partial<HomeState>
+): Promise<HomeState> {
+  const cached = await getCachedHomeState();
+  const merged = mergeHomeStates(
+    cached,
+    { ...DEFAULT_HOME_STATE, ...incoming } as HomeState
+  );
+  try {
+    await AsyncStorage.setItem(HOME_STATE_KEY, JSON.stringify(merged));
+    lastSyncFetchMs.set('sync_home_state', Date.now());
+  } catch {}
+  notifyHomeState(merged);
+  return merged;
+}
+
+export async function applyIncomingRealtimePlacesState(
+  currentPlaces: SpecialPlace[],
+  incoming: Partial<SpecialPlacesState>
+): Promise<SpecialPlacesState> {
+  let base: SpecialPlacesState = { places: currentPlaces };
+  try {
+    const raw = await AsyncStorage.getItem(PLACES_STATE_KEY);
+    if (raw) {
+      base = normalizePlacesState({ ...DEFAULT_PLACES_STATE, ...(JSON.parse(raw) as SpecialPlacesState) });
+    }
+  } catch {}
+  const merged = mergeSpecialPlaces(
+    base,
+    normalizePlacesState({ ...DEFAULT_PLACES_STATE, ...incoming } as SpecialPlacesState)
+  );
+  try {
+    await AsyncStorage.setItem(PLACES_STATE_KEY, JSON.stringify(merged));
+    lastSyncFetchMs.set('sync_places_state', Date.now());
+  } catch {}
+  return merged;
+}
+
 export const saveHomeState = async (sender: UserProfile, state: HomeState): Promise<void> => {
   notifyHomeState(state);
-  await saveAndBroadcastState<HomeState>(
+  const merged = await saveAndBroadcastState<HomeState>(
     sender,
     'sync_home_state',
     HOME_STATE_KEY,
     state,
-    normalizeHomeState
+    normalizeHomeState,
+    mergeHomeStates
   );
+  notifyHomeState(merged);
 };
 
 export const getMoviesState = (): Promise<MoviesAndPlansState> =>
@@ -1413,32 +2029,64 @@ export const getMoviesState = (): Promise<MoviesAndPlansState> =>
     mergeMoviesStates
   );
 
-export const saveMoviesState = (sender: UserProfile, state: MoviesAndPlansState): Promise<void> =>
-  saveAndBroadcastState<MoviesAndPlansState>(
+export const saveMoviesState = async (
+  sender: UserProfile,
+  state: MoviesAndPlansState
+): Promise<void> => {
+  await saveAndBroadcastState<MoviesAndPlansState>(
     sender,
     'sync_movies_state',
     MOVIES_STATE_KEY,
     state,
-    normalizeMoviesState
+    normalizeMoviesState,
+    mergeMoviesStates
   );
+};
 
-export const getGamesState = (): Promise<GamesState> =>
+export const getGamesState = (forceRefresh: boolean = false): Promise<GamesState> =>
   fetchLatestSyncedState<GamesState>(
     'sync_games_state',
     GAMES_STATE_KEY,
     DEFAULT_GAMES_STATE,
     normalizeGamesState,
-    mergeGamesStates
+    mergeGamesStates,
+    forceRefresh
   );
 
-export const saveGamesState = (sender: UserProfile, state: GamesState): Promise<void> =>
-  saveAndBroadcastState<GamesState>(
+export async function applyIncomingRealtimeGamesState(
+  currentState: GamesState | null,
+  incoming: Partial<GamesState>
+): Promise<GamesState> {
+  let base: GamesState = currentState ? normalizeGamesState(currentState) : DEFAULT_GAMES_STATE;
+  try {
+    const raw = await AsyncStorage.getItem(GAMES_STATE_KEY);
+    if (raw) {
+      const parsed = normalizeGamesState({ ...DEFAULT_GAMES_STATE, ...(JSON.parse(raw) as GamesState) });
+      base = currentState ? mergeGamesStates(parsed, base) : parsed;
+    }
+  } catch {}
+  const incomingNormalized = normalizeGamesState({
+    ...DEFAULT_GAMES_STATE,
+    ...incoming,
+  } as GamesState);
+  const merged = mergeGamesStates(base, incomingNormalized);
+  try {
+    await AsyncStorage.setItem(GAMES_STATE_KEY, JSON.stringify(merged));
+    lastSyncFetchMs.set('sync_games_state', Date.now());
+  } catch {}
+  return merged;
+}
+
+export const saveGamesState = async (sender: UserProfile, state: GamesState): Promise<GamesState> => {
+  return await saveAndBroadcastState<GamesState>(
     sender,
     'sync_games_state',
     GAMES_STATE_KEY,
     state,
-    normalizeGamesState
+    normalizeGamesState,
+    mergeGamesStates
   );
+};
 
 export const getSpecialPlacesState = (): Promise<SpecialPlacesState> =>
   fetchLatestSyncedState<SpecialPlacesState>(
@@ -1449,14 +2097,16 @@ export const getSpecialPlacesState = (): Promise<SpecialPlacesState> =>
     mergeSpecialPlaces
   );
 
-export const saveSpecialPlacesState = (
+export const saveSpecialPlacesState = async (
   sender: UserProfile,
   state: SpecialPlacesState
-): Promise<void> =>
-  saveAndBroadcastState<SpecialPlacesState>(
+): Promise<void> => {
+  await saveAndBroadcastState<SpecialPlacesState>(
     sender,
     'sync_places_state',
     PLACES_STATE_KEY,
     state,
-    normalizePlacesState
+    normalizePlacesState,
+    mergeSpecialPlaces
   );
+};

@@ -11,16 +11,86 @@ import {
   Switch,
   ActivityIndicator,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from './ui/Icon';
 import { PressableScale } from './ui/Kit';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useHomeState } from '../hooks/useHomeState';
 import { calculateTimeTogether } from '../services/StorageService';
 import { CoupleWrappedModal } from './CoupleWrappedModal';
+import { useCoupleFeatures } from '../contexts/CoupleFeaturesContext';
 import { FONTS, MIN_TOUCH, RADII, SPACING, TYPE_SCALE } from '../theme/designSystem';
+
+interface AvatarCircleProps {
+  size: number;
+  uri?: string | null;
+  name: string;
+  bgColor: string;
+  textColor: string;
+  borderColor?: string;
+  borderWidth?: number;
+  fontSize?: number;
+  style?: StyleProp<ViewStyle>;
+}
+
+const AvatarCircle: React.FC<AvatarCircleProps> = ({
+  size,
+  uri,
+  name,
+  bgColor,
+  textColor,
+  borderColor,
+  borderWidth = 0,
+  fontSize,
+  style,
+}) => {
+  const radius = size / 2;
+  const innerSize = Math.max(0, size - borderWidth * 2);
+  const innerRadius = innerSize / 2;
+  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+
+  return (
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: radius,
+          backgroundColor: bgColor,
+          borderColor: borderColor || 'transparent',
+          borderWidth,
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        },
+        style,
+      ]}
+    >
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={{ width: innerSize, height: innerSize, borderRadius: innerRadius }}
+        />
+      ) : (
+        <Text
+          style={{
+            color: textColor,
+            fontSize: fontSize ?? Math.round(size * 0.42),
+            fontWeight: '800',
+          }}
+        >
+          {initial}
+        </Text>
+      )}
+    </View>
+  );
+};
 
 interface AppHeaderProps {
   /** Se mantiene por compatibilidad; la racha ahora sale de una única fuente de datos. */
@@ -32,7 +102,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
   const { profile, setProfile, logout, getDisplayName, getAvatarUri, saveProfileSettings } =
     useProfile();
   const { colors, isDark, toggleDark, openThemeModal } = useTheme();
-  const home = useHomeState();
+  const { openSidebar, homeState: home, hasPendingSidebarNotice } = useCoupleFeatures();
   const streak = home.streakCount || 1;
   const timeTogether = calculateTimeTogether(home.anniversaryDate);
   const currentProfile = profile || 'Karla';
@@ -109,16 +179,49 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
 
   const myDisplayName = getDisplayName(currentProfile);
   const myAvatarUri = getAvatarUri(currentProfile);
+  const partnerDisplayName = getDisplayName(partnerRole);
   const partnerAvatarUri = getAvatarUri(partnerRole);
   const karlaName = getDisplayName('Karla');
   const javierName = getDisplayName('Javier');
+  const partnerFallbackBg =
+    partnerRole === 'Karla'
+      ? isDark
+        ? 'rgba(236, 72, 153, 0.22)'
+        : '#fdf2f8'
+      : isDark
+        ? 'rgba(56, 189, 248, 0.22)'
+        : '#f0f9ff';
+  const partnerFallbackBorder = partnerRole === 'Karla' ? '#f472b6' : '#38bdf8';
+  const partnerFallbackText =
+    partnerRole === 'Karla'
+      ? isDark
+        ? '#f9a8d4'
+        : '#be185d'
+      : isDark
+        ? '#7dd3fc'
+        : '#0369a1';
+  const karlaDraftName =
+    currentProfile === 'Karla'
+      ? myNameInput.trim() || karlaName
+      : partnerNameInput.trim() || karlaName;
+  const javierDraftName =
+    currentProfile === 'Javier'
+      ? myNameInput.trim() || javierName
+      : partnerNameInput.trim() || javierName;
+  const karlaHeroAvatar = currentProfile === 'Karla' ? myAvatarDraft : partnerAvatarUri;
+  const javierHeroAvatar = currentProfile === 'Javier' ? myAvatarDraft : partnerAvatarUri;
 
   return (
-    <View
+    <LinearGradient
+      colors={[
+        colors.surface,
+        isDark ? `${colors.primary}18` : `${colors.primary}0D`,
+      ]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
       style={[
         styles.headerContainer,
         {
-          backgroundColor: colors.surface,
           borderBottomColor: colors.border,
           shadowColor: colors.shadow,
           paddingTop: SPACING.xs,
@@ -126,23 +229,63 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
       ]}
     >
       <View style={styles.topRow}>
-        {/* Marca KMRG compacta */}
-        <View style={styles.brand}>
-          <View style={styles.titleWithEmblem}>
-            <Text style={[styles.brandTitle, { color: colors.primary }]}>KMRG</Text>
-            <Ionicons name="heart" size={12} color={colors.primary} />
+        <View style={styles.brandGroup}>
+          <TouchableOpacity
+            onPress={openSidebar}
+            activeOpacity={0.7}
+            style={[
+              styles.sidebarBtn,
+              { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir barra lateral de Nuestro Rincón"
+          >
+            <Ionicons name="menu" size={19} color={colors.primary} />
+            {hasPendingSidebarNotice && (
+              <View
+                style={[styles.sidebarUnreadDot, { borderColor: colors.surface }]}
+              />
+            )}
+          </TouchableOpacity>
+
+          {/* Marca KMRG + nombres y días juntos */}
+          <View style={styles.brand}>
+            <View style={styles.titleWithEmblem}>
+              <Text style={[styles.brandTitle, { color: colors.primary }]}>KMRG</Text>
+              <View style={[styles.brandHeartBadge, { backgroundColor: `${colors.primary}18` }]}>
+                <Ionicons name="heart" size={10} color={colors.primary} />
+              </View>
+            </View>
+            <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {karlaName} & {javierName} • {timeTogether.totalDays}d
+            </Text>
           </View>
-          <Text style={[styles.brandSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
-            {karlaName} & {javierName}
-          </Text>
         </View>
 
         <View style={styles.rightActions}>
-          {/* Racha: única fuente de datos */}
-          <View style={[styles.streakBadge, { backgroundColor: colors.primaryLight }]}>
+          {/* Racha interactiva: abre Nuestro Resumen KMRG */}
+          <PressableScale
+            onPress={() => setIsWrappedOpen(true)}
+            accessibilityLabel={`Racha activa de ${streak} días. Toca para abrir Nuestro Resumen`}
+            style={[
+              styles.streakBadge,
+              {
+                backgroundColor: isDark ? 'rgba(245, 158, 11, 0.18)' : '#fffbeb',
+                borderColor: isDark ? 'rgba(245, 158, 11, 0.36)' : '#fde68a',
+              },
+            ]}
+            scaleTo={0.94}
+          >
             <Ionicons name="flame" size={14} color={colors.warning} />
-            <Text style={[styles.streakText, { color: colors.text }]}>{streak}</Text>
-          </View>
+            <Text
+              style={[
+                styles.streakText,
+                { color: isDark ? '#fbbf24' : '#b45309' },
+              ]}
+            >
+              {streak}d
+            </Text>
+          </PressableScale>
 
           {rightAction ? (
             rightAction
@@ -150,24 +293,43 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
             <PressableScale
               onPress={() => setIsProfileModalOpen(true)}
               onLongPress={() => setIsProfileModalOpen(true)}
-              accessibilityLabel={`Perfil activo: ${myDisplayName}`}
+              accessibilityLabel={`Perfil activo: ${myDisplayName}. Toca para abrir perfil y ajustes`}
               style={[
                 styles.profilePill,
-                { backgroundColor: colors.primaryLight, borderColor: colors.border },
+                {
+                  backgroundColor: isDark ? colors.surfaceAlt : colors.surface,
+                  borderColor: `${colors.primary}38`,
+                },
               ]}
+              scaleTo={0.96}
             >
-              {myAvatarUri ? (
-                <Image source={{ uri: myAvatarUri }} style={styles.profileAvatarMini} />
-              ) : (
-                <View style={[styles.profileInitial, { backgroundColor: colors.primary }]}>
-                  <Text style={[styles.profileInitialText, { color: colors.primaryOn }]}>
-                    {myDisplayName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
+              <View style={styles.coupleAvatarStack}>
+                <AvatarCircle
+                  size={24}
+                  uri={partnerAvatarUri}
+                  name={partnerDisplayName}
+                  bgColor={partnerFallbackBg}
+                  textColor={partnerFallbackText}
+                  borderColor={colors.surface}
+                  borderWidth={1.5}
+                  fontSize={10}
+                />
+                <AvatarCircle
+                  size={30}
+                  uri={myAvatarUri}
+                  name={myDisplayName}
+                  bgColor={colors.primary}
+                  textColor={colors.primaryOn}
+                  borderColor={colors.primary}
+                  borderWidth={1.5}
+                  fontSize={12}
+                  style={styles.activeStackedAvatar}
+                />
+              </View>
               <Text style={[styles.profileText, { color: colors.text }]} numberOfLines={1}>
                 {myDisplayName}
               </Text>
+              <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
             </PressableScale>
           )}
         </View>
@@ -189,23 +351,130 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
         animationType="fade"
         onRequestClose={() => setIsProfileModalOpen(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: isDark ? colors.surfaceAlt : '#f8fafc' }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalBackdrop}
+        >
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: isDark ? colors.surface : colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             {/* Header del Modal */}
             <View style={styles.modalHeaderRow}>
-              <Text style={[TYPE_SCALE.title, { color: colors.text, fontSize: 19, fontFamily: FONTS.serif }]}>
-                Perfil y Ajustes
-              </Text>
+              <View>
+                <Text style={[styles.modalEyebrow, { color: colors.primary }]}>
+                  NUESTRO ESPACIO
+                </Text>
+                <Text style={[TYPE_SCALE.title, { color: colors.text, fontSize: 20, fontFamily: FONTS.serif }]}>
+                  Perfil y Ajustes
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => setIsProfileModalOpen(false)}
-                style={[styles.closeBtn, { backgroundColor: colors.surface }]}
+                style={[styles.closeBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
                 accessibilityLabel="Cerrar modal"
               >
                 <Ionicons name="close" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 6 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 12 }}
+            >
+              {/* ================= HERO DE PAREJA ================= */}
+              <LinearGradient
+                colors={[
+                  isDark ? `${colors.primary}28` : `${colors.primary}18`,
+                  isDark ? colors.surfaceAlt : colors.surface,
+                ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.coupleHeroBanner, { borderColor: `${colors.primary}30` }]}
+              >
+                <View style={styles.coupleHeroAvatars}>
+                  <AvatarCircle
+                    size={50}
+                    uri={karlaHeroAvatar}
+                    name={karlaDraftName}
+                    bgColor={isDark ? 'rgba(236, 72, 153, 0.22)' : '#fdf2f8'}
+                    textColor={isDark ? '#f9a8d4' : '#be185d'}
+                    borderColor={colors.primary}
+                    borderWidth={2}
+                  />
+                  <View
+                    style={[
+                      styles.coupleHeartConnector,
+                      { backgroundColor: colors.primary, borderColor: colors.surface },
+                    ]}
+                  >
+                    <Ionicons name="heart" size={12} color={colors.primaryOn} />
+                  </View>
+                  <AvatarCircle
+                    size={50}
+                    uri={javierHeroAvatar}
+                    name={javierDraftName}
+                    bgColor={isDark ? 'rgba(56, 189, 248, 0.22)' : '#f0f9ff'}
+                    textColor={isDark ? '#7dd3fc' : '#0369a1'}
+                    borderColor={colors.primary}
+                    borderWidth={2}
+                  />
+                </View>
+
+                <Text style={[styles.coupleHeroNames, { color: colors.text }]} numberOfLines={1}>
+                  {karlaDraftName} & {javierDraftName}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsProfileModalOpen(false);
+                    setTimeout(() => setIsWrappedOpen(true), 250);
+                  }}
+                  activeOpacity={0.75}
+                  style={styles.coupleHeroStatsRow}
+                >
+                  <View
+                    style={[
+                      styles.coupleHeroStatChip,
+                      {
+                        backgroundColor: isDark ? 'rgba(245, 158, 11, 0.18)' : '#fffbeb',
+                        borderColor: isDark ? 'rgba(245, 158, 11, 0.36)' : '#fde68a',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="flame" size={12} color={colors.warning} />
+                    <Text
+                      style={[
+                        styles.coupleHeroStatText,
+                        { color: isDark ? '#fbbf24' : '#b45309' },
+                      ]}
+                    >
+                      {streak} días de racha
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.coupleHeroStatChip,
+                      {
+                        backgroundColor: `${colors.primary}15`,
+                        borderColor: `${colors.primary}32`,
+                      },
+                    ]}
+                  >
+                    <Ionicons name="heart" size={11} color={colors.primary} />
+                    <Text style={[styles.coupleHeroStatText, { color: colors.primary }]}>
+                      {timeTogether.totalDays} días juntos
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </LinearGradient>
+
               {/* ================= TARJETA 1: TÚ (PUNTO FOCAL CENTRADO) ================= */}
               <View
                 style={[
@@ -216,19 +485,19 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                 <TouchableOpacity
                   onPress={() => setIsPhotoSheetOpen(true)}
                   activeOpacity={0.85}
-                  style={[
-                    styles.avatarCircleLarge,
-                    { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-                  ]}
+                  style={styles.avatarTapWrapper}
                   accessibilityLabel="Opciones de foto de perfil"
                 >
-                  {myAvatarDraft ? (
-                    <Image source={{ uri: myAvatarDraft }} style={styles.avatarImageLarge} />
-                  ) : (
-                    <Text style={[styles.avatarInitialText, { color: colors.primary }]}>
-                      {(myNameInput || currentProfile).charAt(0).toUpperCase()}
-                    </Text>
-                  )}
+                  <AvatarCircle
+                    size={76}
+                    uri={myAvatarDraft}
+                    name={myNameInput || currentProfile}
+                    bgColor={colors.primaryLight}
+                    textColor={colors.primary}
+                    borderColor={colors.primary}
+                    borderWidth={2.5}
+                    fontSize={28}
+                  />
                   <View style={[styles.cameraBadge, { backgroundColor: colors.primary, borderColor: colors.surface }]}>
                     <Ionicons name="camera" size={13} color={colors.primaryOn} />
                   </View>
@@ -260,7 +529,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                     </Text>
                     <TouchableOpacity
                       onPress={() => setIsEditingMyName(true)}
-                      style={[styles.inlinePencilBtn, { backgroundColor: isDark ? colors.surfaceAlt : '#f1f5f9' }]}
+                      style={[styles.inlinePencilBtn, { backgroundColor: colors.surfaceAlt }]}
                       accessibilityLabel="Editar nombre"
                     >
                       <Ionicons name="pencil" size={13} color={colors.textSecondary} />
@@ -272,7 +541,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                 <View style={[styles.roleBadge, { backgroundColor: `${colors.primary}15` }]}>
                   <Ionicons name="person" size={11} color={colors.primary} />
                   <Text style={[styles.roleBadgeText, { color: colors.primary }]}>
-                    {currentProfile === 'Karla' ? 'Karlita • Tu perfil' : 'Javier • Tu perfil'}
+                    {currentProfile === 'Karla' ? 'Karlita • Tu perfil activo' : 'Javier • Tu perfil activo'}
                   </Text>
                 </View>
               </View>
@@ -285,28 +554,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                 ]}
               >
                 <View style={styles.partnerCardLeft}>
-                  {partnerAvatarUri ? (
-                    <Image source={{ uri: partnerAvatarUri }} style={styles.partnerAvatarImage} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.partnerAvatarInitial,
-                        {
-                          backgroundColor: partnerRole === 'Karla' ? '#fdf2f8' : '#f0f9ff',
-                          borderColor: partnerRole === 'Karla' ? '#f472b6' : '#38bdf8',
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.partnerAvatarInitialText,
-                          { color: partnerRole === 'Karla' ? '#be185d' : '#0369a1' },
-                        ]}
-                      >
-                        {(partnerNameInput || partnerRole).charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
+                  <AvatarCircle
+                    size={42}
+                    uri={partnerAvatarUri}
+                    name={partnerNameInput || partnerRole}
+                    bgColor={partnerFallbackBg}
+                    textColor={partnerFallbackText}
+                    borderColor={partnerFallbackBorder}
+                    borderWidth={1.5}
+                    fontSize={16}
+                  />
 
                   <View style={{ flex: 1 }}>
                     <View style={styles.partnerHeaderRow}>
@@ -345,7 +602,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                 {!isEditingPartnerName && (
                   <TouchableOpacity
                     onPress={() => setIsEditingPartnerName(true)}
-                    style={[styles.inlinePencilBtn, { backgroundColor: isDark ? colors.surfaceAlt : '#f1f5f9' }]}
+                    style={[styles.inlinePencilBtn, { backgroundColor: colors.surfaceAlt }]}
                     accessibilityLabel="Editar apodo de tu pareja"
                   >
                     <Ionicons name="pencil" size={13} color={colors.textSecondary} />
@@ -369,7 +626,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                   style={styles.settingItemRow}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.settingIconBox, { backgroundColor: `${colors.primary}15` }]}>
+                  <View style={[styles.settingIconBox, { backgroundColor: `${colors.primary}18` }]}>
                     <Ionicons name="color-palette" size={18} color={colors.primary} />
                   </View>
                   <View style={styles.settingTextGroup}>
@@ -392,8 +649,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                   style={styles.settingItemRow}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.settingIconBox, { backgroundColor: '#ede9fe' }]}>
-                    <Ionicons name="stats-chart" size={18} color="#7c3aed" />
+                  <View
+                    style={[
+                      styles.settingIconBox,
+                      { backgroundColor: isDark ? 'rgba(139, 92, 246, 0.2)' : '#ede9fe' },
+                    ]}
+                  >
+                    <Ionicons
+                      name="stats-chart"
+                      size={18}
+                      color={isDark ? '#c4b5fd' : '#7c3aed'}
+                    />
                   </View>
                   <View style={styles.settingTextGroup}>
                     <Text style={[styles.settingTitle, { color: colors.text }]}>Nuestro Resumen KMRG</Text>
@@ -408,7 +674,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
 
                 {/* Opción 3: Modo Oscuro con Switch de Alto Contraste */}
                 <View style={styles.settingItemRow}>
-                  <View style={[styles.settingIconBox, { backgroundColor: isDark ? '#334155' : '#fef3c7' }]}>
+                  <View
+                    style={[
+                      styles.settingIconBox,
+                      { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.18)' : '#fef3c7' },
+                    ]}
+                  >
                     <Ionicons
                       name={isDark ? 'moon' : 'sunny'}
                       size={18}
@@ -424,7 +695,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                   <Switch
                     value={isDark}
                     onValueChange={toggleDark}
-                    trackColor={{ false: '#cbd5e1', true: colors.primary }}
+                    trackColor={{ false: colors.border, true: colors.primary }}
                     thumbColor="#ffffff"
                   />
                 </View>
@@ -467,7 +738,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ================= MINI BOTTOM SHEET: FOTO DE PERFIL ================= */}
@@ -488,7 +759,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            <View style={styles.sheetHandle} />
+            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
             <Text style={[styles.photoSheetTitle, { color: colors.text }]}>Foto de perfil</Text>
 
             <TouchableOpacity
@@ -504,7 +775,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sheetOptionText, { color: colors.text }]}>Cambiar foto</Text>
-                <Text style={styles.sheetOptionSub}>Elegir desde tu galería de fotos</Text>
+                <Text style={[styles.sheetOptionSub, { color: colors.textSecondary }]}>
+                  Elegir desde tu galería de fotos
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
@@ -518,19 +791,26 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
                 }}
                 activeOpacity={0.7}
               >
-                <View style={[styles.sheetIconCircle, { backgroundColor: '#fee2e2' }]}>
+                <View
+                  style={[
+                    styles.sheetIconCircle,
+                    { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2' },
+                  ]}
+                >
                   <Ionicons name="trash-outline" size={18} color={colors.danger} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.sheetOptionText, { color: colors.danger }]}>Eliminar foto actual</Text>
-                  <Text style={styles.sheetOptionSub}>Volver a la inicial de tu nombre</Text>
+                  <Text style={[styles.sheetOptionSub, { color: colors.textSecondary }]}>
+                    Volver a la inicial de tu nombre
+                  </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
-              style={[styles.sheetCancelBtn, { backgroundColor: isDark ? colors.surfaceAlt : '#f1f5f9' }]}
+              style={[styles.sheetCancelBtn, { backgroundColor: colors.surfaceAlt }]}
               onPress={() => setIsPhotoSheetOpen(false)}
               activeOpacity={0.7}
             >
@@ -539,7 +819,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ rightAction }) => {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </LinearGradient>
   );
 };
 
@@ -559,40 +839,77 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: MIN_TOUCH,
   },
+  brandGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  sidebarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  sidebarUnreadDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    backgroundColor: '#ec4899',
+  },
   brand: { flexShrink: 1 },
-  titleWithEmblem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  titleWithEmblem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   brandTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
     fontFamily: FONTS.serif,
-    letterSpacing: 2,
+    letterSpacing: 2.2,
   },
-  brandSubtitle: { ...TYPE_SCALE.caption, marginTop: -2 },
-  rightActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
+  brandHeartBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandSubtitle: { ...TYPE_SCALE.caption, fontSize: 11, fontWeight: '600', marginTop: -1 },
+  rightActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     height: 36,
     borderRadius: RADII.pill,
+    borderWidth: 1,
   },
-  streakText: { ...TYPE_SCALE.body, fontWeight: '800' },
+  streakText: { fontSize: 12.5, fontWeight: '800' },
   profilePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingLeft: 4,
-    paddingRight: 12,
-    height: 40,
+    gap: 7,
+    paddingLeft: 5,
+    paddingRight: 10,
+    height: 38,
     borderRadius: RADII.pill,
     borderWidth: 1,
-    maxWidth: 140,
+    maxWidth: 158,
   },
-  profileAvatarMini: { width: 32, height: 32, borderRadius: 16 },
-  profileInitial: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  profileInitialText: { fontSize: 14, fontWeight: '800' },
-  profileText: { ...TYPE_SCALE.body, fontWeight: '700', flexShrink: 1 },
+  coupleAvatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeStackedAvatar: {
+    marginLeft: -9,
+  },
+  profileText: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
 
   // Modal de Perfil & Ajustes
   modalBackdrop: {
@@ -607,6 +924,7 @@ const styles = StyleSheet.create({
     maxWidth: 390,
     maxHeight: '92%',
     borderRadius: 24,
+    borderWidth: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
@@ -622,12 +940,71 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
+  modalEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 1,
+  },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Hero de pareja en Modal
+  coupleHeroBanner: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  coupleHeroAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  coupleHeartConnector: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: -7,
+    zIndex: 2,
+  },
+  coupleHeroNames: {
+    fontSize: 16,
+    fontWeight: '800',
+    fontFamily: FONTS.serif,
+    marginBottom: 8,
+  },
+  coupleHeroStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  coupleHeroStatChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADII.pill,
+    borderWidth: 1,
+  },
+  coupleHeroStatText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
 
   // Tarjeta 1: Tú
@@ -642,24 +1019,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  avatarCircleLarge: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatarTapWrapper: {
     marginBottom: 8,
     position: 'relative',
-  },
-  avatarImageLarge: {
-    width: 71,
-    height: 71,
-    borderRadius: 35.5,
-  },
-  avatarInitialText: {
-    fontSize: 28,
-    fontWeight: '800',
   },
   cameraBadge: {
     position: 'absolute',
@@ -749,23 +1111,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flex: 1,
-  },
-  partnerAvatarImage: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-  },
-  partnerAvatarInitial: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  partnerAvatarInitialText: {
-    fontSize: 16,
-    fontWeight: '800',
   },
   partnerHeaderRow: {
     flexDirection: 'row',

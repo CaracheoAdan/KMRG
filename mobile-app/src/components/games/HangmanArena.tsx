@@ -6,12 +6,18 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Ionicons } from '../ui/Icon';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Line, Ellipse, Circle, G } from 'react-native-svg';
 import { GamesState } from '../../services/CoupleSyncService';
+import { PetAccessoryType } from '../../types';
 import { GAMES_THEME, triggerGameHaptic } from '../../theme/gamesTheme';
 import { GameButton } from './common/GameButton';
+import { PochitoBear } from '../PochitoBear';
+import { useProfile } from '../../contexts/ProfileContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
   hangman: GamesState['hangman'];
@@ -19,10 +25,21 @@ interface Props {
   primaryColor: string;
   wrongGuessesCount: number;
   maxWrong: number;
+  petAccessory?: PetAccessoryType | string | null;
   onGuessLetter: (letter: string) => void;
   onRandomWord: () => void;
   onChallengePartner: () => void;
+  onRevealLetter?: () => void;
 }
+
+const BALLOON_SLOTS = [
+  { x: 48, y: 26, color: '#fb7185' },
+  { x: 78, y: 16, color: '#f472b6' },
+  { x: 108, y: 11, color: '#c084fc' },
+  { x: 140, y: 11, color: '#38bdf8' },
+  { x: 170, y: 16, color: '#fbbf24' },
+  { x: 200, y: 26, color: '#f87171' },
+];
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -36,11 +53,25 @@ export const HangmanArena: React.FC<Props> = ({
   hangman,
   wrongGuessesCount,
   maxWrong,
+  petAccessory,
   onGuessLetter,
   onRandomWord,
   onChallengePartner,
+  onRevealLetter,
 }) => {
+  const { getDisplayName, getAvatarUri } = useProfile();
+  const { colors, isDark } = useTheme();
   const heartBeatAnim = useRef(new Animated.Value(1)).current;
+  const pochitoDropAnim = useRef(new Animated.Value(wrongGuessesCount)).current;
+
+  useEffect(() => {
+    Animated.spring(pochitoDropAnim, {
+      toValue: Math.min(maxWrong, wrongGuessesCount),
+      friction: 6,
+      tension: 60,
+      useNativeDriver: true,
+    }).start();
+  }, [wrongGuessesCount, maxWrong, pochitoDropAnim]);
 
   // Animación de latido para las vidas restantes
   useEffect(() => {
@@ -66,6 +97,22 @@ export const HangmanArena: React.FC<Props> = ({
 
   const isWon = hangman.status === 'won';
   const isLost = hangman.status === 'lost';
+  const remainingBalloons = Math.max(0, maxWrong - wrongGuessesCount);
+  const pochitoMood = isWon
+    ? 'feliz'
+    : isLost
+    ? 'triste'
+    : wrongGuessesCount >= 3
+    ? 'seria'
+    : 'feliz';
+
+  const challengerProfile: 'Karla' | 'Javier' | null = hangman.isPartnerChallenge
+    ? /karl/i.test(hangman.author || '') || hangman.author === getDisplayName('Karla')
+      ? 'Karla'
+      : 'Javier'
+    : null;
+  const challengerAvatar = challengerProfile ? getAvatarUri(challengerProfile) : null;
+  const challengerName = challengerProfile ? getDisplayName(challengerProfile) : '';
 
   // Animación al revelar parte del cuerpo por cada error
   const partAppearAnim = useRef(new Animated.Value(1)).current;
@@ -158,18 +205,30 @@ export const HangmanArena: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      {/* 1. Tarjeta Escénica: Ilustración Grande Centrada + Vidas y Pista */}
-      <View style={[styles.stageCard, GAMES_THEME.shadows.card]}>
-        {/* Barra superior de la tarjeta: Vidas y Categoría (Sin ícono duplicado) */}
-        <View style={styles.stageHeader}>
+      {/* 1. Tarjeta Escénica Bento: Ilustración Grande Centrada + Vidas y Pista */}
+      <LinearGradient
+        colors={isDark ? [colors.surface, colors.surfaceAlt] : [colors.primaryLight, '#ffffff']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.stageCard, { borderColor: colors.border }, GAMES_THEME.shadows.card]}
+      >
+        {/* Barra superior de la tarjeta: Vidas y Categoría / Retador */}
+        <View style={[styles.stageHeader, { borderBottomColor: colors.border }]}>
           <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{hangman.category || 'Palabra Oculta'}</Text>
+            {challengerAvatar && (
+              <Image source={{ uri: challengerAvatar }} style={styles.challengerAvatar} />
+            )}
+            <Text style={styles.categoryText} numberOfLines={1}>
+              {hangman.isPartnerChallenge
+                ? `Reto de ${challengerName}`
+                : hangman.category || 'Palabra Oculta'}
+            </Text>
           </View>
 
           {/* Vidas de Corazones Palpitantes */}
           <Animated.View style={[styles.livesRow, { transform: [{ scale: heartBeatAnim }] }]}>
             {Array.from({ length: maxWrong }).map((_, i) => {
-              const isAlive = i < maxWrong - wrongGuessesCount;
+              const isAlive = i < remainingBalloons;
               return (
                 <Ionicons
                   key={i}
@@ -182,8 +241,7 @@ export const HangmanArena: React.FC<Props> = ({
           </Animated.View>
         </View>
 
-        {/* Escenario Ilustrado Grande Centrado (~45% del alto de la tarjeta) */}
-        {/* Patíbulo en Madera Clara con Base sobre el Suelo, Luna Llena y Brillo */}
+        {/* Escenario Ilustrado: Cielo nocturno con Nube Suave + Pochito flotando en Globos de Corazón */}
         <LinearGradient
           colors={['#1e1b4b', '#312e81', '#1e1b4b']}
           start={{ x: 0, y: 0 }}
@@ -192,92 +250,78 @@ export const HangmanArena: React.FC<Props> = ({
         >
           {/* Luna brillante con halo de luz */}
           <View style={styles.sceneMoon}>
-            <Ionicons name="moon" size={28} color="#fef08a" />
+            <Ionicons name="moon" size={26} color="#fef08a" />
           </View>
           <View style={[styles.sceneStar, { top: 12, left: 24 }]} />
           <View style={[styles.sceneStar, { top: 28, left: 60, width: 2, height: 2 }]} />
           <View style={[styles.sceneStar, { top: 16, right: 70, width: 2, height: 2 }]} />
           <View style={[styles.sceneStar, { top: 38, right: 44 }]} />
 
-          {/* Suelo / Plataforma del patíbulo */}
-          <View style={styles.groundBeam} />
+          {/* Globos de Corazón, Cuerdas y Nube Esponjosa en SVG */}
+          <Svg width={248} height={176} viewBox="0 0 248 176" style={styles.balloonSceneSvg}>
+            {/* Nube esponjosa en la base */}
+            <Ellipse cx="124" cy="166" rx="92" ry="18" fill="#e2e8f0" opacity={0.95} />
+            <Circle cx="70" cy="158" r="18" fill="#f8fafc" />
+            <Circle cx="102" cy="150" r="24" fill="#ffffff" />
+            <Circle cx="144" cy="150" r="23" fill="#ffffff" />
+            <Circle cx="176" cy="158" r="17" fill="#f8fafc" />
 
-          {/* Ilustración Grande y Centrada del Patíbulo en Madera Noble */}
-          <View style={styles.grandGallowsBox}>
-            <View style={styles.grandGallowsBase} />
-            <View style={styles.grandGallowsPole} />
-            <View style={styles.grandGallowsTop} />
-            <View style={styles.grandGallowsBrace} />
-            <View style={styles.grandGallowsRope} />
+            {/* Cuerdas y Globos restantes renderizados en nodos G estables */}
+            {BALLOON_SLOTS.map((b, idx) => {
+              const targetY = 82 + wrongGuessesCount * 5;
+              const isVisible = idx < remainingBalloons;
+              return (
+                <G key={idx} opacity={isVisible ? 1 : 0}>
+                  <Line
+                    x1={b.x}
+                    y1={b.y + 18}
+                    x2={124}
+                    y2={targetY}
+                    stroke="rgba(255, 255, 255, 0.72)"
+                    strokeWidth={1.4}
+                    strokeDasharray="3,2"
+                  />
+                  <Path
+                    d={`M ${b.x} ${b.y + 18} C ${b.x - 10} ${b.y + 11} ${b.x - 12} ${b.y + 3} ${b.x - 6} ${b.y - 1} C ${b.x - 2.5} ${b.y - 3.5} ${b.x - 0.5} ${b.y - 1} ${b.x} ${b.y + 2} C ${b.x + 0.5} ${b.y - 1} ${b.x + 2.5} ${b.y - 3.5} ${b.x + 6} ${b.y - 1} C ${b.x + 12} ${b.y + 3} ${b.x + 10} ${b.y + 11} ${b.x} ${b.y + 18} Z`}
+                    fill={b.color}
+                    stroke="rgba(255,255,255,0.75)"
+                    strokeWidth={1.2}
+                  />
+                </G>
+              );
+            })}
+          </Svg>
 
-            {/* Muñequito de Pareja Dibujado Trazo a Trazo con Animación en Cada Error */}
-            {wrongGuessesCount >= 1 && (
-              <Animated.View
-                style={[
-                  styles.grandHmHead,
-                  isLost && styles.hmHeadLost,
-                  wrongGuessesCount === 1 && { transform: [{ scale: partAppearAnim }] },
-                ]}
-              >
-                <View style={styles.grandHmBow} />
-                <View style={styles.hmEyesRow}>
-                  <Text style={styles.grandHmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
-                  <Text style={styles.grandHmEyeEmoji}>{isLost ? '×' : isWon ? '^' : '•'}</Text>
-                </View>
-                <View style={isLost ? styles.hmMouthLost : styles.hmMouthSmile} />
-              </Animated.View>
-            )}
-
-            {wrongGuessesCount >= 2 && (
-              <Animated.View
-                style={[
-                  styles.grandHmBody,
-                  wrongGuessesCount === 2 && { transform: [{ scale: partAppearAnim }] },
-                ]}
-              >
-                <Ionicons name="heart" size={8} color="#ffffff" style={{ opacity: 0.9 }} />
-              </Animated.View>
-            )}
-            {wrongGuessesCount >= 3 && (
-              <Animated.View
-                style={[
-                  styles.grandHmArmLeft,
-                  wrongGuessesCount === 3 && { transform: [{ scale: partAppearAnim }] },
-                ]}
-              />
-            )}
-            {wrongGuessesCount >= 4 && (
-              <Animated.View
-                style={[
-                  styles.grandHmArmRight,
-                  wrongGuessesCount === 4 && { transform: [{ scale: partAppearAnim }] },
-                ]}
-              />
-            )}
-            {wrongGuessesCount >= 5 && (
-              <Animated.View
-                style={[
-                  styles.grandHmLegLeft,
-                  wrongGuessesCount === 5 && { transform: [{ scale: partAppearAnim }] },
-                ]}
-              />
-            )}
-            {wrongGuessesCount >= 6 && (
-              <Animated.View
-                style={[
-                  styles.grandHmLegRight,
-                  wrongGuessesCount === 6 && { transform: [{ scale: partAppearAnim }] },
-                ]}
-              />
-            )}
-          </View>
+          {/* Pochito ("Panzón") descendiendo suavemente conforme se sueltan los globos */}
+          <Animated.View
+            style={[
+              styles.pochitoFloatWrap,
+              {
+                transform: [
+                  {
+                    translateY: pochitoDropAnim.interpolate({
+                      inputRange: [0, maxWrong],
+                      outputRange: [0, 32],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <PochitoBear
+              mood={pochitoMood}
+              size="md"
+              accessory={(petAccessory || 'none') as PetAccessoryType}
+              isAnimated={!isLost}
+            />
+          </Animated.View>
         </LinearGradient>
 
         {/* Pista y Estado DEBAJO de la ilustración con ÚNICO ícono de información */}
         <View style={styles.hintWrapUnderGallows}>
           <View style={styles.hintQuoteRow}>
             <Ionicons name="bulb" size={15} color="#9333ea" />
-            <Text style={styles.hintQuoteText} numberOfLines={3}>
+            <Text style={[styles.hintQuoteText, { color: colors.text }]} numberOfLines={3}>
               “{hangman.hint}”
             </Text>
           </View>
@@ -285,7 +329,11 @@ export const HangmanArena: React.FC<Props> = ({
           {isWon && (
             <View style={styles.statusPillWon}>
               <Ionicons name="sparkles" size={13} color="#059669" />
-              <Text style={styles.statusTextWon}>¡Adivinaron la palabra! (+400)</Text>
+              <Text style={styles.statusTextWon}>
+                {hangman.winner
+                  ? `¡${getDisplayName(hangman.winner)} adivinó la palabra!`
+                  : '¡Adivinaron la palabra! (+400)'}
+              </Text>
             </View>
           )}
           {isLost && (
@@ -295,7 +343,7 @@ export const HangmanArena: React.FC<Props> = ({
             </View>
           )}
         </View>
-      </View>
+      </LinearGradient>
 
       {/* 2. Casillas de Letras: Divididas en dos filas balanceadas si > 8 letras, con margen de 16px */}
       <View style={styles.wordGroupsContainer}>
@@ -380,20 +428,35 @@ export const HangmanArena: React.FC<Props> = ({
         ))}
       </View>
 
-      {/* 5. Dock Inferior: Botones Unificados (Primary + Secondary) */}
+      {/* 5. Dock Inferior: Otra Palabra + Comodín Revelar 1 Letra + Retar */}
       <View style={styles.dockActionsRow}>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 0.9 }}>
           <GameButton
-            label="Otra Palabra"
+            label="Otra"
             icon="shuffle"
             variant="secondary"
             onPress={onRandomWord}
           />
         </View>
 
-        <View style={{ flex: 1.3 }}>
+        {onRevealLetter && (
+          <View style={{ flex: 1 }}>
+            <GameButton
+              label={hangman.hintUsed ? 'Usada' : '💡 Letra'}
+              icon="bulb-outline"
+              variant="secondary"
+              disabled={!!hangman.hintUsed || hangman.status !== 'playing'}
+              onPress={() => {
+                void triggerGameHaptic('selection');
+                onRevealLetter();
+              }}
+            />
+          </View>
+        )}
+
+        <View style={{ flex: 1.1 }}>
           <GameButton
-            label="+400 Retar Pareja"
+            label="Retar"
             icon="sparkles"
             variant="primary"
             onPress={onChallengePartner}
@@ -415,13 +478,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   stageCard: {
-    width: '100%',
-    backgroundColor: '#ffffff',
+    width: '100%' as const,
     borderRadius: GAMES_THEME.radius.xl,
-    padding: 10,
+    padding: 11,
     borderWidth: 1.5,
-    borderColor: 'rgba(244, 63, 94, 0.18)',
     gap: 8,
+    overflow: 'hidden' as const,
   },
   stageHeader: {
     flexDirection: 'row',
@@ -432,10 +494,28 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
   },
   categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 3.5,
     borderRadius: 8,
     backgroundColor: 'rgba(147, 51, 234, 0.12)',
+    maxWidth: '58%' as const,
+  },
+  challengerAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  balloonSceneSvg: {
+    position: 'absolute',
+    bottom: 0,
+  },
+  pochitoFloatWrap: {
+    marginTop: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryText: {
     fontSize: 12,

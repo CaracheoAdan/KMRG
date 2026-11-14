@@ -5,6 +5,8 @@ export const INTERACTION_TYPES = [
   'thinking_of_you',
   'heartbeat',
   'reaction',
+  'sync_streak',
+  'mood_checkin',
   'sync_home_state',
   'sync_movies_state',
   'sync_games_state',

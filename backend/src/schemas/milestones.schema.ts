@@ -1,12 +1,16 @@
 import { z } from 'zod';
 import { dateOnlySchema } from './messages.schema';
 
-// Solo se aceptan URLs https (o http en desarrollo local) para evitar esquemas peligrosos (javascript:, data:, file:).
+// Se aceptan URLs http(s) o Data URLs de imagen comprimida (data:image/...) para evitar esquemas peligrosos (javascript:, file:).
 const imageUrlSchema = z
   .string()
-  .url('image_url debe ser una URL válida')
-  .max(1024)
-  .refine((val) => /^https?:\/\//i.test(val), 'image_url debe usar http(s)');
+  .trim()
+  .min(1, 'image_url es obligatoria')
+  .max(500000, 'La imagen excede el tamaño máximo permitido')
+  .refine(
+    (val) => /^https?:\/\/.+/i.test(val) || /^data:image\/[a-zA-Z0-9.+-]+;base64,[a-zA-Z0-9+/=\s]+$/i.test(val),
+    'image_url debe ser una URL http(s) válida o una imagen data:image/'
+  );
 
 export const createMilestoneSchema = z.object({
   author: z.string().trim().min(1).max(50).optional().default('Javier'),

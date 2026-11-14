@@ -38,6 +38,7 @@ export const TabNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        freezeOnBlur: true,
         tabBarActiveTintColor: primaryColor,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: [
@@ -50,7 +51,7 @@ export const TabNavigator: React.FC = () => {
             paddingBottom: 8 + insets.bottom,
           },
         ],
-        animation: 'shift',
+        animation: 'fade',
         tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
@@ -61,10 +62,15 @@ export const TabNavigator: React.FC = () => {
           tabBarLabel: 'Hoy',
           tabBarButton: createAccessibleTabButton('Hoy', 'Nuestro rincón de hoy') as any,
           tabBarIcon: ({ focused, color }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && [styles.activeIconContainer, { backgroundColor: `${primaryColor}16` }],
+              ]}
+            >
               <Ionicons
                 name={focused ? 'home' : 'home-outline'}
-                size={21}
+                size={20}
                 color={color}
               />
             </View>
@@ -79,10 +85,15 @@ export const TabNavigator: React.FC = () => {
           tabBarLabel: 'Cine',
           tabBarButton: createAccessibleTabButton('Cine y Planes', 'Películas y lista de sueños') as any,
           tabBarIcon: ({ focused, color }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && [styles.activeIconContainer, { backgroundColor: `${primaryColor}16` }],
+              ]}
+            >
               <Ionicons
                 name={focused ? 'film' : 'film-outline'}
-                size={21}
+                size={20}
                 color={color}
               />
             </View>
@@ -99,12 +110,19 @@ export const TabNavigator: React.FC = () => {
           tabBarIcon: ({ focused }) => (
             <View
               style={[
-                styles.writeIconCircle,
-                { backgroundColor: primaryColor, shadowColor: primaryColor },
-                focused && { transform: [{ scale: 1.08 }] },
+                styles.writeIconHalo,
+                focused && { borderColor: `${primaryColor}45`, borderWidth: 2 },
               ]}
             >
-              <Ionicons name="pencil" size={18} color="#ffffff" />
+              <View
+                style={[
+                  styles.writeIconCircle,
+                  { backgroundColor: primaryColor, shadowColor: primaryColor },
+                  focused && { transform: [{ scale: 1.06 }] },
+                ]}
+              >
+                <Ionicons name="pencil" size={17} color="#ffffff" />
+              </View>
             </View>
           ),
         }}
@@ -117,10 +135,15 @@ export const TabNavigator: React.FC = () => {
           tabBarLabel: 'Juegos',
           tabBarButton: createAccessibleTabButton('Juegos', 'Minijuegos de pareja') as any,
           tabBarIcon: ({ focused, color }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && [styles.activeIconContainer, { backgroundColor: `${primaryColor}16` }],
+              ]}
+            >
               <Ionicons
                 name={focused ? 'game-controller' : 'game-controller-outline'}
-                size={21}
+                size={20}
                 color={color}
               />
             </View>
@@ -135,10 +158,15 @@ export const TabNavigator: React.FC = () => {
           tabBarLabel: 'Nosotros',
           tabBarButton: createAccessibleTabButton('Nosotros', 'Álbum de fotos y calendario') as any,
           tabBarIcon: ({ focused, color }) => (
-            <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
+            <View
+              style={[
+                styles.iconContainer,
+                focused && [styles.activeIconContainer, { backgroundColor: `${primaryColor}16` }],
+              ]}
+            >
               <Ionicons
                 name={focused ? 'heart' : 'heart-outline'}
-                size={21}
+                size={20}
                 color={color}
               />
             </View>
@@ -167,14 +195,23 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
   activeIconContainer: {
-    transform: [{ scale: 1.08 }],
+    transform: [{ scale: 1.04 }],
+  },
+  writeIconHalo: {
+    padding: 2.5,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   writeIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 2 },

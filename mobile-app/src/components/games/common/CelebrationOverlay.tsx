@@ -11,6 +11,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '../../ui/Icon';
 import { GAMES_THEME, triggerGameHaptic } from '../../../theme/gamesTheme';
+import { PochitoBear } from '../../PochitoBear';
+import { PetAccessoryType } from '../../../types';
 
 interface CelebrationProps {
   visible: boolean;
@@ -18,6 +20,8 @@ interface CelebrationProps {
   gameTitle: string;
   pointsEarned: number;
   subtitle: string;
+  petName?: string;
+  petAccessory?: PetAccessoryType;
   onPlayAgain: () => void;
   onViewBoard?: () => void;
   onClose: () => void;
@@ -42,6 +46,8 @@ export const CelebrationOverlay: React.FC<CelebrationProps> = ({
   gameTitle,
   pointsEarned,
   subtitle,
+  petName = 'Pochito',
+  petAccessory = 'none',
   onPlayAgain,
   onViewBoard,
   onClose,
@@ -134,21 +140,24 @@ export const CelebrationOverlay: React.FC<CelebrationProps> = ({
             },
           ]}
         >
-          {/* Halo Trofeo */}
-          <View style={styles.trophyHalo}>
-            <LinearGradient
-              colors={['#fbbf24', '#f59e0b']}
-              style={styles.trophyCircle}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
+          {/* Pochito festejando con su accesorio + trofeo */}
+          <View style={styles.mascotCelebrationRow}>
+            <PochitoBear
+              mood="feliz"
+              size="md"
+              accessory={petAccessory}
+              isAnimated={true}
+              isTickled={true}
+            />
+            <View style={styles.trophyMiniBadge}>
               <Ionicons
                 name={isDraw ? 'heart-half' : 'trophy'}
-                size={38}
+                size={18}
                 color="#ffffff"
               />
-            </LinearGradient>
+            </View>
           </View>
+          <Text style={styles.petCheerText}>¡{petName} celebra con ustedes! 🐾✨</Text>
 
           {/* Badge del Juego */}
           <View style={styles.gameBadge}>
@@ -249,6 +258,36 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(251, 191, 36, 0.4)',
     ...GAMES_THEME.shadows.card,
+  },
+  mascotCelebrationRow: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  trophyMiniBadge: {
+    position: 'absolute',
+    right: -10,
+    bottom: 2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f59e0b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  petCheerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#d97706',
+    marginBottom: 8,
   },
   trophyHalo: {
     width: 80,

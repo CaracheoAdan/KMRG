@@ -1,0 +1,47 @@
+name: Database Weekly Backup
+
+on:
+  schedule:
+    # Todos los domingos a las 08:00 UTC (02:00 AM Ciudad de México)
+    - cron: '0 8 * * 0'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Export PostgreSQL & Supabase Snapshot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL Client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Dump Database
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ]; then
+            echo "BACKUP_DATABASE_URL secret is not configured. Skipping pg_dump."
+            exit 0
+          fi
+          mkdir -p backups
+          TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+          pg_dump "$BACKUP_DATABASE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            -f "backups/kmrg_backup_${TIMESTAMP}.sql"
+          gzip "backups/kmrg_backup_${TIMESTAMP}.sql"
+
+      - name: Upload Backup Artifact (Retained 90 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: kmrg-db-backup-${{ github.run_id }}
+          path: backups/
+          if-no-files-found: ignore
+          retention-days: 90

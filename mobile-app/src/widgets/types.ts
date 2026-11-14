@@ -10,6 +10,10 @@ export interface KmrgWidgetData {
   nextEventDate?: string;
   accentColor?: string;
   streakActive?: boolean;
+  isDoodleNote?: boolean;
+  doodleTitle?: string;
+  petAccessory?: string;
+  petName?: string;
 }
 
 export const DEFAULT_WIDGET_DATA: KmrgWidgetData = {
@@ -24,6 +28,10 @@ export const DEFAULT_WIDGET_DATA: KmrgWidgetData = {
   nextEventDate: '',
   accentColor: '#9333ea', // Morado Karlita por defecto
   streakActive: false,
+  isDoodleNote: false,
+  doodleTitle: '',
+  petAccessory: 'none',
+  petName: 'Pochito',
 };
 
 export function computeTimeTogether(anniversaryDate?: string, fallbackDays = 0) {
@@ -212,57 +220,177 @@ export function getFlameSvg(active: boolean, size = 24): string {
 }
 
 /**
- * Pochito (mascota original de KMRG) asomándose desde el borde inferior:
- * Solo la mitad superior visible, ojos expresivos brillantes, mejillas sonrojadas,
- * corazoncito en la cabeza en color de acento, y destellos (rombos en celeste, amarillo y magenta suave).
+ * Pochito ("Panzón") asomándose desde el borde inferior del widget:
+ * Orejitas de oso, hociquito crema, patitas agarrando el borde y el accesorio real equipado.
  */
 export function getPochitoPeekingSvg(
   accentHex: string,
   isCelebration: boolean,
   width = 120,
-  height = 42
+  height = 42,
+  accessory = 'none'
 ): string {
   const extraSparkles = isCelebration
     ? `
-      <polygon points="12,16 15,20 12,24 9,20" fill="#FDE047" />
-      <polygon points="60,3 62.5,6 60,9 57.5,6" fill="#F472B6" />
-      <polygon points="108,16 111,20 108,24 105,20" fill="#FDE047" />
-      <polygon points="78,5 80.5,8 78,11 75.5,8" fill="#38BDF8" />
+      <polygon points="10,22 13,26 10,30 7,26" fill="#FDE047" />
+      <polygon points="110,22 113,26 110,30 107,26" fill="#FDE047" />
+      <polygon points="22,8 24.5,11 22,14 19.5,11" fill="#F472B6" />
+      <polygon points="98,8 100.5,11 98,14 95.5,11" fill="#38BDF8" />
     `
     : '';
 
-  return `<svg width="${width}" height="${height}" viewBox="0 0 120 42">
-    <!-- Destellos rombo: celeste (#38bdf8), amarillo (#fde047), magenta suave (#f472b6) -->
-    <polygon points="20,24 23.5,28 20,32 16.5,28" fill="#38BDF8" />
-    <polygon points="28,12 31,16 28,20 25,16" fill="#FDE047" />
-    <polygon points="92,13 95,17 92,21 89,17" fill="#F472B6" />
-    <polygon points="100,26 103,30 100,34 97,30" fill="#38BDF8" />
+  let accessorySvg = '';
+  switch (accessory) {
+    case 'crown':
+      accessorySvg = `
+        <path d="M 48 19 L 46 8 L 54 13 L 60 5 L 66 13 L 74 8 L 72 19 Q 60 21 48 19 Z" fill="#FACC15" stroke="#92400E" stroke-width="1.3" stroke-linejoin="round" />
+        <path d="M 48.5 18 Q 60 20 71.5 18" stroke="#E11D48" stroke-width="2" fill="none" />
+        <circle cx="60" cy="14.5" r="1.8" fill="#F43F5E" />
+        <circle cx="60" cy="4.8" r="1.7" fill="#FEF08A" stroke="#92400E" stroke-width="0.9" />
+      `;
+      break;
+    case 'bow':
+      accessorySvg = `
+        <g transform="rotate(-16 42 20)">
+          <path d="M 42 20 C 35 14, 30 17, 31 21 C 32 25, 37 25, 42 21 Z" fill="#FB7185" stroke="#9F1239" stroke-width="1.2" />
+          <path d="M 42 20 C 49 14, 54 17, 53 21 C 52 25, 47 25, 42 21 Z" fill="#FB7185" stroke="#9F1239" stroke-width="1.2" />
+          <circle cx="42" cy="20.5" r="3" fill="#F43F5E" stroke="#9F1239" stroke-width="1.2" />
+        </g>
+      `;
+      break;
+    case 'flower':
+      accessorySvg = `
+        <g>
+          <ellipse cx="73" cy="24" rx="4" ry="2.2" fill="#34D399" stroke="#047857" stroke-width="1" />
+          <circle cx="79" cy="14" r="3.6" fill="#F9A8D4" stroke="#BE185D" stroke-width="1" />
+          <circle cx="84" cy="18" r="3.6" fill="#FBCFE8" stroke="#BE185D" stroke-width="1" />
+          <circle cx="82" cy="24" r="3.6" fill="#F9A8D4" stroke="#BE185D" stroke-width="1" />
+          <circle cx="76" cy="24" r="3.6" fill="#FBCFE8" stroke="#BE185D" stroke-width="1" />
+          <circle cx="74" cy="18" r="3.6" fill="#F9A8D4" stroke="#BE185D" stroke-width="1" />
+          <circle cx="79" cy="19.5" r="3" fill="#FDE047" stroke="#CA8A04" stroke-width="1" />
+        </g>
+      `;
+      break;
+    case 'sunglasses':
+      accessorySvg = `
+        <g>
+          <path d="M 33 31 L 41 31" stroke="#1E293B" stroke-width="1.8" stroke-linecap="round" />
+          <path d="M 79 31 L 87 31" stroke="#1E293B" stroke-width="1.8" stroke-linecap="round" />
+          <path d="M 56.5 31.5 Q 60 30 63.5 31.5" stroke="#1E293B" stroke-width="2" fill="none" />
+          <rect x="41" y="28" width="15.5" height="10.5" rx="4" fill="#0F172A" stroke="#1E293B" stroke-width="1.5" />
+          <path d="M 44 30.5 L 47 36" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round" opacity="0.6" />
+          <rect x="63.5" y="28" width="15.5" height="10.5" rx="4" fill="#0F172A" stroke="#1E293B" stroke-width="1.5" />
+          <path d="M 66.5 30.5 L 69.5 36" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round" opacity="0.6" />
+        </g>
+      `;
+      break;
+    case 'party_hat':
+      accessorySvg = `
+        <g transform="rotate(6 60 18)">
+          <path d="M 51 19 L 60 3 L 69 19 Q 60 21 51 19 Z" fill="#EC4899" stroke="#831843" stroke-width="1.3" stroke-linejoin="round" />
+          <path d="M 54 14 L 65 11.5" stroke="#FDE047" stroke-width="2.2" stroke-linecap="round" />
+          <path d="M 56.5 9.5 L 63 8" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" />
+          <circle cx="60" cy="3" r="3" fill="#FDE047" stroke="#831843" stroke-width="1" />
+        </g>
+      `;
+      break;
+    case 'beret':
+      accessorySvg = `
+        <g transform="rotate(-12 56 18)">
+          <path d="M 41 19 C 40 11, 51 9, 60 10 C 70 11, 74 15, 72 19 Q 56 21 41 19 Z" fill="#BE123C" stroke="#881337" stroke-width="1.3" />
+          <path d="M 43 19 Q 57 21 70 19" stroke="#4C0519" stroke-width="2.2" fill="none" stroke-linecap="round" />
+        </g>
+      `;
+      break;
+    case 'headphones':
+      accessorySvg = `
+        <g>
+          <path d="M 30 31 C 30 10, 90 10, 90 31" fill="none" stroke="#334155" stroke-width="3.2" stroke-linecap="round" />
+          <rect x="27" y="25" width="7" height="14" rx="3.5" fill="#38BDF8" stroke="#0F172A" stroke-width="1.3" />
+          <rect x="86" y="25" width="7" height="14" rx="3.5" fill="#38BDF8" stroke="#0F172A" stroke-width="1.3" />
+        </g>
+      `;
+      break;
+    case 'scarf':
+      accessorySvg = `
+        <g>
+          <path d="M 39 46 Q 60 51 81 46 L 80 50 Q 60 53 40 50 Z" fill="#F43F5E" stroke="#9F1239" stroke-width="1.2" />
+        </g>
+      `;
+      break;
+    case 'halo':
+      accessorySvg = `
+        <g>
+          <ellipse cx="60" cy="9.5" rx="13" ry="3.5" fill="none" stroke="#FEF08A" stroke-width="4" opacity="0.5" />
+          <ellipse cx="60" cy="9.5" rx="12" ry="3" fill="none" stroke="#FACC15" stroke-width="2.2" />
+        </g>
+      `;
+      break;
+    case 'wizard':
+      accessorySvg = `
+        <g>
+          <path d="M 39 20 Q 60 23.5 81 20 Q 74 16.5 60 16.5 Q 46 16.5 39 20 Z" fill="#4338CA" stroke="#1E1B4B" stroke-width="1.3" />
+          <path d="M 48 18 L 57 3 Q 61 1 66 5 L 64 7 L 72 18 Q 60 20 48 18 Z" fill="#4338CA" stroke="#1E1B4B" stroke-width="1.3" />
+          <path d="M 49 16.5 Q 60 18.5 71 16.5" stroke="#FACC15" stroke-width="2" fill="none" />
+        </g>
+      `;
+      break;
+    case 'loincloth':
+      accessorySvg = `
+        <g>
+          <path d="M 73 16 C 78 12, 83 14, 82 18 C 79 20, 75 19, 73 16 Z" fill="#22C55E" stroke="#15803D" stroke-width="1.2" />
+          <path d="M 38 46 Q 60 51 82 46 L 80 50 Q 60 53 40 50 Z" fill="#F59E0B" stroke="#78350F" stroke-width="1.2" />
+        </g>
+      `;
+      break;
+    default:
+      accessorySvg = `
+        <path d="M 60 14.5 C 59 12.5 57.5 11 55.8 11 C 54 11 53 12.3 53 13.8 C 53 15.8 55 17.5 60 20 C 65 17.5 67 15.8 67 13.8 C 67 12.3 66 11 64.2 11 C 62.5 11 61 12.5 60 14.5 Z" fill="${accentHex}" />
+      `;
+      break;
+  }
+
+  return `<svg width="${width}" height="${height}" viewBox="0 0 120 50">
+    <!-- Destellos rombo -->
+    <polygon points="18,30 21,33.5 18,37 15,33.5" fill="#38BDF8" />
+    <polygon points="24,18 26.5,21 24,24 21.5,21" fill="#FDE047" />
+    <polygon points="96,18 98.5,21 96,24 93.5,21" fill="#F472B6" />
+    <polygon points="102,30 105,33.5 102,37 99,33.5" fill="#38BDF8" />
     ${extraSparkles}
 
-    <!-- Cabeza suave de Pochito asomándose -->
-    <path d="M 32 42 Q 32 13 60 13 Q 88 13 88 42 Z" fill="#FDE68A" stroke="#F59E0B" stroke-width="1.5" />
+    <!-- Orejitas redondas de osito -->
+    <circle cx="40" cy="24" r="8.5" fill="#FDE047" stroke="#B45309" stroke-width="1.5" />
+    <circle cx="40.3" cy="24.2" r="4.6" fill="#FDA4AF" />
+    <circle cx="80" cy="24" r="8.5" fill="#FDE047" stroke="#B45309" stroke-width="1.5" />
+    <circle cx="79.7" cy="24.2" r="4.6" fill="#FDA4AF" />
 
-    <!-- Accesorio de corazoncito en la coronita en el color de acento activo -->
-    <path d="M 60 12 C 59 10 57 8 55 8 C 53 8 52 9.5 52 11 C 52 13 54 15 60 18 C 66 15 68 13 68 11 C 68 9.5 67 8 65 8 C 63 8 61 10 60 12 Z" fill="${accentHex}" />
+    <!-- Cabecita mochi de Pochito asomándose -->
+    <path d="M 33 50 C 33 27, 43 18, 60 18 C 77 18, 87 27, 87 50 Z" fill="#FDE047" stroke="#B45309" stroke-width="1.5" />
 
-    <!-- Ojo izquierdo expresivo -->
-    <ellipse cx="50" cy="27" rx="5.5" ry="7" fill="#FFFFFF" stroke="#D97706" stroke-width="0.8" />
-    <ellipse cx="51" cy="26" rx="3.8" ry="4.5" fill="#1E293B" />
-    <circle cx="52.2" cy="24.5" r="1.5" fill="#FFFFFF" />
-
-    <!-- Ojo derecho expresivo -->
-    <ellipse cx="70" cy="27" rx="5.5" ry="7" fill="#FFFFFF" stroke="#D97706" stroke-width="0.8" />
-    <ellipse cx="69" cy="26" rx="3.8" ry="4.5" fill="#1E293B" />
-    <circle cx="70.2" cy="24.5" r="1.5" fill="#FFFFFF" />
+    <!-- Ojos expresivos -->
+    <ellipse cx="49.5" cy="33" rx="3.2" ry="3.8" fill="#1C1917" />
+    <circle cx="48.5" cy="31.5" r="1.2" fill="#FFFFFF" />
+    <ellipse cx="70.5" cy="33" rx="3.2" ry="3.8" fill="#1C1917" />
+    <circle cx="69.5" cy="31.5" r="1.2" fill="#FFFFFF" />
 
     <!-- Mejillas sonrojadas -->
-    <ellipse cx="42" cy="34" rx="4" ry="2.2" fill="#F472B6" opacity="0.8" />
-    <ellipse cx="78" cy="34" rx="4" ry="2.2" fill="#F472B6" opacity="0.8" />
+    <ellipse cx="41.5" cy="38.5" rx="4.2" ry="2.2" fill="#FB7185" opacity="0.55" />
+    <ellipse cx="78.5" cy="38.5" rx="4.2" ry="2.2" fill="#FB7185" opacity="0.55" />
 
-    <!-- Sonrisita tierna -->
-    <path d="M 57 33 Q 60 36 63 33" stroke="#D97706" stroke-width="1.2" stroke-linecap="round" fill="none" />
+    <!-- Hociquito crema + naricita + boquita -->
+    <ellipse cx="60" cy="41.5" rx="10" ry="6.8" fill="#FFFDF5" stroke="#FED7AA" stroke-width="1" />
+    <path d="M 57 38.5 C 57 37.3 63 37.3 63 38.5 C 63 39.8 61 41.3 60 41.5 C 59 41.3 57 39.8 57 38.5 Z" fill="#78350F" />
+    <path d="M 56.5 42.8 Q 58.3 44.8 60 42.8 Q 61.7 44.8 63.5 42.8" stroke="#78350F" stroke-width="1.2" stroke-linecap="round" fill="none" />
+
+    <!-- Patitas agarrando el borde inferior -->
+    <ellipse cx="43" cy="49" rx="5.5" ry="3.2" fill="#FEF08A" stroke="#B45309" stroke-width="1.3" />
+    <ellipse cx="77" cy="49" rx="5.5" ry="3.2" fill="#FEF08A" stroke="#B45309" stroke-width="1.3" />
+
+    <!-- Accesorio equipado -->
+    ${accessorySvg}
   </svg>`;
 }
 
 export const ENVELOPE_WHITE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="3"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`;
 export const HEART_WHITE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+export const BRUSH_WHITE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>`;
